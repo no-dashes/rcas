@@ -1,0 +1,58 @@
+# frozen_string_literal: true
+
+require_relative "test_helper"
+
+# Regression tests for inputs that used to blow the stack or take minutes.
+class PerformanceTest < Minitest::Test
+  include RCAS::Sets
+
+  def random_product(seed, max_degree, factors)
+    rng = Random.new(seed)
+    (1..factors).reduce(1) do |acc, _|
+      acc * (0..rng.rand(1..max_degree)).map { |i| rng.rand(-20..20) * :x**i }.sum
+    end
+  end
+
+  def test_expand_of_a_product_of_many_sums
+    u = random_product(1, 10, 10)
+    e = u.expand
+    poly = ZZ[:x].call(u)
+    assert_operator poly.degree, :>, 30
+    assert_equal poly.to_expr, e
+    assert_equal poly.call(x: 3), u.call(x: 3)
+  end
+
+  def test_factor_recovers_the_product
+    u = random_product(1, 6, 6)
+    poly = ZZ[:x].call(u)
+    fact = poly.factor
+    assert_equal poly, fact.expand
+    assert_operator fact.size, :>=, 3
+  end
+
+  def test_factor_with_a_leading_coefficient_divisible_by_small_primes
+    # every prime below 20 divides the leading coefficient 2*3*5*7*11*13*17*19
+    lc = 9_699_690
+    f = ZZ[:x].call((lc * :x**2 + 1) * (:x**3 - :x - 1))
+    assert_equal "(1 + 9699690*x**2)*(-1 - x + x**3)", f.factor.to_s
+  end
+
+  def test_long_sums_stay_shallow
+    big = (1..20_000).map { |i| i * :x**i }.sum
+    s = big.simplify
+    assert_equal 20_000, s.each_node.count { |n| n.is_a?(RCAS::Var) }
+    assert s.to_s.start_with?("x + 2*x**2 + 3*x**3")
+    assert_equal s, big.simplify
+    assert_equal 20_000, big.to_poly.degree
+    assert_equal (1..20_000).sum, s.call(x: 1)
+    assert big.to_s.size > 100_000, "printing an unsimplified deep chain works too"
+  end
+
+  def test_long_alternating_sums_keep_their_signs
+    alt = (1..100).map { |i| (i.even? ? -1 : 1) * :x**i }.sum
+    s = alt.simplify
+    assert_equal alt.call(x: 2), s.call(x: 2)
+    assert_equal alt.expand.to_s, s.to_s
+    assert_equal "x - x**2 + x**3", (:x - :x**2 + :x**3).simplify.to_s
+  end
+end

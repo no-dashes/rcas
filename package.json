@@ -1,0 +1,8 @@
+{
+  "name": "rcas-tex",
+  "private": true,
+  "description": "KaTeX for rcas inline typesetting (lib/rcas/render.rb); run `npm install`",
+  "dependencies": {
+    "katex": "^0.16.11"
+  }
+}

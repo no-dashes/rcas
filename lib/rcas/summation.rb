@@ -1,0 +1,295 @@
+# frozen_string_literal: true
+
+module RCAS
+  # Unevaluated sum.
+  class Sum < Expression
+    attr_reader :term, :var, :from, :to
+
+    def initialize(term, var, from, to)
+      @term = term
+      @var = var
+      @from = from
+      @to = to
+      freeze
+    end
+
+    def children = [term, var, from, to]
+    def rebuild(term, var, from, to) = Sum.new(term, var, from, to)
+    def to_sexp = [:sum, term.to_sexp, var.to_sexp, from.to_sexp, to.to_sexp]
+  end
+
+  # Symbolic summation.
+  #
+  #   sum(k, k, 1, n)              # => n/2 + n**2/2
+  #   sum(k**2, k, 1, n)           # => n/6 + n**2/2 + n**3/3
+  #   sum(2**k, k, 0, n)           # => -1 + 2*2**n
+  #   sum(1/(k*(k + 1)), k, 1, oo) # => 1
+  #
+  # Polynomials in k get their closed form directly; other terms go through
+  # Gosper's algorithm, which finds an antidifference whenever the term is
+  # hypergeometric and one exists. Anything else stays an unevaluated Sum.
+  module Summation
+    module_function
+
+    def sum(f, k, from, to)
+      f = Expression.lift(f).simplify
+      k = Expression.lift(k)
+      from = Expression.lift(from)
+      to = Expression.lift(to)
+      return (f * (to - from + 1)).simplify unless f.variables.include?(k.name)
+
+      coeffs = Solve.polynomial_coefficients(f, k)
+      return polynomial_sum(coeffs, k, from, to) if coeffs && to != OO
+
+      if to == OO && (z = zeta_sum(f, k, from))
+        return z
+      end
+
+      # sum_{k=0}^{n} binomial(n, k) ... is the full series (terms vanish beyond n)
+      binomial_top = f.each_node.find { |e| e.is_a?(Fn) && e.name == :binomial && e.args.first == to && e.args.last == k }
+      to = OO if binomial_top
+
+      g = gosper(f, k)
+      if g
+        upper = to == OO ? tail_limit(g, k) : g.subs(k => to + 1)
+        return (upper - g.subs(k => from)).cancel if upper
+      end
+      if to == OO && (known = classical_series(f, k, from))
+        return known
+      end
+      direct = direct_sum(f, k, from, to)
+      direct || Sum.new(f, k, from, to)
+    end
+
+    # Ratio of consecutive terms as a rational function of k (binomials and
+    # factorials cancelled), or nil.
+    def term_ratio(f, k)
+      g = Combinatorics.to_factorials(f)
+      ratio = (g.subs(k => k + 1) / g).cancel
+      pair = Fraction.as_fraction(ratio, [k.name]) or return nil
+      [ratio, pair]
+    end
+
+    def classical_series(f, k, from, depth = 0)
+      return nil unless from.is_a?(Num) && from.value.is_a?(Integer)
+      pair = term_ratio(f, k)
+      return nil if pair.nil?
+      known = Combinatorics.known_series(pair.first, k)
+      if known
+        m0, total = known
+        return nil if from.value < m0
+        first = f.subs(k => m0).simplify
+        return nil if first.each_node.any? { |n| n.is_a?(Fn) && %i[factorial gamma].include?(n.name) && n.args.first.is_a?(Num) }
+        result = (first * total).simplify
+        (m0...from.value).each { |i| result -= f.subs(k => i).simplify }
+        return result.simplify
+      end
+      # leading terms that vanish (k*binomial(n, k) at k = 0): shift the index
+      return nil if depth > 2 || !Scalar.zero?(f.subs(k => from).simplify)
+      shifted = f.subs(k => k + from.value + 1).simplify
+      classical_series(shifted, k, Num.new(0), depth + 1)
+    rescue ZeroDivisionError
+      nil # the ratio matched a template but the term itself has a pole
+    end
+
+    MAX_DIRECT_TERMS = 100_000
+
+    # No closed form but integer bounds: add the terms up exactly.
+    def direct_sum(f, k, from, to)
+      return nil unless [from, to].all? { |b| b.is_a?(Num) && b.value.is_a?(Integer) }
+      return nil if to.value - from.value > MAX_DIRECT_TERMS
+      total = Num.new(0)
+      (from.value..to.value).each { |i| total = Scalar.add(total, Expression.lift(f.call(k.name => i))) }
+      total.is_a?(Num) ? total : total.simplify
+    end
+
+    # ---- c / k**s from k = m to infinity: c * (zeta(s) - partial sum) -----------
+
+    def zeta_sum(f, k, from)
+      coeff, factors = Simplify.factorize(f)
+      return nil unless factors.size == 1 && factors.key?(k)
+      s = factors[k]
+      return nil unless s.is_a?(Numeric) && s.real? && s < -1
+      return nil unless from.is_a?(Num) && from.value.is_a?(Integer) && from.value >= 1
+      s = -s
+      return nil unless s.is_a?(Integer)
+      partial = (1...from.value).sum { |n| Rational(1, n**s) }
+      (Num.new(coeff) * (Fn.new(:zeta, [Num.new(s)]) - Num.new(partial))).simplify
+    end
+
+    # zeta(2m) = (-1)^(m+1) B_2m (2 pi)^(2m) / (2 (2m)!)
+    def zeta_even(n)
+      m = n / 2
+      b = bernoulli(n)
+      factorial = (1..n).reduce(1, :*)
+      c = Rational((-1)**(m + 1) * 2**n, 2 * factorial) * b
+      (Num.new(c) * PI**n).simplify
+    end
+
+    def bernoulli(n)
+      @bernoulli ||= [Rational(1)]
+      while @bernoulli.size <= n
+        m = @bernoulli.size
+        s = (0...m).sum { |j| binomial(m + 1, j) * @bernoulli[j] }
+        @bernoulli << -s / (m + 1)
+      end
+      @bernoulli[n]
+    end
+
+    def binomial(n, k) = (1..k).reduce(1) { |acc, i| acc * (n - k + i) / i }
+
+    # Euler-Maclaurin tail after 200 terms; accurate to ~1e-12 for s >= 1.5.
+    def zeta_numeric(s)
+      raise ArgumentError, "zeta(s) needs s > 1, got #{s}" unless s > 1
+      n = 200
+      head = (1...n).sum { |i| i.to_f**-s }
+      head + n**(1 - s) / (s - 1) + 0.5 * n**-s + s * n**(-s - 1) / 12 - s * (s + 1) * (s + 2) * n**(-s - 3) / 720
+    end
+
+    # ---- polynomials: Faulhaber by interpolation -----------------------------
+
+    def polynomial_sum(coeffs, k, from, to)
+      total = Num.new(0)
+      coeffs.each_with_index do |c, j|
+        next if Scalar.zero?(c)
+        s = power_sum(j)
+        total += c * (s.call(n: to) - s.call(n: from - 1))
+      end
+      total.expand
+    end
+
+    # S_j(n) = 1**j + 2**j + ... + n**j as a polynomial in n.
+    def power_sum(j)
+      @power_sums ||= {}
+      @power_sums[j] ||= begin
+        n = Var.new(:n)
+        points = (0..j + 1).map { |m| [m, (1..m).sum { |i| i**j }] }
+        # Newton interpolation with exact rationals
+        coefficients = points.map { |_, v| Rational(v) }
+        (1..j + 1).each do |level|
+          (j + 1).downto(level) { |i| coefficients[i] = (coefficients[i] - coefficients[i - 1]) / (points[i][0] - points[i - level][0]) }
+        end
+        poly = Num.new(0)
+        (j + 1).downto(0) { |i| poly = (poly * (n - points[i][0]) + coefficients[i]) }
+        poly.expand
+      end
+    end
+
+    # ---- Gosper's algorithm ------------------------------------------------------
+
+    # Antidifference g with g(k+1) - g(k) = f(k), or nil.
+    def gosper(f, k)
+      ratio_pair = term_ratio(f, k)
+      return nil if ratio_pair.nil?
+      p, q = ratio_pair.last
+      ring = p.ring
+      return nil unless ring.vars.include?(k.name)
+      kn = k.name
+
+      a, b, c = p, q, ring.one
+      dispersion(a, b, kn).each do |h|
+        g = a.gcd(shift(b, k, h))
+        next if g.constant?
+        a = a.exact_div(g)
+        b = b.exact_div(shift(g, k, -h))
+        (1..h).each { |i| c *= shift(g, k, -i) }
+      end
+
+      bm = shift(b, k, -1)
+      d = degree_bound(a, bm, c, kn) or return nil
+      xs = (0..d).map { |i| Var.new(:"_x#{i}") }
+      xk = xs.each_with_index.reduce(Num.new(0)) { |acc, (v, i)| acc + v * k**i }
+      equation = (a.to_expr * xk.subs(k => k + 1) - bm.to_expr * xk - c.to_expr).expand
+      conditions = Solve.polynomial_coefficients(equation, k) or return nil
+      solution = Solve.linear_system(conditions, xs).first or return nil
+      x_expr = xk.subs(solution).subs(xs.to_h { |v| [v, Num.new(0)] }) # free unknowns: any value works
+      g = (bm.to_expr * x_expr * f / c.to_expr).cancel
+      check = (g.subs(k => k + 1) - g - f).cancel
+      Scalar.zero?(check) || numerically_zero?(check, k) ? g : nil
+    rescue DomainError, NotImplementedError, ZeroDivisionError
+      nil
+    end
+
+    def shift(poly, k, h) = poly.ring.call(poly.to_expr.subs(k => k + h))
+
+    # Non-negative integers h with gcd(a(k), b(k+h)) non-trivial.
+    def dispersion(a, b, kn)
+      h = Var.new(:_h)
+      ringh = QQ[*a.ring.vars, :_h]
+      bh = ringh.call(b.to_expr.subs(Var.new(kn) => Var.new(kn) + h))
+      res = ringh.call(a.to_expr).resultant(bh, kn)
+      return [] if res.zero?
+      coeffs = (0..res.degree(:_h)).map { |i| res.coefficient_in(:_h, i).to_expr }
+      roots = begin
+        Solve.polynomial_roots(coeffs)
+      rescue NotImplementedError
+        []
+      end
+      roots.select { |r| r.is_a?(Num) && r.value.is_a?(Integer) && r.value >= 0 }.map(&:value).uniq.sort
+    end
+
+    def degree_bound(a, bm, c, kn)
+      da, db, dc = a.degree(kn), bm.degree(kn), c.degree(kn)
+      lca = a.leading_coefficient_in(kn)
+      lcb = bm.leading_coefficient_in(kn)
+      candidates = []
+      if da != db || lca != lcb
+        candidates << dc - [da, db].max
+      else
+        n = da
+        candidates << dc - n + 1
+        diff = bm.coefficient_in(kn, n - 1) - a.coefficient_in(kn, n - 1)
+        if n >= 1 && diff.constant? && lca.constant?
+          ratio = Scalar.div(diff.constant_term, lca.constant_term)
+          candidates << ratio.value if ratio.is_a?(Num) && ratio.value.is_a?(Integer)
+        end
+      end
+      d = candidates.max
+      d.negative? ? nil : d
+    end
+
+    # Random-point check for identities the canonical form does not prove.
+    def numerically_zero?(expr, _k)
+      rng = Random.new(7)
+      3.times do
+        values = expr.variables.to_h { |v| [v, rng.rand(2.0..5.0)] }
+        value = expr.evalf(**values)
+        return false unless value.is_a?(Numeric) && value.abs < 1e-9 * [1, expr.variables.size].max
+      end
+      true
+    rescue StandardError
+      false
+    end
+
+    # lim_{k -> oo} g(k) for the antidifference: geometric factors with
+    # |ratio| < 1 vanish, anything else goes to Limits.limit.
+    def tail_limit(g, k)
+      constant, table = Expand.table(g)
+      kept = {}
+      table.each do |factors, coeff|
+        drop = false
+        factors.each do |base, exp|
+          if base.is_a?(Fn) && %i[factorial gamma].include?(base.name) && base.variables.include?(k.name) && exp.is_a?(Integer)
+            raise ArgumentError, "the sum diverges" if exp.positive?
+            drop = true
+            next
+          end
+          next unless exp.is_a?(Expression) && exp.variables.include?(k.name) && !base.variables.include?(k.name)
+          slope = exp.diff(k)
+          next unless slope.is_a?(Num)
+          unless base.is_a?(Num)
+            drop = true # symbolic ratio: convergence (|ratio| < 1) is assumed
+            next
+          end
+          magnitude = base.value.abs**(slope.value.positive? ? 1 : -1)
+          raise ArgumentError, "the sum diverges" if magnitude > 1
+          drop = true if magnitude < 1
+        end
+        kept[factors] = coeff unless drop
+      end
+      rest = Simplify.rebuild_sum(constant, kept)
+      value = Limits.limit(rest, k, OO)
+      value.is_a?(Limit) ? nil : value
+    end
+  end
+end

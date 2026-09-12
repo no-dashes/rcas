@@ -1,0 +1,9 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# A Claude-Code-style front end for rcas: type Ruby, get typeset results in
+# iTerm2, ask Claude questions in plain language. `rcas-chat --help`.
+$LOAD_PATH.unshift File.expand_path("../lib", __dir__)
+require "rcas/chat"
+
+exit RCAS::Chat.start(ARGV).to_i

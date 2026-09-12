@@ -1,0 +1,150 @@
+# frozen_string_literal: true
+
+module RCAS
+  # factorial, binomial and gamma: exact values, the (k+1)!/k! = k+1
+  # cancellation used by simplify and Gosper, and the classical power series
+  # (exp, sin, cos, sinh, cosh, log, atan, the binomial theorem) that turn
+  # infinite hypergeometric sums into closed forms.
+  module Combinatorics
+    module_function
+
+    def factorial_value(n)
+      case n
+      when Integer then n >= 0 ? Num.new((1..n).reduce(1, :*)) : nil
+      when Rational then gamma_value(n + 1)
+      when Float then Num.new(Math.gamma(n + 1))
+      end
+    end
+
+    # gamma(n) for integers and half-integers exactly, floats numerically.
+    def gamma_value(v)
+      case v
+      when Integer then v >= 1 ? Num.new((1..v - 1).reduce(1, :*)) : nil
+      when Rational
+        return nil unless v.denominator == 2
+        # gamma(n + 1/2) = (2n)! / (4**n n!) sqrt(pi), extended downwards by gamma(x) = gamma(x + 1) / x
+        n = (v - Rational(1, 2)).to_i
+        if n >= 0
+          c = Rational((1..2 * n).reduce(1, :*), 4**n * (1..n).reduce(1, :*))
+        else
+          c = Rational(1)
+          (n...0).each { |j| c /= (j + Rational(1, 2)) }
+        end
+        (Num.new(c) * RCAS.sqrt(PI)).simplify
+      when Float then Num.new(Math.gamma(v))
+      end
+    end
+
+    def binomial_value(n, k)
+      return nil unless k.is_a?(Num) && k.value.is_a?(Integer)
+      kk = k.value
+      return Num.new(0) if kk.negative?
+      return Num.new(1) if kk.zero?
+      return n if kk == 1
+      if n.is_a?(Num) && n.value.is_a?(Integer)
+        nn = n.value
+        return Num.new(0) if nn >= 0 && kk > nn
+        return Num.new((0...kk).reduce(1) { |acc, i| acc * (nn - i) } / (1..kk).reduce(1, :*))
+      end
+      nil
+    end
+
+    # binomial(n, k) with a numeric k as the polynomial n(n-1)...(n-k+1)/k!
+    def expand_binomial(n, k)
+      return nil unless k.is_a?(Num) && k.value.is_a?(Integer) && k.value >= 0
+      kk = k.value
+      product = (0...kk).reduce(Num.new(1)) { |acc, i| acc * (n - i) }
+      (product / (1..kk).reduce(1, :*)).expand
+    end
+
+    # Replace binomials by factorials (for ratios of consecutive terms).
+    def to_factorials(expr)
+      expr = expr.map_children { |c| to_factorials(c) }
+      if expr.is_a?(Fn) && expr.name == :binomial
+        n, k = expr.args
+        return Fn.new(:factorial, [n]) / (Fn.new(:factorial, [k]) * Fn.new(:factorial, [(n - k).simplify]))
+      end
+      expr
+    end
+
+    # Merge factorials whose arguments differ by an integer:
+    # (k + 2)! / k!  =>  (k + 1)(k + 2). Mutates +factors+ (base => exponent).
+    def merge_factorials(factors)
+      loop do
+        facts = factors.keys.select { |b| b.is_a?(Fn) && b.name == :factorial }
+        pair = nil
+        facts.combination(2).each do |a, b|
+          d = (a.args.first - b.args.first).simplify
+          next unless d.is_a?(Num) && d.value.is_a?(Integer) && !d.zero?
+          pair = d.value.positive? ? [a, b, d.value] : [b, a, -d.value]
+          break
+        end
+        return factors unless pair
+        big, small, m = pair
+        e = factors.delete(big)
+        Simplify.add_factor(factors, small, e)
+        (1..m).each { |i| Simplify.add_factor(factors, (small.args.first + i).simplify, e) }
+      end
+    end
+
+    def divergent?(value)
+      value.each_node.any? do |n|
+        (n.is_a?(Fn) && n.name == :log && n.args.first.is_a?(Num) && n.args.first.zero?) || n == OO
+      end
+    end
+
+    # sqrt(e) when e is a perfect square (x**2, 4*y**2); any sqrt when not exact_only.
+    def root_of(e, exact_only)
+      coeff, factors = Simplify.factorize(e)
+      if factors.values.all? { |x| x.is_a?(Integer) && x.even? } && coeff.is_a?(Integer) && coeff.positive? &&
+         Integer.sqrt(coeff)**2 == coeff
+        return Simplify.rebuild_product(Integer.sqrt(coeff), factors.transform_values { |x| x / 2 })
+      end
+      exact_only ? nil : RCAS.sqrt(e)
+    end
+
+    # ---- classical series ---------------------------------------------------
+
+    # Infinite hypergeometric sums with a known closed form. r is the ratio
+    # f(k+1)/f(k) as a rational function of k; m0 is the natural first index.
+    # Returns [start_index, sum of the series whose first term is 1].
+    def known_series(r, k)
+      one = Num.new(1)
+      two = Num.new(2)
+      candidates = []
+      candidates << [0, ->(x) { Fn.new(:exp, [x]) }, (r * (k + 1)).cancel, :direct]
+      candidates << [0, ->(x) { Fn.new(:cos, [x]) }, (r * (2 * k + 1) * (2 * k + 2)).cancel, :neg_square]
+      candidates << [0, ->(x) { Fn.new(:sin, [x]) / x }, (r * (2 * k + 2) * (2 * k + 3)).cancel, :neg_square]
+      candidates << [0, ->(x) { Fn.new(:cosh, [x]) }, (r * (2 * k + 1) * (2 * k + 2)).cancel, :square]
+      candidates << [0, ->(x) { Fn.new(:sinh, [x]) / x }, (r * (2 * k + 2) * (2 * k + 3)).cancel, :square]
+      candidates << [1, ->(x) { Fn.new(:log, [one + x]) / x }, (r * (k + 1) / k).cancel, :negated]
+      candidates << [0, ->(x) { Fn.new(:atan, [x]) / x }, (r * (2 * k + 3) / (2 * k + 1)).cancel, :neg_square]
+      [true, false].each do |exact_roots_only|
+        candidates.each do |m0, template, p, kind|
+          next if p.variables.include?(k.name)
+          x =
+            case kind
+            when :direct then p
+            when :negated then (-p).simplify
+            when :square then root_of(p, exact_roots_only)
+            when :neg_square then root_of((-p).simplify, exact_roots_only)
+            end
+          next if x.nil? || (x.is_a?(Num) && x.zero?)
+          value = template.call(x).simplify
+          next if divergent?(value) # log(1 + x) at x = -1: the harmonic series
+          return [m0, value]
+        end
+      end
+      # binomial theorem: r = (n - k) x / (k + 1)
+      p = (r * (k + 1)).cancel
+      coeffs = Solve.polynomial_coefficients(p, k)
+      if coeffs && coeffs.size == 2
+        x = (-coeffs[1]).simplify
+        n = (coeffs[0] / x).cancel
+        return [0, ((one + x)**n).simplify] unless [n, x].any? { |v| v.variables.include?(k.name) }
+      end
+      _ = two
+      nil
+    end
+  end
+end

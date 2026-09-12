@@ -1,0 +1,141 @@
+# rcas
+
+A computer algebra system that lives inside Ruby. Symbols are variables,
+the ordinary operators build expression trees, and irb is the REPL:
+
+```
+$ bin/rcas
+rcas> e = (x + 1) * (1 - x)
+=> (x + 1)*(1 - x)
+rcas> e.expand
+=> 1 - x**2
+rcas> integrate(exp(x) * sin(x), x)
+=> -(cos(x)*exp(x))/2 + exp(x)*sin(x)/2
+rcas> solve(x**2 - 2, x)
+=> [-2**(1/2), 2**(1/2)]
+```
+
+This file covers installation and getting a session running. Everything
+about *using* rcas, from expressions and calculus to polynomial rings,
+finite fields, linear algebra and differential equations, is in
+[MANUAL.md](MANUAL.md), whose transcripts are checked by the test suite.
+
+*Beware*: This is a fun PoC project. It may deliver correct results, but
+it may give wrong answers. So I'd rather not base any important decisions
+on its results. So, don't blame me if your teacher says your homework
+was wrong or your rocket doesn't reach the moon in time.
+
+## Requirements
+
+- Ruby 3.3 or newer (developed on 3.3.10). No gems are needed for the
+  core library or `bin/rcas`; everything is standard library.
+- Big-number performance benefits from a Ruby built with GMP
+  (`ruby -e 'p Integer::GMP_VERSION'` shows whether yours is); factoring
+  large polynomials is noticeably slower without it.
+
+Optional, only for the typeset output and the chat front end:
+
+- Typeset pictures (`show`, `to_png`, and `bin/rcas-chat`): either `node`
+  plus `npm install` in the project directory (fetches KaTeX, see
+  `package.json`) and a local Google Chrome / Chromium, or a TeX
+  installation with `latex` and `dvipng`. Pictures display inline in iTerm2.
+- Questions in plain language in `bin/rcas-chat`: the `anthropic` gem and
+  credentials in `ANTHROPIC_API_KEY` (or a profile from `ant auth login`).
+  Without them the Ruby side of the chat still works.
+
+## Running it
+
+```
+$ git clone <this repository> rcas && cd rcas
+$ bin/rcas          # irb with rcas loaded: bare names are variables
+$ bin/rcas-chat     # terminal front end with typeset output and Claude
+```
+
+Inside `bin/rcas`, an undefined bare name such as `x` becomes the variable
+`:x`, the functions (`sin`, `integrate`, `solve`, ...) and the constants
+(`PI`, `E`, `I`, `oo`, `NN ZZ QQ RR CC`) are in scope, and `hold { ... }`
+keeps input unevaluated. See MANUAL.md, "Sessions and setup", for the details.
+
+## Using the library from Ruby
+
+```ruby
+require "rcas"
+
+e = (:x + 1) * (1 - :x)          # symbols are variables
+e.expand                         # => 1 - x**2
+RCAS.integrate(RCAS.sin(:x), :x) # => -cos(x)
+
+include RCAS::Functions          # bare sin, integrate, solve, ...
+include RCAS::Sets               # NN ZZ QQ RR CC
+include RCAS::Constants          # PI E I OO
+```
+
+`lib/rcas.rb` is the only entry point; it requires the rest of `lib/rcas/`.
+
+## Files and settings
+
+rcas itself keeps no state. `bin/rcas-chat` writes to `~/.rcas` (another
+directory with `RCAS_HOME`):
+
+| path | contents |
+|---|---|
+| `~/.rcas/settings.json` | your defaults: output mode, backend, scale, theme, wrap width, model, fallbacks |
+| `~/.rcas/sessions/*.json` | one file per chat session: transcript, conversation with Claude and the session's settings, saved after every input (`RCAS_SESSION_DIR` moves the directory) |
+| `~/.rcas/history` | the input history of the chat prompt |
+| `/tmp/rcas/` | pictures of typeset output while a session runs; a session deletes the pictures it created when it ends (`RCAS_CACHE_DIR` moves the directory) |
+
+Defaults are changed in four ways, in increasing precedence:
+`~/.rcas/settings.json`, environment variables, command-line flags, and
+`/` commands inside a session, which are also remembered in that
+session's file and restored by `--resume`. The easiest way to fill
+`settings.json` is to set things up in a session and run `/settings save`;
+`/settings` shows the values in force and what the file says, `/settings
+reset` deletes the file. The file is plain JSON:
+
+```json
+{
+  "output": "latex",
+  "backend": "katex",
+  "scale": 1.5,
+  "theme": "dark",
+  "model": "claude-opus-5",
+  "fallbacks": true
+}
+```
+
+| setting | environment | flag | in the session |
+|---|---|---|---|
+| output mode: `text`, `tex` (picture only), `both`, `latex` (text + source). Default: `both` in iTerm2 when a renderer is installed, `text` otherwise | `RCAS_TEX_INLINE=0` forces text | `--output=MODE`, `--tex`, `--no-tex` | `/output MODE` |
+| typesetting backend `katex` or `latex` (default: whichever is installed, KaTeX first) | `RCAS_TEX_BACKEND` | `--backend=katex\|latex` | `/backend katex\|latex` |
+| picture zoom, colour theme | `RCAS_TEX_SCALE`, `RCAS_TEX_THEME=light\|dark` | | `/scale N`, `/theme dark\|light` |
+| line width for wrapping long results (default: terminal width) | `RCAS_TEX_WRAP`, `COLUMNS` | | |
+| Claude model (default `claude-opus-5`), server-side fallback on refusal | `RCAS_MODEL`, `RCAS_FALLBACKS=0` | `--model ID` | `/model ID`, `/fallbacks on\|off` |
+| credentials for questions | `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` | | |
+| helper binaries for KaTeX rendering | `RCAS_NODE`, `RCAS_CHROME`, `RCAS_KATEX_DIR` | | |
+| colours off | `NO_COLOR` | `--no-color` | |
+| location of settings, history and sessions | `RCAS_HOME` (default `~/.rcas`) | | |
+
+Everything in the first column except colours and the KaTeX helpers can be
+stored in `settings.json` under the keys `output`, `backend`, `scale`,
+`theme`, `wrap`, `model`, `fallbacks`.
+
+Sessions: `-c` / `--continue` reopens the most recent one, `-r` / `--resume`
+opens a picker, `--resume NAME` (or an id prefix, or a list number) goes
+straight to one; inside a session `/sessions`, `/rename NAME`, `/save FILE`
+and `/reset`. The full command list is in MANUAL.md, Appendix B.
+
+## Tests
+
+```
+$ ruby -S rake
+```
+
+runs the whole suite, including `test/manual_test.rb`, which executes every
+`rcas>` transcript in MANUAL.md and compares the printed results.
+
+## Documentation
+
+- [MANUAL.md](MANUAL.md): the user manual, with a table of contents,
+  worked examples for every feature, a reference of functions, and
+  appendices on typeset output and `rcas-chat`.
+- `LICENSE`: MIT.
