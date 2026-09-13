@@ -1,7 +1,11 @@
+<p align="center">
+  <img src="assets/rcas-logo.jpeg" alt="rcas - Ruby Computer Algebra System" width="360"><br>
+</p>
+
 # rcas manual
 
 rcas is a computer algebra system that lives inside Ruby. Symbols are
-variables, the ordinary operators build expression trees, and irb is the
+indeterminates, the ordinary operators build expression trees, and irb is the
 REPL. This manual walks through everything that is finished. Every
 transcript in it is checked by `test/manual_test.rb`, so the outputs are
 exactly what the current code prints.
@@ -40,6 +44,7 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
     - [Inequalities](#inequalities)
   - [1.5 Domains and assumptions](#15-domains-and-assumptions)
   - [1.6 Polynomial rings](#16-polynomial-rings)
+    - [Degree and coefficients](#degree-and-coefficients)
     - [Algebraic numbers](#algebraic-numbers)
     - [Finite fields](#finite-fields)
   - [1.7 Linear algebra](#17-linear-algebra)
@@ -75,6 +80,22 @@ object:
 - The functions of the reference section, the constants `PI E I oo`, the
   number sets `NN ZZ QQ RR CC` and `GF` are in scope, and `hold { ... }`
   can read the source of blocks typed at the prompt.
+- Any name Ruby accepts as an identifier works, Unicode included: `α`,
+  `β₁`, `φ`, `δt`. A name starting with an uppercase letter (`X`, `Δt`) is
+  a constant to Ruby and therefore not available. `π` and `∞` are the
+  constants `pi` and `oo`; results still print as `pi` and `oo` so that
+  they can be pasted back.
+- Names Ruby already uses cannot become indeterminates this way. Of the
+  one- and two-letter names only `p`, `pp` and (with the JSON library)
+  `j`, `jj` are affected. rcas' own `eq`, `pi` and `oo` are reserved too;
+  everything else short is free.
+
+**Caveat: the one thing rcas takes away from irb.** Everything above only
+*adds* to irb. The single exception is that Kernel's printers `p`, `pp`,
+`j` and `jj` are undefined on the session object so that `p` can be an
+indeterminate (a prime, say). `p(expr)` therefore raises `NoMethodError` in
+`bin/rcas` and `bin/rcas-chat`; use `puts expr`, `print`, or
+`Kernel.p(expr)`. Plain `irb` with `require "rcas"` is unaffected.
 - Results print as text. `show(obj)` typesets a value (Appendix A);
   `bin/rcas-chat` (Appendix B) shows pictures inline and answers questions
   in plain language.
@@ -91,10 +112,18 @@ Blocks passed to `hold` work in files and in irb; code assembled with
 
 #### Variables and operators
 
-Inside `bin/rcas` a bare name that is not yet defined becomes a variable:
-the session evaluates `x` to the symbol `:x` and remembers it as a local
-variable. Arithmetic on symbols builds expressions and nothing is rewritten
-until you ask for it.
+Inside `bin/rcas` a bare name that is not yet defined becomes an
+indeterminate: the session evaluates `x` to the symbol `:x` and remembers
+it as a local variable holding that symbol. Arithmetic on symbols builds
+expressions and nothing is rewritten until you ask for it.
+
+A word on terms. A Ruby *variable* such as `e` holds a value. A symbol such
+as `:x` inside an expression is an *indeterminate*: it stands for nothing
+in particular, and `x**2 - 1` is a formal expression, not a computation
+waiting for a value. Giving an indeterminate a value is what `subs` and
+`call` do; `x.in(ZZ)` restricts what it may stand for without fixing it.
+For historical reasons the method that lists the indeterminates of an
+expression is called `variables`, as in most computer algebra systems.
 
 ```
 rcas> x + 1
@@ -228,14 +257,17 @@ rcas> log(8)
 => 3*log(2)
 ```
 
-`PI`, `E` and `I` are the exact constants (`pi` works as a bare name too);
-`oo` is infinity, used as a limit point and a summation bound. A function
+`PI`, `E` and `I` are the exact constants (`pi` and `π` work as bare
+names too); `oo` and `∞` are infinity, used as a limit point and a
+summation bound. A function
 applied to a constant folds right away, the way Ruby folds `1 + 2`; an
 operator expression such as `I**2` is kept as written until `simplify`.
 
 ```
 rcas> [sin(PI/6), cos(PI/4), tan(PI/4), sin(PI)]
 => [1/2, 2**(1/2)/2, 1, 0]
+rcas> [sin(π/6), limit(1/x, x: ∞)]
+=> [1/2, 0]
 rcas> [exp(I*PI), (I**2).simplify, ((1 + 2*I)*(1 - 2*I)).expand]
 => [-1, -1, 5]
 rcas> [(E**x).simplify, log(E), (E**2 * E).simplify]
@@ -812,6 +844,47 @@ rcas> ZZ[x, y].(x**2 * y - y).gcd(x * y**2 - y**2)
 => -y + x*y
 ```
 
+#### Degree and coefficients
+
+`degree`, `ldegree`, `lcoeff`, `tcoeff`, `coeff`, `coeffs` and `collect`
+read the polynomial structure of a plain expression, without building a
+ring first. They expand internally, so the input need not be expanded, and
+coefficients come back in canonical form. All of them are also methods on
+expressions (`f.degree(x)`, `f.coeff(x, 2)`).
+
+```
+rcas> f = a*x**2 + b*x + c
+=> a*x**2 + b*x + c
+rcas> [degree(f, x), lcoeff(f, x), tcoeff(f, x), coeff(f, x, 1), coeff(f, x**2)]
+=> [2, a, c, b, a]
+rcas> coeffs(f, x)
+=> [c, b, a]
+rcas> [degree((x + 1)**3, x), coeffs((x + 1)**4, x), ldegree(x**3 - 2*x, x)]
+=> [3, [1, 4, 6, 4, 1], 1]
+rcas> collect((x + y)**2 + a*x, x)
+=> y**2 + (a + 2*y)*x + x**2
+rcas> collect(a*x**2 - x**2 + b*x - 3*x + 1, x)
+=> 1 + (-3 + b)*x + (-1 + a)*x**2
+```
+
+Without an indeterminate the whole expression is examined: `degree` is the
+total degree, `coeffs` lists the coefficients of the canonical sum in
+printed order, and `lcoeff`/`tcoeff` belong to its last and first term.
+The zero polynomial has degree -1, as in `ZZ[x]`, and no coefficients.
+
+```
+rcas> [degree(x**2*y + x*y**3), coeffs((x + y)**2), degree(x**2 + 1, y)]
+=> [4, [1, 2, 1], 0]
+rcas> [degree(0), coeffs(0, x), degree(pi*x**2 + sqrt(2), x)]
+=> [-1, [], 2]
+```
+
+An expression that is not a polynomial in the indeterminate (`sin(x)`,
+`1/x`, `x**n`, `sqrt(x)`) raises a `DomainError` instead of guessing;
+`degree(x*sin(y), x)` is fine because `sin(y)` is a constant with respect
+to `x`. `coeff(f, x, k)` needs an integer `k`; rational exponents are not
+polynomial terms.
+
 #### Algebraic numbers
 
 Constant expressions built from rationals, `i`, radicals (`sqrt(2)`,
@@ -1092,7 +1165,8 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | elementary functions | `sin cos tan asin acos atan exp log sinh cosh sqrt cbrt root zeta abs sign` |
 | combinatorics | `factorial binomial gamma` |
 | rewriting | `trigsimp expand_trig expand_log logcombine minpoly` |
-| constants | `PI E I oo` (`pi` too) |
+| polynomial structure | `degree ldegree lcoeff tcoeff coeff coeffs collect` |
+| constants | `PI E I oo` (bare `pi`, `π`, `oo`, `∞`) |
 | calculus | `integrate diff series taylor limit sum` |
 | algebra | `solve eq factor` |
 | differential equations | `D dsolve` |
@@ -1100,9 +1174,10 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | linear algebra | `vector matrix` |
 | holding | `hold evaluate` |
 
-Methods on expressions: `simplify expand factor cancel rationalize subs
-call evalf to_f diff integrate series taylor limit solve eq variables
-domain in in? to_poly to_sexp hold-related evaluate`.
+Methods on expressions: `simplify expand factor cancel rationalize collect
+subs call evalf to_f diff integrate series taylor limit solve eq variables
+degree ldegree lcoeff tcoeff coeff coeffs domain in in? to_poly to_sexp
+hold-related evaluate`.
 
 Not implemented: the complete Risch algorithm and special functions
 (`erf`, `Ei`), non-homogeneous second-order differential equations, limits
@@ -1140,6 +1215,8 @@ lib/rcas/latex.rb           to_latex, line breaking (Appendix A)
 lib/rcas/render.rb          pictures from LaTeX, inline images (Appendix A)
 lib/rcas/chat.rb            rcas-chat front end (Appendix B)
 lib/rcas/chat/*.rb
+assets/rcas-logo.jpeg       the logo (960 px, used in the documents)
+assets/rcas-logo-full.jpeg  the logo at full resolution
 bin/rcas                    irb launcher
 bin/rcas-chat               rcas-chat launcher
 package.json                KaTeX for the typesetting
@@ -1240,7 +1317,7 @@ and an API key.
 ```
 $ bin/rcas-chat
 ╭─────────────────────────────────────────────────────────────╮
-│ ✻ rcas 0.1.0 - symbols are variables; type Ruby or ask ...  │
+│ ✻ rcas 0.1.0 - symbols are indeterminates; type Ruby or ...  │
 │   model    claude-opus-5                                    │
 │   output   both via katex                                   │
 │   session  20260912-143012-a1b2                             │

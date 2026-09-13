@@ -25,6 +25,8 @@ module RCAS
 
     module_function
 
+    IDENTIFIER = RCAS::IDENTIFIER
+
     def hold(block)
       ast = begin
         RubyVM::AbstractSyntaxTree.of(block, keep_script_lines: true)
@@ -109,7 +111,8 @@ module RCAS
         if @binding.local_variable_defined?(name) && !(value = @binding.local_variable_get(name)).nil?
           return lift(value)
         end
-        lift(@binding.receiver.__send__(name))
+        value = @binding.receiver.__send__(name)
+        value.nil? ? Var.new(name) : lift(value) # Kernel#p without arguments returns nil: an indeterminate
       rescue NameError
         Var.new(name)
       end

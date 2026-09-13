@@ -11,7 +11,7 @@ module RCAS
   # * sin/cos/tan/exp/log/sqrt are available as plain functions
   # * a friendlier prompt
   module IRB
-    IDENTIFIER = /\A[a-z_][a-z0-9_]*\z/
+    IDENTIFIER = RCAS::IDENTIFIER
 
     module AutoSymbol
       def method_missing(name, *args, &block)
@@ -38,6 +38,7 @@ module RCAS
       RubyVM.keep_script_lines = true # lets hold { ... } read blocks typed into irb
       main.singleton_class.include(Functions)
       main.singleton_class.prepend(AutoSymbol)
+      RCAS.undefine_kernel_printers(main)
       Object.include(Sets) unless Object.include?(Sets)
       Object.include(Constants) unless Object.include?(Constants)
       main

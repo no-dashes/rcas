@@ -1,6 +1,10 @@
+<p align="center">
+  <img src="assets/rcas-logo.jpeg" alt="rcas - Ruby Computer Algebra System" width="480"><br>
+</p>
+
 # rcas
 
-A computer algebra system that lives inside Ruby. Symbols are variables,
+A computer algebra system that lives inside Ruby. Symbols are indeterminates,
 the ordinary operators build expression trees, and irb is the REPL:
 
 ```
@@ -51,17 +55,23 @@ $ bin/rcas          # irb with rcas loaded: bare names are variables
 $ bin/rcas-chat     # terminal front end with typeset output and Claude
 ```
 
-Inside `bin/rcas`, an undefined bare name such as `x` becomes the variable
-`:x`, the functions (`sin`, `integrate`, `solve`, ...) and the constants
-(`PI`, `E`, `I`, `oo`, `NN ZZ QQ RR CC`) are in scope, and `hold { ... }`
-keeps input unevaluated. See MANUAL.md, "Sessions and setup", for the details.
+Inside `bin/rcas`, an undefined bare name such as `x` (or `α`, `β₁`: any
+Ruby identifier) becomes the indeterminate `:x`, the functions (`sin`,
+`integrate`, `solve`, ...) and the constants (`PI`/`π`, `E`, `I`, `oo`/`∞`,
+`NN ZZ QQ RR CC`) are in scope, and `hold { ... }` keeps input unevaluated. See MANUAL.md, "Sessions and
+setup", for the details.
+
+**Caveat.** This is otherwise a plain irb, with one deliberate departure:
+Kernel's printers `p`, `pp`, `j` and `jj` are undefined in the session so
+that `p` can be an indeterminate (a prime, say). Print with `puts`, `print`
+or `Kernel.p(expr)` instead. The same holds in `bin/rcas-chat`.
 
 ## Using the library from Ruby
 
 ```ruby
 require "rcas"
 
-e = (:x + 1) * (1 - :x)          # symbols are variables
+e = (:x + 1) * (1 - :x)          # symbols are indeterminates
 e.expand                         # => 1 - x**2
 RCAS.integrate(RCAS.sin(:x), :x) # => -cos(x)
 

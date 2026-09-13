@@ -5,5 +5,5 @@ $LOAD_PATH.unshift File.expand_path("../lib", __dir__)
 require "rcas"
 require "rcas/irb"
 
-puts "rcas #{RCAS::VERSION} - symbols are variables: try (x + 1) * (1 - x)"
+puts "rcas #{RCAS::VERSION} - symbols are indeterminates: try (x + 1) * (1 - x)"
 RCAS::IRB.start(self)

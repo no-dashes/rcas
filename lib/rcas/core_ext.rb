@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Symbols double as algebraic variables: `:x + 1` builds an expression.
+# Symbols double as indeterminates: `:x + 1` builds an expression.
 class Symbol
   def +(other) = RCAS::Var.new(self) + other
   def -(other) = RCAS::Var.new(self) - other

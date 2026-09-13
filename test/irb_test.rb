@@ -23,6 +23,24 @@ class IrbTest < Minitest::Test
     assert_includes out, "[:_, :e, :x]"
   end
 
+  def test_kernel_printers_double_as_indeterminates
+    out = run_session("p**2 + 1", "pp + 1", "x = p", "Kernel.p(42)", "p(42)")
+    assert_includes out, "p**2 + 1"
+    assert_includes out, "pp + 1"
+    assert_includes out, ":p"
+    assert_includes out, "42", "Kernel.p still prints"
+    assert out.any? { |l| l.include?("undefined method `p'") }, "p(42) is not a printer here"
+  end
+
+  def test_unicode_names_and_constants
+    out = run_session("α**2 + β₁", "sin(π/6)", "sum(1/n**2, n: 1..∞)", "hold { α + π }", "x = ∞")
+    assert_includes out, "α**2 + β₁"
+    assert_includes out, "1/2"
+    assert_includes out, "pi**2/6"
+    assert_includes out, "α + pi"
+    assert_includes out, "oo"
+  end
+
   def test_functions_are_available_bare
     out = run_session("sin(y).diff(y)", "sqrt(4).simplify")
     assert_includes out, "cos(y)"

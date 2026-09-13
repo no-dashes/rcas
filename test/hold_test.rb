@@ -22,6 +22,21 @@ class HoldTest < Minitest::Test
     assert_equal "t + 1", RCAS.hold { x + 1 }.to_s
   end
 
+  def test_unicode_identifiers
+    assert_equal "α + β₁**2", RCAS.hold { α + β₁**2 }.to_s
+    assert_equal [:α, :β₁], RCAS.hold { α + β₁**2 }.variables
+    assert_equal "pi", RCAS.π.to_s
+    assert_equal "oo", RCAS.∞.to_s
+    assert_match RCAS::IDENTIFIER, "α₁"
+    assert_match RCAS::IDENTIFIER, "∞"
+    refute_match RCAS::IDENTIFIER, "Foo"
+    refute_match RCAS::IDENTIFIER, "foo?"
+  end
+
+  def test_kernel_printer_names_are_indeterminates
+    assert_equal "p**2 + 1", RCAS.hold { p**2 + 1 }.to_s
+  end
+
   def test_functions_and_constants
     assert_equal "sin(0) + 4**(1/2)", RCAS.hold { sin(0) + sqrt(4) }.to_s
     assert_equal "2", RCAS.hold { sin(0) + sqrt(4) }.simplify.to_s

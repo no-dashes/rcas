@@ -39,7 +39,7 @@ module RCAS
 
       def banner(model:, backend:, assistant:, session: nil)
         lines = [
-          "#{Style.paint('✻', :magenta, :bold)} #{Style.bold("rcas #{RCAS::VERSION}")} #{Style.dim('- symbols are variables; type Ruby or ask a question')}",
+          "#{Style.paint('✻', :magenta, :bold)} #{Style.bold("rcas #{RCAS::VERSION}")} #{Style.dim('- symbols are indeterminates; type Ruby or ask a question')}",
           "",
           "  #{Style.dim('model')}    #{assistant ? model : "disabled #{Style.dim("(set ANTHROPIC_API_KEY to enable Claude, #{model})")}"}",
           "  #{Style.dim('output')}   #{@mode}#{tex? ? Style.dim(" via #{backend}") : ''}",

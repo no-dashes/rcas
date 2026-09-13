@@ -9,7 +9,7 @@ module RCAS
     # in bin/rcas; Functions (sin, sqrt, assume, matrix, show, ...) and the
     # number sets are in scope.
     class Workspace
-      IDENTIFIER = /\A[a-z_][a-z0-9_]*\z/
+      IDENTIFIER = RCAS::IDENTIFIER # Unicode names (α, β₁, ∞) included
 
       module AutoSymbol
         def method_missing(name, *args, &block)
@@ -30,6 +30,7 @@ module RCAS
         workspace = self
         @main.singleton_class.include(Functions)
         @main.singleton_class.prepend(AutoSymbol)
+        RCAS.undefine_kernel_printers(@main) # p, pp, j, jj are indeterminates here
         @main.define_singleton_method(:__rcas_workspace__) { workspace }
         @main.define_singleton_method(:to_s) { "rcas" }
         @main.define_singleton_method(:inspect) { "rcas" }

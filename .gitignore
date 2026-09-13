@@ -1,1 +1,7 @@
+# private working notes for Claude sessions (kept out of the repository for now)
+CLAUDE.md
+
 node_modules/
+.DS_Store
+*.png
+!assets/*

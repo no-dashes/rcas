@@ -1,6 +1,11 @@
 # frozen_string_literal: true
 
 module RCAS
+  # A bare name that may become an indeterminate: a Ruby local/method name
+  # that does not start with an uppercase ASCII letter. Ruby treats every
+  # non-ASCII character as an identifier character, so α, β₁ and ∞ qualify.
+  IDENTIFIER = /\A(?:[a-z_]|[^\x00-\x7F])(?:[a-zA-Z0-9_]|[^\x00-\x7F])*\z/
+
   # Elementary functions. Available as RCAS.sin(:x) or, after
   # `include RCAS::Functions`, as bare sin(:x).
   module Functions
@@ -22,6 +27,8 @@ module RCAS
 
     def pi = PI
     def oo = OO
+    def π = PI
+    def ∞ = OO
 
     # root(2, 3) is the exact cube root; Ruby would turn 2**(1/3r) into a float.
     def root(x, n)
@@ -99,6 +106,18 @@ module RCAS
       var, from, to = Functions.range_arguments(var, from, to, range, "integrate", discrete: false) if var.nil? || from
       from.nil? ? Integrate.integrate(expr, var) : Integrate.definite(expr, var, from, to)
     end
+
+    # polynomial structure: degree(f, x), lcoeff(f, x), coeff(f, x, 2), collect(f, x)
+    def degree(f, x = nil) = Coefficients.degree(f, x)
+    def ldegree(f, x = nil) = Coefficients.ldegree(f, x)
+    def lcoeff(f, x = nil) = Coefficients.lcoeff(f, x)
+    def tcoeff(f, x = nil) = Coefficients.tcoeff(f, x)
+    # coeff(f, x, k) or coeff(f, x**k): the coefficient of x**k
+    def coeff(f, x, k = 1) = Coefficients.coeff(f, x, k)
+    # coeffs(f, x): coefficients of x**0 .. x**degree; coeffs(f): of every term
+    def coeffs(f, x = nil) = Coefficients.coeffs(f, x)
+    # collect(f, x): f as a sum of coefficient * x**k
+    def collect(f, x) = Coefficients.collect(f, x)
 
     # trigonometric and logarithmic rewriting
     def trigsimp(expr) = Trigonometry.trigsimp(expr)
@@ -248,4 +267,17 @@ module RCAS
   end
 
   extend Functions
+
+  # Kernel's one- and two-letter printers (p, pp, and j, jj from the JSON
+  # library) would otherwise capture the short names most wanted as
+  # indeterminates (p for a prime!). A session's main object undefines
+  # them, so the bare name reaches the auto-symbol hook like any other;
+  # print with puts, print or Kernel.p(expr) instead.
+  UNDEFINED_KERNEL_METHODS = %i[p pp j jj].freeze
+
+  def self.undefine_kernel_printers(main)
+    UNDEFINED_KERNEL_METHODS.each do |name|
+      main.singleton_class.undef_method(name) if main.respond_to?(name, true)
+    end
+  end
 end
