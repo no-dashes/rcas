@@ -192,7 +192,18 @@ module RCAS
     def coerce(other) = [Polynomial.from_expr(ring, other), self]
 
     def rop(op, left)
+      left = Expression.lift(left)
+      scalar = scalar_in_base(left)
+      return scalar.public_send(op, self) if scalar
       Polynomial.from_expr(ring.join(Polynomial.ring_for(ring.base, left)), left, promote: true).public_send(op, self)
+    end
+
+    # A parameter expression such as 1/(2*a) over Frac(QQ[a])[x] is a
+    # constant of the ring, not a polynomial in a new variable a.
+    def scalar_in_base(expr)
+      return nil if expr.is_a?(Num) || expr.variables.empty? || !(expr.variables & ring.vars).empty?
+      return nil unless (ring.base.is_a?(FractionField) || ring.base.is_a?(PolynomialRing)) && ring.base.include?(expr)
+      Polynomial.new(ring, { Array.new(ring.vars.size, 0) => expr })
     end
 
     def ==(other)
@@ -424,6 +435,8 @@ module RCAS
         yield to_ring(target), other.to_ring(target)
       when Expression, Numeric, Symbol
         expr = Expression.lift(other)
+        scalar = scalar_in_base(expr)
+        return yield self, scalar if scalar
         target = ring.join(Polynomial.ring_for(ring.base, expr))
         begin
           poly = Polynomial.from_expr(target, expr, promote: true)

@@ -62,4 +62,11 @@ class ExpressionTest < Minitest::Test
   def test_lift_rejects_junk
     assert_raises(TypeError) { :x + "1" }
   end
+
+  def test_evalf_keeps_integer_exponents
+    assert_equal "1.0 + x**2", (:x**2 + 1).evalf.to_s
+    assert_equal "3.141592653589793 + x**0.5", (:x**(1 / 2r) + RCAS::PI).evalf.to_s
+    assert_equal "0.5*x**3", (:x**3 / 2).evalf.to_s
+    assert_in_delta 1.7320508, (:x**2 + 1).evalf(x: Math.sqrt(2)) - 1.2679492, 1e-6
+  end
 end

@@ -98,7 +98,12 @@ module RCAS
       v.positive? ? OO : Neg.new(OO)
     end
 
-    def factor(obj, extension: nil) = obj.is_a?(Polynomial) ? obj.factor(extension: extension) : Expression.lift(obj).factor(extension: extension)
+    # factor(x**2 - 1), factor(360), factor(f, extension: sqrt(2))
+    def factor(obj, extension: nil)
+      value = obj.is_a?(Num) ? obj.value : obj
+      return NumberTheory.factor(value) if value.is_a?(Integer) || value.is_a?(Rational)
+      obj.is_a?(Polynomial) ? obj.factor(extension: extension) : Expression.lift(obj).factor(extension: extension)
+    end
     def minpoly(expr, var = :x) = Expression.lift(expr).minpoly(var)
 
     # integrate(x**2 * exp(x), x); definite: integrate(x**2, x, 0, 1) or integrate(x**2, x: 0..1)
@@ -118,6 +123,38 @@ module RCAS
     def coeffs(f, x = nil) = Coefficients.coeffs(f, x)
     # collect(f, x): f as a sum of coefficient * x**k
     def collect(f, x) = Coefficients.collect(f, x)
+
+    # simplify(f), expand(f), cancel(f), rationalize(f): the methods as functions
+    def simplify(f) = Expression.lift(f).simplify
+    def expand(f) = Expression.lift(f).expand
+    def cancel(f) = Expression.lift(f).cancel
+    def rationalize(f) = Expression.lift(f).rationalize
+
+    # numer(f), denom(f): numerator and denominator of the normal form
+    def numer(f) = RationalFunction.numer(f)
+    def denom(f) = RationalFunction.denom(f)
+    # apart(f, x): partial fractions over QQ; other indeterminates are parameters
+    def apart(f, x = nil) = RationalFunction.apart(f, x)
+    # gcd(f, g), lcm(f, g) of integers or polynomials
+    def gcd(f, g) = RationalFunction.gcd(f, g)
+    def lcm(f, g) = RationalFunction.lcm(f, g)
+    # quo(f, g), rem(f, g), divmod(f, g): polynomial division; quo(f, g, x) divides by x with parameters
+    def quo(f, g, x = nil) = RationalFunction.quo(f, g, x)
+    def rem(f, g, x = nil) = RationalFunction.rem(f, g, x)
+    def divmod(f, g, x = nil) = RationalFunction.divmod(f, g, x)
+
+    # ifactor(360): prime factorization; factor(360) does the same
+    def ifactor(n) = NumberTheory.factor(n)
+    # isprime(n): Miller-Rabin, exact below 3.3e24
+    def isprime(n) = NumberTheory.prime?(n)
+    def nextprime(n) = NumberTheory.nextprime(n)
+    def prevprime(n) = NumberTheory.prevprime(n)
+    # divisors(12) => [1, 2, 3, 4, 6, 12]; totient(n) is Euler's phi
+    def divisors(n) = NumberTheory.divisors(n)
+    def totient(n) = NumberTheory.totient(n)
+    # invmod(3, 7): inverse modulo; chrem([2, 3], [3, 5]): Chinese remainder theorem
+    def invmod(a, m) = NumberTheory.invmod(a, m)
+    def chrem(residues, moduli) = NumberTheory.chrem(residues, moduli)
 
     # trigonometric and logarithmic rewriting
     def trigsimp(expr) = Trigonometry.trigsimp(expr)

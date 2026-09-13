@@ -259,6 +259,10 @@ module RCAS
       case other
       when NumberSet      then PolynomialRing.new(base.join(other), vars)
       when PolynomialRing then PolynomialRing.new(base.join(other.base), vars | other.vars)
+      when FractionField
+        # Frac(QQ[a])[x] joined with its own coefficient field stays a
+        # polynomial ring in x; only shared variables force a fraction field.
+        (other.ring.vars & vars).empty? ? PolynomialRing.new(base.join(other), vars) : other.join(self)
       else other.join(self)
       end
     end

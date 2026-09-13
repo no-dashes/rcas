@@ -155,9 +155,13 @@ module RCAS
 
     def rank = Elimination.rref(entries).last.size
 
+    # Numeric: Gaussian elimination. Polynomial or rational-function entries
+    # in one indeterminate: evaluation and interpolation (PolyMatrix).
+    # Anything else: cofactor expansion.
     def det
       raise ArgumentError, "determinant needs a square matrix" unless square?
-      numeric? ? Elimination.det(entries) : Elimination.cofactor_det(entries).expand
+      return Elimination.det(entries) if numeric?
+      PolyMatrix.det(entries) || Elimination.cofactor_det(entries).expand
     end
 
     # Numeric matrices are inverted by row reduction, symbolic ones through
@@ -170,6 +174,8 @@ module RCAS
         reduced, pivots = Elimination.rref(augmented)
         raise DomainError, "matrix is singular" unless pivots.first(rows) == (0...rows).to_a
         target.unchecked(reduced.map { |r| r.drop(rows) })
+      elsif (inv = PolyMatrix.inverse(entries))
+        target.unchecked(inv)
       else
         d = det
         raise DomainError, "matrix is singular" if Scalar.zero?(d)
@@ -195,6 +201,9 @@ module RCAS
     def solve(b)
       b = b.entries if b.is_a?(Vector)
       raise ArgumentError, "right-hand side needs #{rows} entries" unless b.size == rows
+      if square? && !numeric? && (y = PolyMatrix.solve(entries, b.map { |e| Scalar.lift(e) }))
+        return VectorSpace.new(domain.fraction_field, cols).unchecked(y)
+      end
       augmented = entries.each_with_index.map { |r, i| r + [Scalar.lift(b[i])] }
       reduced, pivots = Elimination.rref(augmented)
       pivots = pivots.reject { |c| c == cols }
@@ -210,6 +219,10 @@ module RCAS
 
     # Basis of the null space, as vectors over the fraction field.
     def kernel
+      space_k = VectorSpace.new(domain.fraction_field, cols)
+      if !numeric? && (basis = PolyMatrix.kernel(entries))
+        return basis.map { |v| space_k.unchecked(v) }
+      end
       reduced, pivots = Elimination.rref(entries)
       free = (0...cols).to_a - pivots
       space_k = VectorSpace.new(domain.fraction_field, cols)
@@ -229,7 +242,7 @@ module RCAS
       shifted = Array.new(rows) { |i| Array.new(cols) { |j| i == j ? Scalar.sub(t, self[i, j]) : Scalar.neg(self[i, j]) } }
       ring = (domain.ring? ? domain : ZZ)[var]
       ring = domain[var] if domain.is_a?(FiniteField)
-      ring.call(Elimination.cofactor_det(shifted).expand)
+      ring.call(PolyMatrix.det(shifted) || Elimination.cofactor_det(shifted).expand)
     end
 
     # ---- eigenvalues ------------------------------------------------------

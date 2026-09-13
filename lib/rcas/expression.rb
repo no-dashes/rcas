@@ -209,15 +209,22 @@ module RCAS
     # Numeric evaluation: every number becomes a Float so roots and function
     # values fold, then the bindings are applied.
     def evalf(**bindings)
-      table = {}
-      each_node do |n|
-        case n
-        when Const then table[n] = Num.new(n.value.to_f)
-        when RootOf then table[n] = Num.new(Expression.floatify(n.value))
-        when Num then table[n] = Num.new(Expression.floatify(n.value)) unless n.value.is_a?(Float) || n.finite_field?
-        end
+      Expression.floatify_tree(self).call(**bindings.transform_values { |v| Expression.floatify(v) })
+    end
+
+    # Every number becomes a Float, except integer exponents: x**2 stays
+    # x**2 rather than x**2.0.
+    def self.floatify_tree(node)
+      case node
+      when Const then Num.new(node.value.to_f)
+      when RootOf then Num.new(floatify(node.value))
+      when Num then node.value.is_a?(Float) || node.finite_field? ? node : Num.new(floatify(node.value))
+      when Pow
+        exp = node.exponent
+        exp = floatify_tree(exp) unless exp.is_a?(Num) && exp.value.is_a?(Integer)
+        Pow.new(floatify_tree(node.base), exp)
+      else node.map_children { |c| floatify_tree(c) }
       end
-      subs(table).call(**bindings.transform_values { |v| Expression.floatify(v) })
     end
 
     # Numeric conversions of constant expressions: (PI**2/6).to_f, Num#to_r, Num#to_i

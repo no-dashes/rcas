@@ -30,6 +30,7 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
     - [Substitution and evaluation](#substitution-and-evaluation)
     - [Equality](#equality)
   - [1.2 Numbers and constants](#12-numbers-and-constants)
+    - [Integers and primes](#integers-and-primes)
   - [1.3 Calculus](#13-calculus)
     - [Derivatives](#derivatives)
     - [Antiderivatives](#antiderivatives)
@@ -44,6 +45,7 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
     - [Inequalities](#inequalities)
   - [1.5 Domains and assumptions](#15-domains-and-assumptions)
   - [1.6 Polynomial rings](#16-polynomial-rings)
+    - [gcd and division of expressions](#gcd-and-division-of-expressions)
     - [Degree and coefficients](#degree-and-coefficients)
     - [Algebraic numbers](#algebraic-numbers)
     - [Finite fields](#finite-fields)
@@ -178,6 +180,8 @@ rcas> (6*x**2 - x - 2).factor
 
 Rational expressions: `cancel` puts everything over one denominator with the
 polynomial gcd removed, `rationalize` clears square roots from denominators.
+`numer` and `denom` return the two halves of that normal form, with integer
+coefficients and a positive leading coefficient in the denominator.
 
 ```
 rcas> ((x**2 - 1) / (x - 1)).cancel
@@ -186,7 +190,36 @@ rcas> (1 / (a**2 * (-1 - 1/a)) + 1/a).cancel
 => 1/(1 + a)
 rcas> (1 / (1 + sqrt(2))).rationalize
 => -1 + 2**(1/2)
+rcas> [numer(1/x + 1/(x + 1)), denom(1/x + 1/(x + 1))]
+=> [1 + 2*x, x + x**2]
+rcas> [numer(x/2), denom(x/2), numer(3/4r), denom(sin(x)/x**2)]
+=> [x, 2, 3, x**2]
 ```
+
+`apart` is the partial fraction decomposition over QQ: a polynomial part,
+then one term per power of each irreducible factor of the denominator.
+Other indeterminates are parameters; name the one to decompose in when
+there are several.
+
+```
+rcas> apart(1/(x**2 - 1))
+=> 1/(2*(-1 + x)) - 1/(2*(1 + x))
+rcas> apart((x + 1)/(x**2*(x - 1)))
+=> 2/(-1 + x) - 2/x - 1/x**2
+rcas> apart(x**3/(x**2 + 1))
+=> x - x/(1 + x**2)
+rcas> apart((x**2 + x + 1)/((x - 1)**2*(x**2 + 1)))
+=> 3/(2*(-1 + x)**2) - 1/(2*(1 + x**2))
+rcas> apart(1/(x**2 - a**2), x)
+=> -1/(2*a*(a + x)) - 1/(2*a*(a - x))
+rcas> apart(1/(x**2 - 2))
+=> 1/(-2 + x**2)
+```
+
+The last denominator is irreducible over QQ, so nothing splits; `apart`
+does not introduce algebraic numbers. The rewriting methods also exist as
+functions, MuPAD and Maple style: `simplify(f)`, `expand(f)`, `cancel(f)`,
+`rationalize(f)`.
 
 #### Substitution and evaluation
 
@@ -293,6 +326,34 @@ rcas> sin(-x).simplify
 rcas> zeta(2)
 => pi**2/6
 ```
+
+#### Integers and primes
+
+`factor` on an integer or rational gives its prime factorization, an
+object with `unit`, `factors` (prime and exponent pairs), `primes`,
+`expand` and `prime?`; `ifactor` is the same function under Maple's name.
+Trial division by small primes is followed by Pollard's rho method, which
+handles factors of a dozen digits or so; `isprime` is a Miller-Rabin test
+that is exact below 3.3e24 and a strong probable-prime test beyond.
+
+```
+rcas> factor(360)
+=> 2**3*3**2*5
+rcas> [factor(360).factors, factor(360).unit, factor(4/9r), factor(-12)]
+=> [[[2, 3], [3, 2], [5, 1]], 1, 2**2/3**2, -(2**2*3)]
+rcas> factor(2**67 - 1)
+=> 193707721*761838257287
+rcas> [isprime(97), isprime(2**61 - 1), isprime(2**64 + 1)]
+=> [true, true, false]
+rcas> [nextprime(100), prevprime(100), divisors(12), totient(12)]
+=> [101, 97, [1, 2, 3, 4, 6, 12], 4]
+rcas> [invmod(3, 7), chrem([2, 3], [3, 5]), 3.pow(100, 7), 12.gcd(18)]
+=> [5, 8, 4, 6]
+```
+
+`chrem(residues, moduli)` solves the simultaneous congruences (the moduli
+need not be coprime; an inconsistent system raises). Modular powers, gcd
+and lcm of integers are Ruby's own `pow(e, m)`, `gcd` and `lcm`.
 
 ### 1.3 Calculus
 
@@ -844,6 +905,22 @@ rcas> ZZ[x, y].(x**2 * y - y).gcd(x * y**2 - y**2)
 => -y + x*y
 ```
 
+#### gcd and division of expressions
+
+`gcd`, `lcm`, `quo`, `rem` and `divmod` work on plain expressions as well
+as on ring elements and integers. Division is over QQ; with several
+indeterminates, name the one to divide by and the others become
+parameters.
+
+```
+rcas> [gcd(12, 18), gcd(2*x + 2, 4*x**2 - 4), lcm(x**2 - 1, x**2 + 2*x + 1)]
+=> [6, 2 + 2*x, -1 - x + x**2 + x**3]
+rcas> [quo(x**3 - 1, x - 1), rem(x**3 + 1, x - 1), divmod(x**2 + 1, 2*x)]
+=> [1 + x + x**2, 2, [x/2, 1]]
+rcas> divmod(a*x**2 + x - a, x - 1, x)
+=> [1 + a + a*x, 1]
+```
+
 #### Degree and coefficients
 
 `degree`, `ldegree`, `lcoeff`, `tcoeff`, `coeff`, `coeffs` and `collect`
@@ -1090,8 +1167,28 @@ rcas> QQ.matrix([[1, 1], [0, 1]]).diagonalizable?
 => false
 ```
 
-Symbolic entries are allowed once their variables are declared; symbolic
-determinants and inverses use cofactor expansion, so keep them small.
+Symbolic entries are allowed once their variables are declared. When every
+entry is a polynomial or rational function in one indeterminate with
+rational coefficients, `det`, `inverse`, `solve` and `kernel` work by
+evaluation and interpolation: a degree bound for the result, exact
+elimination at that many rational points, Newton interpolation back
+(Horn, *Faktorisierung in Schief-Polynomringen*, Kassel 2008, chapter 6).
+An 8x8 matrix of cubics takes a few hundredths of a second where cofactor
+expansion would not finish. Anything else falls back to cofactor expansion
+and row reduction over expressions, so keep those small.
+
+```
+rcas> m = QQ[x].matrix([[1, x**2], [x**2 + 1, x - 2]])
+=> [       1  x**2]
+   [x**2 + 1 x - 2]
+rcas> m.det
+=> -2 + x - x**2 - x**4
+rcas> m.solve([x - 1, x + 1])
+=> ((-2 + 3*x + x**3)/(2 - x + x**2 + x**4), (-2 - x**2 + x**3)/(2 - x + x**2 + x**4))
+rcas> m.inverse
+=> [   (2 - x)/(2 - x + x**2 + x**4) x**2/(2 - x + x**2 + x**4)]
+   [(1 + x**2)/(2 - x + x**2 + x**4)   -1/(2 - x + x**2 + x**4)]
+```
 
 ```
 rcas> x.in(RR)
@@ -1164,7 +1261,9 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 |---|---|
 | elementary functions | `sin cos tan asin acos atan exp log sinh cosh sqrt cbrt root zeta abs sign` |
 | combinatorics | `factorial binomial gamma` |
-| rewriting | `trigsimp expand_trig expand_log logcombine minpoly` |
+| rewriting | `simplify expand cancel rationalize trigsimp expand_trig expand_log logcombine minpoly` |
+| rational functions | `numer denom apart gcd lcm quo rem divmod` |
+| integers | `factor ifactor isprime nextprime prevprime divisors totient invmod chrem` |
 | polynomial structure | `degree ldegree lcoeff tcoeff coeff coeffs collect` |
 | constants | `PI E I oo` (bare `pi`, `π`, `oo`, `∞`) |
 | calculus | `integrate diff series taylor limit sum` |
@@ -1175,9 +1274,9 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | holding | `hold evaluate` |
 
 Methods on expressions: `simplify expand factor cancel rationalize collect
-subs call evalf to_f diff integrate series taylor limit solve eq variables
-degree ldegree lcoeff tcoeff coeff coeffs domain in in? to_poly to_sexp
-hold-related evaluate`.
+numer denom apart gcd lcm quo rem divmod subs call evalf to_f diff integrate
+series taylor limit solve eq variables degree ldegree lcoeff tcoeff coeff
+coeffs domain in in? to_poly to_sexp hold-related evaluate`.
 
 Not implemented: the complete Risch algorithm and special functions
 (`erf`, `Ei`), non-homogeneous second-order differential equations, limits
@@ -1205,6 +1304,9 @@ lib/rcas/polynomial.rb      ring elements
 lib/rcas/gcd.rb             polynomial gcd
 lib/rcas/factor.rb          polynomial factorization
 lib/rcas/fraction.rb        cancel, rationalize
+lib/rcas/rational_function.rb  numer, denom, apart, gcd/lcm/quo/rem on expressions
+lib/rcas/number_theory.rb   integer factorization, primes, divisors, totient, invmod, chrem
+lib/rcas/poly_matrix.rb     det/solve/inverse/kernel of polynomial matrices by evaluation and interpolation
 lib/rcas/vector.rb          VectorSpace, Vector
 lib/rcas/matrix.rb          MatrixSpace, Matrix, elimination
 lib/rcas/hold.rb            hold

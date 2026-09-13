@@ -59,4 +59,15 @@ class SimplifyTest < Minitest::Test
     assert_equal "0", (:x**2 + 2 * :x + 1 - (:x + 1)**2).expand.to_s
     assert_equal "1 + x/y", ((:x + :y) / :y).expand.to_s
   end
+
+  def test_numeric_content_leaves_a_root
+    root = ->(base, q) { (base**(1 / q.to_r)).simplify.to_s }
+    assert_equal "2*(1 - y**2)**(1/2)", root.call(4 - 4 * :y**2, 2)
+    assert_equal "2*(-1 + y**2)**(1/2)", root.call(-4 + 4 * :y**2, 2)
+    assert_equal "2*(1 + x)**(1/3)", root.call(8 * :x + 8, 3)
+    assert_equal "(1 - y**2)**(1/2)/2", root.call(1 / 4r - :y**2 / 4, 2)
+    assert_equal "(2 + 2*x)**(1/2)", root.call(2 + 2 * :x, 2) # 2 has no square root to extract
+    assert_equal "(4 + 4*x)**(1/3)", root.call(4 + 4 * :x, 3)
+    assert_equal "-(1 - y**2)**(1/2)", RCAS.solve(:x**2 + :y**2 - 1, :x).first.to_s
+  end
 end

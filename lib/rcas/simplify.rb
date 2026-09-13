@@ -174,6 +174,10 @@ module RCAS
             # (4*a)**(1/2) => 4**(1/2) * a**(1/2): a positive number may always leave the root
             c, rest = split
             stack.push([Pow.new(Num.new(c), e.exponent), pw, true], [Pow.new(rest, e.exponent), pw, true])
+          elsif exp.is_a?(Rational) && (e.base.is_a?(Add) || e.base.is_a?(Sub)) && (split = sum_content_split(e.base, exp.denominator))
+            # (4 - 4*y**2)**(1/2) => 2*(1 - y**2)**(1/2)
+            c, rest = split
+            stack.push([Pow.new(Num.new(c), e.exponent), pw, true], [Pow.new(rest, e.exponent), pw, true])
           else
             add_factor(factors, e.base, multiply_exponents(exp, pw))
           end
@@ -316,6 +320,18 @@ module RCAS
       c, factors = factorize(expr)
       return nil unless (c.is_a?(Integer) || c.is_a?(Rational)) && !c.zero? && c.abs != 1 && !factors.empty?
       [c.abs, rebuild_product(c.negative? ? -1 : 1, factors)] # sqrt(-4*a) = 2*sqrt(-a)
+    end
+
+    # [content, sum / content] when the rational content of a sum with
+    # rational coefficients has a q-th root to extract, else nil.
+    def sum_content_split(expr, q)
+      constant, terms = termize(expr)
+      values = terms.values + (constant.zero? ? [] : [constant])
+      return nil unless values.all? { |v| v.is_a?(Integer) || v.is_a?(Rational) }
+      content = values.map(&:abs).reduce { |g, v| Polynomial.rational_gcd(g, v) }
+      return nil if content == 1 || extract_root(content, q).nil?
+      rest = rebuild_sum(normalize_number(Rational(constant) / content), terms.transform_values { |c| normalize_number(Rational(c) / content) })
+      [content, rest]
     end
 
     # A sum whose terms are all negative, like -1 - 2*x.
