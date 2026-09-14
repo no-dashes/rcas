@@ -56,6 +56,10 @@ module RCAS
   # reduced to polynomials in one atom (exp(x), sin(x), sqrt(x), ...) and
   # inverted. Systems: linear in the unknowns, or two polynomial equations
   # in two unknowns through resultants.
+  #
+  # Sources (keys: MANUAL.md, Sources): elimination by resultants [GCL92,
+  # ch. 9], [CLO15, §3.6]; numeric roots by the Durand-Kerner (Weierstrass)
+  # simultaneous iteration [Ker66], started at powers of 0.4 + 0.9i.
   module Solve
     MAX_DEPTH = 6
 

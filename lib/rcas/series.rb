@@ -25,6 +25,12 @@ module RCAS
   # Truncated Puiseux series in a local variable t: sum of coeff * t**exp for
   # rational exponents below +order+. Coefficients are Expressions and may
   # contain the marker variable LOG for log(t).
+  #
+  # Sources: series arithmetic (product, quotient, composition, powers) as
+  # in [Knu98, §4.7]. Limits take the leading term of this expansion at the
+  # point; that is the textbook strategy, not Gruntz's MRV algorithm
+  # [Gru96], which is why bounded oscillation is left unevaluated. Keys:
+  # MANUAL.md, Sources.
   class Series
     LOG = Var.new(:_L)
 

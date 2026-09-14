@@ -13,6 +13,12 @@ module RCAS
   # Rational-coefficient input goes through Fraction.as_fraction (one
   # numerator over one denominator, gcd cancelled). Anything else is split
   # syntactically: factors with negative exponents form the denominator.
+  #
+  # Sources: the partial fraction decomposition is the classical one in
+  # [Bro05, §2.1] (see MANUAL.md, Sources): split over pairwise coprime
+  # denominators with the extended Euclidean algorithm, then expand each
+  # numerator p-adically in its irreducible factor. Denominators are
+  # factored over QQ (factor.rb), so no algebraic numbers are introduced.
   module RationalFunction
     module_function
 

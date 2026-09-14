@@ -33,6 +33,10 @@ module RCAS
 
   # QQ(alpha): numbers a0 + a1*alpha + ... + a_{n-1}*alpha**(n-1) with the
   # minimal polynomial of alpha reducing higher powers.
+  #
+  # Sources (keys: MANUAL.md, Sources): arithmetic in QQ(alpha) and minimal
+  # polynomials through resultants [Loo83], [Coh93, §4.2]; factoring over
+  # QQ(alpha) by norms is Trager's method [Tra76], [Coh93, Algorithm 3.6.4].
   class AlgebraicField < Domain
     attr_reader :minpoly, :generator, :radicals
 

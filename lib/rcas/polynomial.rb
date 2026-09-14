@@ -267,7 +267,8 @@ module RCAS
 
     def coprime?(other) = gcd(other).constant?
 
-    # Resultant with respect to a variable, via the Sylvester matrix.
+    # Resultant with respect to a variable, as the determinant of the
+    # Sylvester matrix [GCL92, ch. 7], [CLO15, §3.6] (keys: MANUAL.md, Sources).
     def resultant(other, var = nil)
       combine(other, :resultant) do |a, b|
         x = var || a.ring.vars.first

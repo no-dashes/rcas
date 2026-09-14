@@ -54,7 +54,8 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
   - [1.9 Performance notes](#19-performance-notes)
 - [2. Reference](#2-reference)
 - [3. Files](#3-files)
-- [4. License](#4-license)
+- [4. Sources](#4-sources)
+- [5. License](#5-license)
 - [Appendix A. Typeset output](#appendix-a-typeset-output)
   - [Pictures](#pictures)
 - [Appendix B. rcas-chat](#appendix-b-rcas-chat)
@@ -1326,7 +1327,110 @@ package.json                KaTeX for the typesetting
 
 Run the tests with `ruby -S rake`.
 
-## 4. License
+## 4. Sources
+
+The non-trivial algorithms and where they come from. Keys in brackets are
+used in the source code comments (`# [GCL92, ch. 8]`).
+
+| algorithm | file | source |
+|---|---|---|
+| canonical form, expansion on term tables | simplify.rb, expand.rb | own design; Mathematica-style ordering |
+| squarefree decomposition (Yun) | factor.rb | [Yun76]; [vzGG13, §14.6] |
+| factoring over ZZ: Cantor-Zassenhaus mod p, Hensel lifting, Mignotte bound, recombination | factor.rb | [Zas69]; [CZ81]; [Mig74]; [GCL92, ch. 8]; [vzGG13, ch. 15] |
+| multivariate factoring by Kronecker substitution | factor.rb | [Knu98, §4.6.2]; [vzGG13, §8.4] |
+| polynomial gcd: Euclid, primitive pseudo-remainder sequences | gcd.rb | [Knu98, §4.6.1, Algorithm E]; [GCL92, ch. 7] |
+| resultant, discriminant (Sylvester matrix) | polynomial.rb | [GCL92, ch. 7]; [CLO15, §3.6] |
+| partial fractions (coprime splitting by extended Euclid, p-adic expansion) | rational_function.rb | [Bro05, §2.1] |
+| rational integration: Hermite reduction (Mack's linear version), Lazard-Rioboo-Trager logarithmic part, Rothstein-Trager resultant | integrate.rb | [Her72]; [Mac75]; [Bro05, §2.2, §2.4, §2.5]; [RT76]; [LR90]; [GCL92, ch. 11] |
+| Risch-Norman heuristic (parallel Risch) | integrate.rb | [NM77]; [GS89] |
+| Puiseux series with log terms, limits by the leading term | series.rb | power series arithmetic as in [Knu98, §4.7]; the limit strategy is the textbook one, not Gruntz's MRV algorithm [Gru96] |
+| Faulhaber sums by Newton interpolation, Bernoulli numbers, zeta(2m) | summation.rb | [GKP94, §6.5]; Euler-Maclaurin tail [GKP94, §9.5] |
+| Gosper's algorithm with the degree bound for the polynomial ansatz | summation.rb | [Gos78]; [PWZ96, ch. 5] |
+| polynomial systems by resultants | solve.rb | [GCL92, ch. 9]; [CLO15, §3.6] |
+| numeric polynomial roots: Durand-Kerner (Weierstrass) iteration | solve.rb | [Ker66] |
+| minimal polynomial via resultants, arithmetic in QQ(alpha) | algebraic.rb | [Loo83]; [Coh93, §4.2] |
+| factoring over QQ(alpha) by norms (Trager) | algebraic.rb | [Tra76]; [Coh93, Algorithm 3.6.4] |
+| finite fields: distinct-degree and equal-degree factoring, Rabin irreducibility test | finite_field.rb | [CZ81]; [vzGG13, §14.2-14.3]; [Rab80] |
+| linear algebra: Gaussian elimination, reduced row echelon form, cofactor expansion | matrix.rb | textbook |
+| polynomial matrices: PolyDet, RatDet, PolyLinearSolve, nullspace by evaluation and interpolation | poly_matrix.rb | [Hor08, ch. 6]; the modular-determinant idea also in [vzGG13, §5.5] |
+| integer factorization: trial division, Pollard-Brent rho | number_theory.rb | [Pol75]; [Bre80]; [Knu98, §4.5.4]; [Coh93, §8.5] |
+| primality: Miller-Rabin, deterministic bases below 3.3e24 | number_theory.rb | [Mil76]; [Rab80b]; [SW17]; [Knu98, §4.5.4, Algorithm P] |
+| Chinese remainder theorem, modular inverse, totient, divisors | number_theory.rb | [Coh93, §1.3]; [Knu98, §4.3.2]; [HW08, §5.5, §16.3] |
+| differential equations: separable, linear first order, constant coefficients | ode.rb | [BD12, ch. 2-3] |
+| inequalities by sign charts over exact real roots | inequalities.rb | textbook; roots from solve.rb |
+
+- [BD12] W. E. Boyce, R. C. DiPrima, *Elementary Differential Equations and
+  Boundary Value Problems*, 10th ed., Wiley 2012.
+- [Bre80] R. P. Brent, An improved Monte Carlo factorization algorithm,
+  *BIT* 20 (1980), 176-184.
+- [Bro05] M. Bronstein, *Symbolic Integration I: Transcendental Functions*,
+  2nd ed., Springer 2005.
+- [CLO15] D. Cox, J. Little, D. O'Shea, *Ideals, Varieties, and
+  Algorithms*, 4th ed., Springer 2015.
+- [Coh93] H. Cohen, *A Course in Computational Algebraic Number Theory*,
+  GTM 138, Springer 1993.
+- [CZ81] D. G. Cantor, H. Zassenhaus, A new algorithm for factoring
+  polynomials over finite fields, *Math. Comp.* 36 (1981), 587-592.
+- [GCL92] K. O. Geddes, S. R. Czapor, G. Labahn, *Algorithms for Computer
+  Algebra*, Kluwer 1992.
+- [GKP94] R. L. Graham, D. E. Knuth, O. Patashnik, *Concrete Mathematics*,
+  2nd ed., Addison-Wesley 1994.
+- [Gos78] R. W. Gosper, Decision procedure for indefinite hypergeometric
+  summation, *Proc. Natl. Acad. Sci. USA* 75 (1978), 40-42.
+- [Gru96] D. Gruntz, *On Computing Limits in a Symbolic Manipulation
+  System*, Diss. ETH Zürich 1996.
+- [GS89] K. O. Geddes, L. Y. Stefanus, On the Risch-Norman integration
+  method and its implementation in Maple, *Proc. ISSAC '89*, ACM 1989,
+  212-217.
+- [Her72] C. Hermite, Sur l'intégration des fractions rationnelles, *Ann.
+  Sci. École Norm. Sup.* (2) 1 (1872), 215-218.
+- [Hor08] P. Horn, *Faktorisierung in Schief-Polynomringen*, Dissertation,
+  Universität Kassel 2008, chapter 6 (Lineare Algebra mit Polynom-Matrizen).
+- [HW08] G. H. Hardy, E. M. Wright, *An Introduction to the Theory of
+  Numbers*, 6th ed., Oxford University Press 2008.
+- [Ker66] I. O. Kerner, Ein Gesamtschrittverfahren zur Berechnung der
+  Nullstellen von Polynomen, *Numer. Math.* 8 (1966), 290-294.
+- [Knu98] D. E. Knuth, *The Art of Computer Programming, vol. 2:
+  Seminumerical Algorithms*, 3rd ed., Addison-Wesley 1998.
+- [Loo83] R. Loos, Computing in algebraic extensions, in: B. Buchberger,
+  G. E. Collins, R. Loos (eds.), *Computer Algebra: Symbolic and Algebraic
+  Computation*, 2nd ed., Springer 1983, 173-187.
+- [LR90] D. Lazard, R. Rioboo, Integration of rational functions: rational
+  computation of the logarithmic part, *J. Symbolic Comput.* 9 (1990),
+  113-115.
+- [Mac75] D. Mack, On rational integration, Technical Report UCP-38,
+  University of Utah 1975.
+- [Mig74] M. Mignotte, An inequality about factors of polynomials, *Math.
+  Comp.* 28 (1974), 1153-1157.
+- [Mil76] G. L. Miller, Riemann's hypothesis and tests for primality, *J.
+  Comput. System Sci.* 13 (1976), 300-317.
+- [NM77] A. C. Norman, P. M. A. Moore, Implementing the new Risch
+  integration algorithm, *Proc. 4th Int. Colloquium on Advanced Computing
+  Methods in Theoretical Physics*, Marseille 1977, 99-110.
+- [Pol75] J. M. Pollard, A Monte Carlo method for factorization, *BIT* 15
+  (1975), 331-334.
+- [PWZ96] M. Petkovšek, H. S. Wilf, D. Zeilberger, *A = B*, A K Peters
+  1996.
+- [Rab80] M. O. Rabin, Probabilistic algorithms in finite fields, *SIAM J.
+  Comput.* 9 (1980), 273-280.
+- [Rab80b] M. O. Rabin, Probabilistic algorithm for testing primality, *J.
+  Number Theory* 12 (1980), 128-138.
+- [RT76] M. Rothstein, *Aspects of Symbolic Integration and Simplification
+  of Exponential and Primitive Functions*, PhD thesis, University of
+  Wisconsin-Madison 1976; B. M. Trager, Algebraic factoring and rational
+  function integration, *Proc. SYMSAC '76*, ACM 1976, 219-226.
+- [SW17] J. Sorenson, J. Webster, Strong pseudoprimes to twelve prime
+  bases, *Math. Comp.* 86 (2017), 985-1003.
+- [Tra76] B. M. Trager, Algebraic factoring and rational function
+  integration, *Proc. SYMSAC '76*, ACM 1976, 219-226.
+- [vzGG13] J. von zur Gathen, J. Gerhard, *Modern Computer Algebra*, 3rd
+  ed., Cambridge University Press 2013.
+- [Yun76] D. Y. Y. Yun, On square-free decomposition algorithms, *Proc.
+  SYMSAC '76*, ACM 1976, 26-35.
+- [Zas69] H. Zassenhaus, On Hensel factorization I, *J. Number Theory* 1
+  (1969), 291-311.
+
+## 5. License
 
 rcas is released under the MIT License; see `LICENSE`.
 

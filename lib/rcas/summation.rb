@@ -28,6 +28,11 @@ module RCAS
   # Polynomials in k get their closed form directly; other terms go through
   # Gosper's algorithm, which finds an antidifference whenever the term is
   # hypergeometric and one exists. Anything else stays an unevaluated Sum.
+  #
+  # Sources (keys: MANUAL.md, Sources): power sums by Newton interpolation
+  # and Bernoulli numbers, zeta(2m) [GKP94, §6.5]; Euler-Maclaurin tail for
+  # zeta(s) numerically [GKP94, §9.5]; Gosper [Gos78] with the degree bound
+  # for the polynomial ansatz from [PWZ96, ch. 5].
   module Summation
     module_function
 

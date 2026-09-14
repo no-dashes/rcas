@@ -29,6 +29,9 @@ module RCAS
   #
   # Returns Equation(s) y = ... with constants C1, C2 (or an implicit
   # equation when the separable case cannot be solved for y).
+  #
+  # Source: the three textbook methods as in [BD12, ch. 2-3] (keys:
+  # MANUAL.md, Sources).
   module ODE
     module_function
 

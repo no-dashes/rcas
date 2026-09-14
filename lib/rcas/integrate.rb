@@ -29,6 +29,11 @@ module RCAS
   # 3. a Risch-Norman heuristic: an ansatz that is a Laurent polynomial in x
   #    and the transcendental/algebraic atoms of the integrand, plus log
   #    terms, whose undetermined coefficients are found by linear algebra
+  #
+  # Sources (keys: MANUAL.md, Sources): Hermite reduction [Her72] in Mack's
+  # linear form [Mac75], [Bro05, §2.2]; Rothstein-Trager resultant [RT76],
+  # [Bro05, §2.4]; Lazard-Rioboo-Trager [LR90], [Bro05, §2.5]; the whole
+  # rational case also [GCL92, ch. 11]; Risch-Norman [NM77], [GS89].
   module Integrate
     MAX_DEPTH = 8
     MAX_UNKNOWNS = 400

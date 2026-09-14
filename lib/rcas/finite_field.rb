@@ -383,6 +383,9 @@ module RCAS
   # Factorization over a finite field: squarefree decomposition in
   # characteristic p, then Cantor-Zassenhaus (distinct-degree and equal-degree
   # splitting, with the trace trick in characteristic 2).
+  #
+  # Sources (keys: MANUAL.md, Sources): [CZ81]; [vzGG13, §14.2-14.3]; the
+  # irreducibility test above is Rabin's [Rab80].
   module FiniteFieldFactor
     module_function
 

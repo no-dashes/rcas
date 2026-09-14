@@ -18,6 +18,12 @@ module RCAS
   # Miller-Rabin test (deterministic below 3.3e24, probabilistic with 24
   # bases beyond) and factoring uses trial division by small primes
   # followed by Pollard-Brent rho.
+  #
+  # Sources (keys refer to MANUAL.md, section Sources): Miller-Rabin
+  # [Mil76], [Rab80b], [Knu98, §4.5.4, Algorithm P]; the 13-base bound
+  # 3.3e24 [SW17]; Pollard rho [Pol75] with Brent's cycle finding [Bre80],
+  # [Knu98, §4.5.4, Algorithm B]; Chinese remainder theorem and modular
+  # inverse [Coh93, §1.3], [Knu98, §4.3.2, §4.5.2]; totient [HW08, §5.5].
   module NumberTheory
     module_function
 

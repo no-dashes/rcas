@@ -15,6 +15,10 @@ module RCAS
   #   Nullspace        drop dependent rows and columns, solve the square
   #                    system for every remaining column (Algorithm 25)
   #
+  # Source: [Hor08, ch. 6] (P. Horn, Faktorisierung in Schief-Polynomringen,
+  # Kassel 2008), Algorithms 20-25; the same evaluation/interpolation idea
+  # for determinants over ZZ is in [vzGG13, §5.5]. Keys: MANUAL.md, Sources.
+  #
   # Every public function returns nil when the matrix is not of that shape
   # (several indeterminates, algebraic or floating point coefficients, ...),
   # so Matrix can fall back to elimination over expressions.

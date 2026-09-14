@@ -14,6 +14,11 @@ module RCAS
   # recursively), squarefree-decompose, then reduce each part to one
   # variable by Kronecker substitution, factor that, and recombine subsets
   # of the univariate factors that map back to true divisors.
+  #
+  # Sources (keys: MANUAL.md, Sources): Yun [Yun76], [vzGG13, §14.6];
+  # Zassenhaus [Zas69], [GCL92, ch. 8], [vzGG13, ch. 15]; Cantor-Zassenhaus
+  # [CZ81]; Hensel lifting [GCL92, ch. 6]; Mignotte bound [Mig74]; Kronecker
+  # substitution [Knu98, §4.6.2], [vzGG13, §8.4].
   module Factor
     module_function
 

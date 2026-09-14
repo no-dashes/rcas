@@ -8,6 +8,9 @@ module RCAS
   #   pseudo-remainder sequences, recursing on the content in one variable
   #   at a time; result primitive with positive leading coefficient over ZZ,
   #   monic (leading coefficient 1 in graded lex order) over QQ
+  #
+  # Sources: primitive PRS [Knu98, §4.6.1, Algorithm E], [GCL92, ch. 7];
+  # extended Euclid [Knu98, §4.5.2, Algorithm X]. Keys: MANUAL.md, Sources.
   module PolyGCD
     module_function
 
