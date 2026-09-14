@@ -120,7 +120,7 @@ class SeriesTest < Minitest::Test
     assert_equal "pi", RCAS.integrate(1 / (1 + :x**2), x: -Float::INFINITY..Float::INFINITY).to_s
     assert_equal 4, (:x**3).to_expr.integrate(x: 0..2)
     assert_equal Rational(1, 3), RCAS.integrate(:x**2, :x, 0, 1)
-    assert_equal "integral(exp(-x**2), x, 0, 1)", RCAS.integrate(exp(-:x**2), x: 0..1).to_s
+    assert_equal "pi**(1/2)*erf(1)/2", RCAS.integrate(exp(-:x**2), x: 0..1).to_s
     assert_equal 0, RCAS.integrate(exp(-:x**2), x: 0..1).diff(:x)
     assert_equal 1, RCAS.limit(sin(:x) / :x, x: 0)
     assert_equal "oo", RCAS.limit(1 / :x, x: 0, dir: :right).to_s

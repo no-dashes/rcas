@@ -57,7 +57,13 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
   - [1.7 Linear algebra](#17-linear-algebra)
   - [1.8 Differential equations and recurrences](#18-differential-equations-and-recurrences)
     - [Recurrences](#recurrences)
-  - [1.9 Performance notes](#19-performance-notes)
+  - [1.9 Statistics](#19-statistics)
+    - [Descriptive statistics](#descriptive-statistics)
+    - [Regression](#regression)
+    - [Distributions](#distributions)
+    - [Hypothesis tests](#hypothesis-tests)
+    - [Confidence intervals](#confidence-intervals)
+  - [1.10 Performance notes](#110-performance-notes)
 - [2. Reference](#2-reference)
 - [3. Files](#3-files)
 - [4. Sources](#4-sources)
@@ -485,8 +491,10 @@ rcas> integrate(exp(x) / (1 + exp(x)), x)
 => log(1 + exp(x))
 rcas> integrate(exp(sqrt(x)) / sqrt(x), x)
 => 2*exp(x**(1/2))
-rcas> integrate(exp(-x**2) + x, x)
-=> integral(exp(-x**2), x) + x**2/2
+rcas> integrate(exp(-x**4) + x, x)
+=> integral(exp(-x**4), x) + x**2/2
+rcas> integrate(exp(-x**2), x)
+=> pi**(1/2)*erf(x)/2
 rcas> integrate(sqrt(x**2 + 1), x)
 => log((1 + x**2)**(1/2) + x)/2 + x*(1 + x**2)**(1/2)/2
 rcas> integrate(sqrt(1 - x**2), x)
@@ -522,7 +530,9 @@ rcas> integrate(log(x), x: 0..1)
 rcas> integrate(sqrt(1 - x**2), x: -1..1)
 => pi/2
 rcas> integrate(exp(-x**2), x: 0..1)
-=> integral(exp(-x**2), x, 0, 1)
+=> pi**(1/2)*erf(1)/2
+rcas> integrate(exp(-x**2), x: -oo..oo)
+=> pi**(1/2)
 ```
 
 #### Series
@@ -1457,7 +1467,174 @@ rcas> rsolve(eq(u(n + 1), 3*u(n) + 2**n), u, n)
 => u(n) = -2**n + 3**n*C1
 ```
 
-### 1.9 Performance notes
+### 1.9 Statistics
+
+#### Descriptive statistics
+
+The functions take a list of values and return exact results; symbolic
+values are fine wherever no ordering is needed. `variance`, `stdev` and
+`covariance` divide by `n - 1` unless `sample: false`, `skewness` and
+`kurtosis` are the standardized central moments (3 for a normal sample),
+and `quantile` interpolates between order statistics the way R and Excel
+do by default.
+
+```
+rcas> data = [2, 4, 4, 4, 5, 5, 7, 9]
+=> [2, 4, 4, 4, 5, 5, 7, 9]
+rcas> [mean(data), median(data), mode(data), variance(data), stdev(data, sample: false)]
+=> [5, 9/2, 4, 32/7, 2]
+rcas> [quantile(data, 1/4r), quartiles([1, 2, 3, 4, 5, 6, 7, 8]), iqr([1, 2, 3, 4, 5, 6, 7, 8])]
+=> [4, [11/4, 9/2, 25/4], 7/2]
+rcas> [skewness([1, 2, 3, 10]), kurtosis([1, 2, 3, 4]), moment([1, 2, 3, 4], 2, central: false)]
+=> [18*2**(1/2)/25, 41/25, 15/2]
+rcas> [geometric_mean([2, 8]), harmonic_mean([1, 2, 4]), frequencies([3, 1, 3, 2, 3])]
+=> [4, 12/7, {1=>1, 2=>1, 3=>3}]
+rcas> [mean([d1, d2, d3]), variance([d1, d2])]
+=> [d1/3 + d2/3 + d3/3, d1**2/2 - d1*d2 + d2**2/2]
+```
+
+#### Regression
+
+`covariance` and `correlation` take two lists; `linreg(xs, ys, x)` is the
+least squares line as an expression in `x`.
+
+```
+rcas> [covariance([1, 2, 3], [2, 4, 7]), correlation([1, 2, 3], [2, 4, 6])]
+=> [5/2, 1]
+rcas> linreg([1, 2, 3], [2, 4, 7], x)
+=> -2/3 + 5*x/2
+```
+
+#### Distributions
+
+`Normal(mu, sigma)`, `Uniform(a, b)`, `Exponential(rate)`, `Bernoulli(p)`,
+`Binomial(n, p)`, `Poisson(rate)`, `Geometric(p)` (failures before the
+first success, `k = 0, 1, ...`), `DiscreteUniform(a, b)` and the three
+sampling distributions `StudentT(nu)`, `ChiSquare(k)`, `FRatio(d1, d2)`
+are distribution objects, with symbolic parameters allowed. They answer `pdf`
+(density or probability mass), `cdf`, `quantile`, `mean`, `variance`,
+`stdev`, `median`, `skewness`, `kurtosis`, `probability` of a range or an
+inequality, `expectation(f, x)` of a function (an integral or sum over the
+support, formal when rcas cannot do it), `moment(k)` and `sample(n)`. The
+normal CDF is written with the error function `erf`; its quantile is
+numeric except at `1/2`.
+
+```
+rcas> X = Normal(0, 1)
+=> Normal(0, 1)
+rcas> [X.pdf(x), X.cdf(x)]
+=> [2**(1/2)*exp(-x**2/2)/(2*pi**(1/2)), 1/2 + erf(2**(1/2)*x/2)/2]
+rcas> [X.probability(x > 1), X.probability(-1..1).evalf, X.quantile(0.975)]
+=> [1/2 - erf(2**(1/2)/2)/2, 0.6826894921370861, 1.9599639845400536]
+rcas> Normal(mu, sigma).pdf(x)
+=> 2**(1/2)*exp(-(-mu + x)**2/(2*sigma**2))/(2*pi**(1/2)*sigma)
+rcas> B = Binomial(10, 1/2r)
+=> Binomial(10, 1/2)
+rcas> [B.pdf(3), B.cdf(3), B.probability(x >= 8), B.mean, B.variance]
+=> [15/128, 11/64, 7/128, 5, 5/2]
+rcas> [Binomial(cnt, prob).pdf(k), Poisson(rate).pdf(k), Geometric(1/2r).cdf(k)]
+=> [prob**k*binomial(cnt, k)*(1 - prob)**(cnt - k), rate**k*exp(-rate)/k!, 1 - (1/2)**k/2]
+rcas> D = DiscreteUniform(1, 6)
+=> DiscreteUniform(1, 6)
+rcas> [D.mean, D.variance, D.probability(x >= 5), D.sample(5, random: Random.new(1))]
+=> [7/2, 35/12, 1/3, [3, 5, 1, 2, 1]]
+rcas> [Uniform(0, 1).expectation(x**2, x), Exponential(2).quantile(1/2r), Exponential(rate).cdf(x)]
+=> [1/3, log(2)/2, 1 - exp(-(rate*x))]
+rcas> [Normal(0, 1).expectation(x**2, x), Normal(mu, sigma).moment(2), Exponential(rate).moment(2)]
+=> [1, mu**2 + sigma**2, 2/rate**2]
+```
+
+The densities are exact; the CDFs of `StudentT`, `ChiSquare` and `FRatio`
+are exact where a closed form exists (`nu = 1, 2` for `StudentT`, even `k`
+for `ChiSquare`) and numeric otherwise, from the regularized incomplete
+gamma and beta functions. Quantiles other than the ones a formula gives
+are numeric.
+
+```
+rcas> [StudentT(1).cdf(1), ChiSquare(2).cdf(x), StudentT(10).quantile(0.975)]
+=> [3/4, 1 - exp(-x/2), 2.228138851986274]
+rcas> [ChiSquare(3).quantile(0.95), FRatio(3, 10).quantile(0.95), Normal(0, 1).quantile(0.975)]
+=> [7.814727903251181, 3.708264819046842, 1.9599639845400536]
+rcas> ChiSquare(k).pdf(x)
+=> 2**(-k/2)*x**(-1 + k/2)*exp(-x/2)/gamma(k/2)
+rcas> StudentT(nu).pdf(t)
+=> gamma(1/2 + nu/2)*(1 + t**2/nu)**(-1/2 - nu/2)/(gamma(nu/2)*(pi*nu)**(1/2))
+```
+
+`erf` and `erfc` are ordinary functions: exact at 0 and at infinity,
+numeric on floats, with derivative `2*exp(-x**2)/sqrt(pi)`, a Taylor
+series, and `integrate` knows `exp(a*x**2 + b*x + c)` for `a < 0`
+(section 1.3).
+
+#### Hypothesis tests
+
+Each test returns a result object that prints as one line and answers
+`statistic`, `pvalue`, `parameters`, `distribution` and
+`reject?(alpha)` (0.05 by default). `alternative:` is `:two_sided` (the
+default), `:less` or `:greater`. The test statistics stay exact when the
+data is exact; the p values come from the t, chi-square, F and normal
+CDFs and are numeric, except in the binomial test, which is exact.
+
+`ttest(data, mu: 0)` is the one-sample t test, `ttest(xs, ys)` Welch's
+two-sample test (`equal_variance: true` for the pooled one, `paired:
+true` for the paired one) and `ztest(data, sigma:, mu: 0)` the test with
+a known standard deviation.
+
+```
+rcas> ttest([5.1, 4.9, 5.6, 5.2, 5.0], mu: 5)
+=> one-sample t test: t = 1.32417, df = 4, p = 0.256044 (two-sided)
+rcas> ttest([1, 2, 3, 4, 5], mu: 1, alternative: :greater)
+=> one-sample t test: t = 2.82843, df = 4, p = 0.0237103 (greater)
+rcas> ttest([12, 15, 14, 16, 13], [10, 11, 9, 12, 10])
+=> Welch t test: t = 4.12948, df = 7.27456, p = 0.0040545 (two-sided)
+rcas> ttest([12, 15, 14, 16, 13], [10, 11, 9, 12, 10], paired: true).reject?(0.01)
+=> true
+rcas> ztest([101, 99, 104, 98, 103], sigma: 2, mu: 100)
+=> z test: z = 1.11803, n = 5, p = 0.263552 (two-sided)
+```
+
+`chisquare_test(counts)` is the goodness-of-fit test against `expected:`
+(counts or probabilities, uniform by default; `df:` lowers the degrees of
+freedom for estimated parameters), and `chisquare_test(rows)` on a table
+of rows is the test of independence, without a continuity correction.
+`ftest(xs, ys)` compares two variances, and `binomial_test(k, n, p:)` is
+the exact test: its p value is the sum of the probabilities of the
+outcomes no more likely than the observed one, and stays a rational.
+
+```
+rcas> chisquare_test([18, 22, 20, 25, 15])
+=> chi-square goodness of fit: X^2 = 29/10, df = 4, p = 0.574697 (greater)
+rcas> chisquare_test([[30, 20], [15, 35]])
+=> chi-square test of independence: X^2 = 100/11, df = 1, p = 0.00256883 (greater)
+rcas> ftest([12, 15, 14, 16, 13], [10, 11, 9, 12, 10])
+=> F test of two variances: F = 25/13, df1 = 4, df2 = 4, p = 0.542062 (two-sided)
+rcas> binomial_test(9, 10)
+=> exact binomial test: k = 9, n = 10, p = 11/512 (two-sided)
+```
+
+#### Confidence intervals
+
+`confidence_interval(data, level: 0.95)` is the Student t interval for
+the mean, the normal one when `sigma:` is given, and the chi-square
+interval for the spread with `parameter: :variance` or `:stdev`.
+`proportion_interval(k, n)` is Wilson's score interval. All of them
+return an `Interval` (section 1.4), so `include?` works.
+
+```
+rcas> confidence_interval([5.1, 4.9, 5.6, 5.2, 5.0])
+=> [4.8245208615073345, 5.495479138492666]
+rcas> confidence_interval([5.1, 4.9, 5.6, 5.2, 5.0], sigma: 0.3)
+=> [4.897043237827026, 5.422956762172975]
+rcas> confidence_interval([5.1, 4.9, 5.6, 5.2, 5.0], parameter: :stdev)
+=> [0.1618768601247171, 0.7763919787687242]
+rcas> proportion_interval(41, 100)
+=> [0.3186731302113651, 0.5079856994658921]
+```
+
+Not implemented: analysis of variance, non-parametric tests (Wilcoxon,
+Kolmogorov-Smirnov), multiple regression and time series.
+
+### 1.10 Performance notes
 
 `expand` and polynomial conversion combine like terms while multiplying,
 so a product of many sums never materialises more terms than the result
@@ -1487,7 +1664,7 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 
 | purpose | functions |
 |---|---|
-| elementary functions | `sin cos tan asin acos atan exp log sinh cosh sqrt cbrt root zeta abs sign` |
+| elementary functions | `sin cos tan asin acos atan exp log sinh cosh sqrt cbrt root zeta abs sign erf erfc` |
 | combinatorics | `factorial binomial gamma` |
 | rewriting | `simplify expand cancel rationalize trigsimp expand_trig expand_log logcombine minpoly` |
 | rational functions | `numer denom apart gcd lcm quo rem divmod` |
@@ -1501,6 +1678,10 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | complex numbers | `re im conj arg` |
 | rounding | `floor ceil round mod` |
 | sequences | `bernoulli fibonacci harmonic` |
+| statistics | `mean median mode variance stdev quantile quartiles iqr moment skewness kurtosis geometric_mean harmonic_mean frequencies covariance correlation linreg` |
+| distributions | `Normal Uniform Exponential Bernoulli Binomial Poisson Geometric DiscreteUniform StudentT ChiSquare FRatio pdf cdf probability` |
+| tests and intervals | `ttest ztest chisquare_test ftest binomial_test confidence_interval proportion_interval` |
+| special functions | `erf erfc` |
 | domains | `NN ZZ QQ RR CC GF assume forget assumptions` |
 | linear algebra | `vector matrix` |
 | holding | `hold evaluate` |
@@ -1510,8 +1691,8 @@ numer denom apart gcd lcm quo rem divmod subs call evalf to_f diff integrate
 series taylor limit solve eq variables degree ldegree lcoeff tcoeff coeff
 coeffs domain in in? to_poly to_sexp hold-related evaluate`.
 
-Not implemented: the complete Risch algorithm and special functions
-(`erf`, `Ei`), differential equations with variable coefficients beyond
+Not implemented: the complete Risch algorithm and special functions beyond
+`erf` (`Ei`, `Si`), analysis of variance and non-parametric tests, differential equations with variable coefficients beyond
 first order and systems of differential equations, limits of bounded
 oscillation (`sin(x)/x` at infinity), inequalities beyond
 polynomial, rational and absolute-value ones, number fields with more than
@@ -1533,6 +1714,10 @@ lib/rcas/summation.rb       Faulhaber, Gosper, zeta
 lib/rcas/product.rb         symbolic products; Product node
 lib/rcas/recurrence.rb      rsolve: linear recurrences with constant coefficients
 lib/rcas/complex_parts.rb   re, im, conj, arg
+lib/rcas/statistics.rb      descriptive statistics, covariance, correlation, linreg
+lib/rcas/distributions.rb   Normal, Uniform, Exponential, Bernoulli, Binomial, Poisson, Geometric, DiscreteUniform, StudentT, ChiSquare, FRatio
+lib/rcas/special.rb         incomplete gamma and beta, numerically
+lib/rcas/hypothesis.rb      t, z, chi-square, F and binomial tests; confidence intervals
 lib/rcas/solve.rb           equations, solve, systems
 lib/rcas/groebner.rb        Gröbner bases: Buchberger, normal forms, monomial orders
 lib/rcas/interpolate.rb     Newton interpolation
@@ -1587,6 +1772,12 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | Gosper's algorithm with the degree bound for the polynomial ansatz | summation.rb | [Gos78]; [PWZ96, ch. 5] |
 | products: factorial and gamma ratios for linear factors, exp of sums | product.rb | [GKP94, §5.5] |
 | recurrences: characteristic roots, undetermined coefficients, initial values | recurrence.rb | [GKP94, §7.3] |
+| descriptive statistics, sample quantiles (definition 7), least squares line | statistics.rb | [HF96]; [Ros14, ch. 7] |
+| distributions: densities, CDFs, moments; normal CDF by erf, quantile by bisection and Newton | distributions.rb | [Ros14, ch. 4-5]; [AS64, §7.1] |
+| incomplete gamma and beta by series and continued fractions (Lentz) | special.rb | [AS64, §6.5, §26.5]; [PTVF07, §6.2, §6.4]; [Len76] |
+| t, chi-square and F tests, exact binomial test, confidence intervals | hypothesis.rb | [Ros14, ch. 8-9]; Welch's degrees of freedom [Wel47]; Wilson's score interval [Wil27] |
+| gamma variates for sampling (Marsaglia-Tsang) | distributions.rb | [MT00] |
+| Gaussian integrals: exp(quadratic) by completing the square, x**n exp(quadratic) by reduction | integrate_substitutions.rb | [AS64, §7.1, §7.4] |
 | polynomial systems: lex Gröbner basis and triangular back-substitution; resultants for two equations with parameters | solve.rb | [CLO15, ch. 2 §8, ch. 3 §1]; [GCL92, ch. 9-10] |
 | Newton interpolation by divided differences | interpolate.rb | [Knu98, §4.6.4]; [vzGG13, ch. 5] |
 | Gröbner bases: Buchberger's algorithm with the product criterion, normal forms, reduced bases, the dimension test | groebner.rb | [Buc65]; [CLO15, ch. 2 §§3, 7, 9-10; ch. 5 §3]; [GCL92, ch. 10] |
@@ -1602,6 +1793,8 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | differential equations: separable, integrating factor, characteristic roots, undetermined coefficients, variation of parameters | ode.rb | [BD12, ch. 2-4] |
 | inequalities by sign charts over exact real roots | inequalities.rb | textbook; roots from solve.rb |
 
+- [AS64] M. Abramowitz, I. A. Stegun (eds.), *Handbook of Mathematical
+  Functions*, National Bureau of Standards 1964, ch. 7 (error function).
 - [BD12] W. E. Boyce, R. C. DiPrima, *Elementary Differential Equations and
   Boundary Value Problems*, 10th ed., Wiley 2012.
 - [Bre80] R. P. Brent, An improved Monte Carlo factorization algorithm,
@@ -1634,6 +1827,8 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   1916.
 - [Her72] C. Hermite, Sur l'intégration des fractions rationnelles, *Ann.
   Sci. École Norm. Sup.* (2) 1 (1872), 215-218.
+- [HF96] R. J. Hyndman, Y. Fan, Sample quantiles in statistical packages,
+  *The American Statistician* 50 (1996), 361-365.
 - [Hor08] P. Horn, *Faktorisierung in Schief-Polynomringen*, Dissertation,
   Universität Kassel 2008, chapter 6 (Lineare Algebra mit Polynom-Matrizen).
 - [HW08] G. H. Hardy, E. M. Wright, *An Introduction to the Theory of
@@ -1642,6 +1837,9 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   Nullstellen von Polynomen, *Numer. Math.* 8 (1966), 290-294.
 - [Knu98] D. E. Knuth, *The Art of Computer Programming, vol. 2:
   Seminumerical Algorithms*, 3rd ed., Addison-Wesley 1998.
+- [Len76] W. J. Lentz, Generating Bessel functions in Mie scattering
+  calculations using continued fractions, *Applied Optics* 15 (1976),
+  668-671.
 - [Loo83] R. Loos, Computing in algebraic extensions, in: B. Buchberger,
   G. E. Collins, R. Loos (eds.), *Computer Algebra: Symbolic and Algebraic
   Computation*, 2nd ed., Springer 1983, 173-187.
@@ -1654,17 +1852,23 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   Comp.* 28 (1974), 1153-1157.
 - [Mil76] G. L. Miller, Riemann's hypothesis and tests for primality, *J.
   Comput. System Sci.* 13 (1976), 300-317.
+- [MT00] G. Marsaglia, W. W. Tsang, A simple method for generating gamma
+  variables, *ACM Trans. Math. Software* 26 (2000), 363-372.
 - [NM77] A. C. Norman, P. M. A. Moore, Implementing the new Risch
   integration algorithm, *Proc. 4th Int. Colloquium on Advanced Computing
   Methods in Theoretical Physics*, Marseille 1977, 99-110.
 - [Pol75] J. M. Pollard, A Monte Carlo method for factorization, *BIT* 15
   (1975), 331-334.
+- [PTVF07] W. H. Press, S. A. Teukolsky, W. T. Vetterling, B. P. Flannery,
+  *Numerical Recipes*, 3rd ed., Cambridge University Press 2007.
 - [PWZ96] M. Petkovšek, H. S. Wilf, D. Zeilberger, *A = B*, A K Peters
   1996.
 - [Rab80] M. O. Rabin, Probabilistic algorithms in finite fields, *SIAM J.
   Comput.* 9 (1980), 273-280.
 - [Rab80b] M. O. Rabin, Probabilistic algorithm for testing primality, *J.
   Number Theory* 12 (1980), 128-138.
+- [Ros14] S. M. Ross, *A First Course in Probability*, 9th ed., Pearson
+  2014.
 - [RT76] M. Rothstein, *Aspects of Symbolic Integration and Simplification
   of Exponential and Primitive Functions*, PhD thesis, University of
   Wisconsin-Madison 1976; B. M. Trager, Algebraic factoring and rational
@@ -1675,6 +1879,11 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   integration, *Proc. SYMSAC '76*, ACM 1976, 219-226.
 - [vzGG13] J. von zur Gathen, J. Gerhard, *Modern Computer Algebra*, 3rd
   ed., Cambridge University Press 2013.
+- [Wel47] B. L. Welch, The generalization of 'Student's' problem when
+  several different population variances are involved, *Biometrika* 34
+  (1947), 28-35.
+- [Wil27] E. B. Wilson, Probable inference, the law of succession, and
+  statistical inference, *J. Amer. Statist. Assoc.* 22 (1927), 209-212.
 - [Yun76] D. Y. Y. Yun, On square-free decomposition algorithms, *Proc.
   SYMSAC '76*, ACM 1976, 26-35.
 - [Zas69] H. Zassenhaus, On Hensel factorization I, *J. Number Theory* 1

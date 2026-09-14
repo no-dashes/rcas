@@ -110,7 +110,7 @@ module RCAS
       end
 
       result = table(f, x) || rational(f, x) || substitution(f, x, depth) ||
-               by_parts(f, x, depth) || Substitutions.radical(f, x, depth) || heurisch(f, x) ||
+               by_parts(f, x, depth) || Substitutions.radical(f, x, depth) || Substitutions.gaussian(f, x) || heurisch(f, x) ||
                Substitutions.root_of_linear(f, x, depth) || Substitutions.exponential(f, x, depth) ||
                Substitutions.trigonometric(f, x, depth) || shift(f, x, depth)
       result&.simplify

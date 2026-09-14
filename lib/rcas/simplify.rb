@@ -220,6 +220,18 @@ module RCAS
 
       # 2**(-1/2) => 2**(1/2)/2, 2**(3/2) => 2*2**(1/2): a positive integer base keeps a
       # fractional exponent in (0, 1); the integer part moves into the coefficient.
+      if factors.any? { |base, exp| base.is_a?(Num) && base.value.is_a?(Rational) && base.value.positive? && exp.is_a?(Rational) }
+        split = {}
+        factors.each do |base, exp|
+          if base.is_a?(Num) && base.value.is_a?(Rational) && base.value.positive? && exp.is_a?(Rational)
+            add_factor(split, Num.new(base.value.numerator), exp) unless base.value.numerator == 1
+            add_factor(split, Num.new(base.value.denominator), -exp)
+          else
+            add_factor(split, base, exp)
+          end
+        end
+        factors = split
+      end
       factors = factors.to_h do |base, exp|
         next [base, exp] unless base.is_a?(Num) && base.value.is_a?(Integer) && base.value.positive? && exp.is_a?(Rational) && exp.floor != 0
         m = exp.floor

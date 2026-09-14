@@ -9,7 +9,7 @@ module RCAS
   # Elementary functions. Available as RCAS.sin(:x) or, after
   # `include RCAS::Functions`, as bare sin(:x).
   module Functions
-    NAMES = %i[sin cos tan exp log atan asin acos sinh cosh zeta factorial gamma abs sign].freeze
+    NAMES = %i[sin cos tan exp log atan asin acos sinh cosh zeta factorial gamma abs sign erf erfc].freeze
 
     # Symbolic arguments build an Fn node; constant arguments fold right
     # away, the way Ruby folds 1 + 2: sin(PI/6) is 1/2, sin(x) stays sin(x).
@@ -228,6 +228,59 @@ module RCAS
     def fibonacci(n) = Functions.fold(Fn.new(:fibonacci, [n]))
     def harmonic(n) = Functions.fold(Fn.new(:harmonic, [n]))
 
+    # Normal(0, 1), Uniform(a, b), Exponential(l), Bernoulli(p), Binomial(n, p), Poisson(l), Geometric(p), DiscreteUniform(1, 6): distributions
+    def Normal(mu = 0, sigma = 1) = Distributions::Normal.new(mu, sigma)
+    def Uniform(a = 0, b = 1) = Distributions::Uniform.new(a, b)
+    def Exponential(rate = 1) = Distributions::Exponential.new(rate)
+    def Bernoulli(p) = Distributions::Bernoulli.new(p)
+    def Binomial(n, p) = Distributions::Binomial.new(n, p)
+    def Poisson(rate) = Distributions::Poisson.new(rate)
+    def Geometric(p) = Distributions::Geometric.new(p)
+    def DiscreteUniform(a, b) = Distributions::DiscreteUniform.new(a, b)
+    # StudentT(nu), ChiSquare(k), FRatio(d1, d2): the sampling distributions of the tests
+    def StudentT(nu) = Distributions::StudentT.new(nu)
+    def ChiSquare(k) = Distributions::ChiSquare.new(k)
+    def FRatio(d1, d2) = Distributions::FRatio.new(d1, d2)
+    # pdf(X, x), cdf(X, x), probability(X, x > 1): the methods as functions
+    def pdf(dist, x) = dist.pdf(x)
+    def cdf(dist, x) = dist.cdf(x)
+    def probability(dist, event) = dist.probability(event)
+
+# ttest(data, mu: 0), ttest(xs, ys), ttest(xs, ys, paired: true), ztest(data, sigma: 2, mu: 0):
+# tests of location; alternative: :two_sided (default), :less, :greater
+def ttest(data, other = nil, **opts) = Hypothesis.ttest(data, other, **opts)
+def ztest(data, sigma:, mu: 0, alternative: :two_sided) = Hypothesis.ztest(data, sigma: sigma, mu: mu, alternative: alternative)
+# chisquare_test(counts, expected: nil): goodness of fit; chisquare_test(rows): independence
+def chisquare_test(observed, **opts) = Hypothesis.chisquare_test(observed, **opts)
+# ftest(xs, ys): the ratio of two sample variances
+def ftest(xs, ys, alternative: :two_sided) = Hypothesis.ftest(xs, ys, alternative: alternative)
+# binomial_test(9, 10, p: 1/2r): exact, the p value stays a rational
+def binomial_test(successes, trials, p: Rational(1, 2), alternative: :two_sided) = Hypothesis.binomial_test(successes, trials, p: p, alternative: alternative)
+# confidence_interval(data, level: 0.95, sigma: nil, parameter: :mean|:variance|:stdev), proportion_interval(k, n)
+def confidence_interval(data, **opts) = Hypothesis.confidence_interval(data, **opts)
+def proportion_interval(successes, trials, level: 0.95) = Hypothesis.proportion_interval(successes, trials, level: level)
+
+    # mean(data), median, mode, variance(data, sample: true), stdev, quantile(data, p), quartiles, iqr,
+    # moment(data, k), skewness, kurtosis, geometric_mean, harmonic_mean, frequencies: on a list or a distribution
+    def mean(obj) = obj.is_a?(Distributions::Distribution) ? obj.mean : Statistics.mean(obj)
+    def median(obj) = obj.is_a?(Distributions::Distribution) ? obj.median : Statistics.median(obj)
+    def mode(data) = Statistics.mode(data)
+    def variance(obj, sample: true) = obj.is_a?(Distributions::Distribution) ? obj.variance : Statistics.variance(obj, sample: sample)
+    def stdev(obj, sample: true) = obj.is_a?(Distributions::Distribution) ? obj.stdev : Statistics.stdev(obj, sample: sample)
+    def quantile(obj, p) = obj.is_a?(Distributions::Distribution) ? obj.quantile(p) : Statistics.quantile(obj, p)
+    def quartiles(data) = Statistics.quartiles(data)
+    def iqr(data) = Statistics.iqr(data)
+    def moment(obj, k, central: true) = obj.is_a?(Distributions::Distribution) ? obj.moment(k) : Statistics.moment(obj, k, central: central)
+    def skewness(obj) = obj.is_a?(Distributions::Distribution) ? obj.skewness : Statistics.skewness(obj)
+    def kurtosis(obj) = obj.is_a?(Distributions::Distribution) ? obj.kurtosis : Statistics.kurtosis(obj)
+    def geometric_mean(data) = Statistics.geometric_mean(data)
+    def harmonic_mean(data) = Statistics.harmonic_mean(data)
+    def frequencies(data) = Statistics.frequencies(data)
+    # covariance(xs, ys), correlation(xs, ys), linreg(xs, ys, x): two data lists; linreg is the least squares line a + b*x
+    def covariance(xs, ys, sample: true) = Statistics.covariance(xs, ys, sample: sample)
+    def correlation(xs, ys) = Statistics.correlation(xs, ys)
+    def linreg(xs, ys, x = :x) = Statistics.linreg(xs, ys, x)
+
     # D(y, x) is the derivative of the unknown function y; dsolve solves ODEs.
     def D(expr, var, order = 1) = Derivative.new(expr, var, order)
     def dsolve(equation, y, x) = ODE.dsolve(equation, y, x)
@@ -260,7 +313,7 @@ module RCAS
       end
     end
 
-    ODD = %i[sin tan atan asin sinh sign].freeze
+    ODD = %i[sin tan atan asin sinh sign erf].freeze
     EVEN = %i[cos cosh abs].freeze
 
     # Constant folding for function applications; called by Simplify.
@@ -318,6 +371,11 @@ module RCAS
       in [:bernoulli, Num => n] if n.value.is_a?(Integer) && n.value >= 0 then Num.new(Simplify.normalize_number(Summation.bernoulli(n.value)))
       in [:fibonacci, Num => n] if n.value.is_a?(Integer) then Num.new(Combinatorics.fibonacci(n.value))
       in [:harmonic, Num => n] if n.value.is_a?(Integer) && n.value >= 0 then Num.new(Simplify.normalize_number((1..n.value).sum(0r) { |k| Rational(1, k) }))
+      in [:erf, Num => n] if n.zero? then Num.new(0)
+      in [:erfc, Num => n] if n.zero? then Num.new(1)
+      in [:erf, Const => c] if c.name == :oo then Num.new(1)
+      in [:erfc, Const => c] if c.name == :oo then Num.new(0)
+      in [:erfc, Neg => e] if e.arg.is_a?(Const) && e.arg.name == :oo then Num.new(2)
       in [:exp, Fn => inner] if inner.name == :log then inner.args.first
       in [:log, Fn => inner] if inner.name == :exp then inner.args.first
       else fn

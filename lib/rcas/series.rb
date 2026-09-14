@@ -194,7 +194,7 @@ module RCAS
           break unless s.zero?
         end
       rescue SeriesError
-        return exponential_fallback(g)
+        return termwise(g) || exponential_fallback(g)
       end
       return Num.new(0) if s.zero?
 
@@ -216,8 +216,9 @@ module RCAS
     # exp(-1/t)*t and friends: look at log(g) instead, whose leading term
     # decides between 0, oo and exp(finite).
     def exponential_fallback(g)
-      raise SeriesError, "no exponential factor in #{g}" unless g.each_node.any? { |n| n.is_a?(Fn) && n.name == :exp }
       coeff, factors = Simplify.factorize(g)
+      exponential = factors.any? { |base, exp| base == Simplify.exp_base || (base.is_a?(Fn) && base.name == :exp) || (exp.is_a?(Expression) && exp.variables.include?(T.name)) }
+      raise SeriesError, "no exponential factor in #{g}" unless exponential
       negative = Simplify.negative?(coeff)
       positive = negative ? Simplify.rebuild_product(-coeff, factors) : g
       value = one_sided(log_of(positive), :right)
@@ -228,6 +229,24 @@ module RCAS
         else Fn.new(:exp, [value]).simplify
         end
       negative ? Neg.new(result).simplify : result
+    end
+
+    # The limit of a sum is the sum of the limits when every term has a
+    # finite one (exp(-1/t)/t + erf(1/t) at t -> 0+, say); nil otherwise.
+    def termwise(g)
+      constant, terms = Simplify.termize(g)
+      if terms.size + (constant.zero? ? 0 : 1) < 2 # c * (a + b): distribute first
+        return nil unless g.each_node.any? { |n| n.is_a?(Add) || n.is_a?(Sub) }
+        constant, terms = Simplify.termize(Expand.expand(g))
+        return nil if terms.size + (constant.zero? ? 0 : 1) < 2
+      end
+      total = Num.new(constant)
+      terms.each do |factors, coeff|
+        value = one_sided(Simplify.rebuild_product(coeff, factors), :right)
+        return nil if value.is_a?(Limit) || infinite?(value) || value.each_node.any? { |n| n == OO }
+        total += value
+      end
+      total.simplify
     end
 
     def log_of(g)
@@ -332,6 +351,14 @@ module RCAS
         raise SeriesError, "sign of #{c}" unless sign.is_a?(Numeric) && sign.real?
         half_pi = Series.constant((sign.negative? ? -PI / 2 : PI / 2).simplify, order)
         return half_pi - function(Fn.new(:atan, [Pow.new(f.args.first, Num.new(-1))]), order)
+      end
+      if %i[erf erfc].include?(name) && s.min_exponent.negative?
+        # erf(+-oo) = +-1 up to an exponentially small tail: a constant, for limits
+        c = s.terms[s.min_exponent]
+        sign = Scalar.numeric?(c) ? c.value : (c.variables.empty? ? c.evalf : nil)
+        raise SeriesError, "sign of #{c}" unless sign.is_a?(Numeric) && sign.real?
+        value = name == :erf ? (sign.negative? ? -1 : 1) : (sign.negative? ? 2 : 0)
+        return Series.constant(Num.new(value), order)
       end
       raise SeriesError, "#{f} has an essential singularity" if s.min_exponent.negative?
       c = s.constant_term

@@ -187,6 +187,41 @@ module RCAS
         expr.map_children { |c| replace_root(c, base, root, n) }
       end
 
+      # ---- exp(a x^2 + b x + c), a < 0: the error function ---------------------------
+      #
+      #   int exp(q) dx = exp(c - b^2/(4a)) * sqrt(pi) / (2 sqrt(-a)) * erf(sqrt(-a) x - b / (2 sqrt(-a)))
+      def gaussian(f, x)
+        return gaussian_moment(f, x) unless f.is_a?(Fn)
+        return nil unless f.name == :exp && f.args.size == 1
+        cs = Solve.polynomial_coefficients(f.args.first, x)
+        return nil unless cs && cs.size == 3 && cs[2].is_a?(Num) && cs[2].value.real? && cs[2].value.negative?
+        c, b, a = cs
+        s = RCAS.sqrt(Num.new(-a.value))
+        argument = (s * x - b / (2 * s)).simplify
+        scale = (Fn.new(:exp, [c - b**2 / (4 * a)]) * RCAS.sqrt(PI) / (2 * s)).simplify
+        (scale * RCAS.erf(argument)).simplify
+      end
+
+      # int x^n e^q = x^(n-1) e^q / (2a) - b/(2a) int x^(n-1) e^q - (n-1)/(2a) int x^(n-2) e^q
+      def gaussian_moment(f, x)
+        _, factors = Simplify.factorize(f)
+        return nil unless factors.size == 2 && factors[x].is_a?(Integer) && factors[x].positive? && factors.key?(Simplify.exp_base)
+        n = factors[x]
+        q = Expression.lift(factors[Simplify.exp_base])
+        cs = Solve.polynomial_coefficients(q, x)
+        return nil unless cs && cs.size == 3 && cs[2].is_a?(Num) && cs[2].value.real? && cs[2].value.negative?
+        _, b, a = cs
+        e = Fn.new(:exp, [q])
+        lower = ->(k) { k.zero? ? gaussian(e, x) : gaussian_moment((x**k * e).simplify, x) }
+        first = lower.call(n - 1) or return nil
+        result = x**(n - 1) * e / (2 * a) - b / (2 * a) * first
+        if n >= 2
+          second = lower.call(n - 2) or return nil
+          result -= Num.new(n - 1) / (2 * a) * second
+        end
+        result.simplify
+      end
+
       # ---- R(x, (a x + b)^(1/n)) -------------------------------------------------
 
       def root_of_linear(f, x, depth)

@@ -93,13 +93,14 @@ class IntegrateTest < Minitest::Test
   end
 
   def test_unevaluated_pieces_are_kept
-    r = exp(-:x**2).integrate(:x)
+    r = exp(-:x**4).integrate(:x)
     assert_kind_of RCAS::Integral, r
-    assert_equal "integral(exp(-x**2), x)", r.to_s
-    assert_equal exp(-:x**2), r.diff(:x)
+    assert_equal "integral(exp(-x**4), x)", r.to_s
+    assert_equal exp(-:x**4), r.diff(:x)
+    assert_equal "pi**(1/2)*erf(x)/2", exp(-:x**2).integrate(:x).to_s
 
-    r = (exp(-:x**2) + :x).integrate(:x)
-    assert_equal "integral(exp(-x**2), x) + x**2/2", r.to_s
+    r = (exp(-:x**4) + :x).integrate(:x)
+    assert_equal "integral(exp(-x**4), x) + x**2/2", r.to_s
     assert_equal "integral(sin(x)/x, x)", (sin(:x) / :x).integrate(:x).to_s
   end
 
