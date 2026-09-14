@@ -121,4 +121,24 @@ class SolveTest < Minitest::Test
     assert_equal "1/(1 + a)", (1 / (:a**2 * (-1 - 1 / :a)) + 1 / :a).cancel.to_s
     assert_equal "-1 + 2**(1/2)", (1 / (1 + RCAS.sqrt(2))).rationalize.to_s
   end
+  def test_the_whole_family_of_trigonometric_solutions
+    assert_equal ["pi/6", "5*pi/6"], RCAS.solve(RCAS.sin(:x) - Rational(1, 2), :x).map(&:to_s), "one period by default"
+    assert_equal ["pi/6 + 2*pi*k", "5*pi/6 + 2*pi*k"], RCAS.solve(RCAS.sin(:x) - Rational(1, 2), :x, all: true).map(&:to_s)
+    assert_equal ["pi/4 + pi*k"], RCAS.solve(RCAS.tan(:x) - 1, :x, all: true).map(&:to_s), "tan has period pi"
+    assert_equal ["pi/2 + 2*pi*k", "-pi/2 + 2*pi*k"], RCAS.solve(RCAS.cos(:x), :x, all: true).map(&:to_s)
+    assert_equal ["pi/12 + pi*k", "5*pi/12 + pi*k"], RCAS.solve(RCAS.sin(2 * :x) - Rational(1, 2), :x, all: true).map(&:to_s)
+    assert_equal ["log(3)"], RCAS.solve(RCAS.exp(:x) - 3, :x, all: true).map(&:to_s), "no period to add"
+    assert_equal ["-2**(1/2)", "2**(1/2)"], RCAS.solve(:x**2 - 2, :x, all: true).map(&:to_s)
+    # the parameter avoids the names already in the equation
+    assert_includes RCAS.solve(RCAS.sin(:k * :x), :x, all: true).map(&:to_s).join(" "), "n"
+    # every member of the family really is a solution
+    family = RCAS.solve(RCAS.sin(:x) - Rational(1, 2), :x, all: true).first
+    (-2..2).each { |i| assert_in_delta 0.5, RCAS.sin(family.subs(k: i)).evalf, 1e-12 }
+  end
+
+  def test_a_ruby_comparison_is_explained
+    error = assert_raises(ArgumentError) { RCAS.solve(:x**2 == 4, :x) }
+    assert_includes error.message, "eq(lhs, rhs)"
+    assert_equal [2, -2], RCAS.solve(RCAS::Equation.new(:x**2, 4), :x).map { |r| r.to_s.to_i }
+  end
 end

@@ -157,6 +157,10 @@ module RCAS
             add_factor(factors, exp_base, multiply_exponents(multiply_exponents(exponent_value(e.base.args.first), exp), pw))
           elsif exp.is_a?(Integer)
             stack.push([e.base, pw * exp, true])
+          elsif exp.is_a?(Rational) && e.base.is_a?(Pow) && e.base.exponent.is_a?(Num) &&
+                e.base.exponent.value.is_a?(Integer) && RCAS.nonnegative?(e.base.base)
+            # (x**2)**(1/2) is x when x cannot be negative
+            stack.push([e.base.base, multiply_exponents(e.base.exponent.value, multiply_exponents(exp, pw)), true])
           elsif exp.is_a?(Numeric) && e.base.is_a?(Num) && (root = exact_power(e.base.value, exp))
             coeff *= pow_number(root, pw)
           elsif e.base.is_a?(Num) && exp.is_a?(Numeric) && (exp.is_a?(Float) || e.base.value.is_a?(Float))

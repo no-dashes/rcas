@@ -65,12 +65,26 @@ module RCAS
 
     module_function
 
-    def solve(target, vars = nil)
+    # all: true adds the period of the trigonometric functions, so that the
+    # answer is the whole family rather than the solutions in one period.
+    def solve(target, vars = nil, all: false)
+      if target.equal?(true) || target.equal?(false)
+        raise ArgumentError, "solve: `==` compares structurally in Ruby and this one is already #{target}; " \
+                             "write solve(eq(lhs, rhs), x) or solve(hold { lhs == rhs }, x)"
+      end
       return Inequalities.solve(target, vars) if target.is_a?(Inequality) || (target.is_a?(Array) && target.any? { |t| t.is_a?(Inequality) })
       return system(target, vars) if target.is_a?(Array)
       f = to_zero(target).simplify
       x = variable(f, vars)
-      dedupe(univariate(f, x, 0))
+      dedupe(univariate(f, x, 0, all: all))
+    end
+
+    # An integer parameter for the periodic solutions, avoiding the names in use.
+    def period_parameter(f, x)
+      taken = f.variables | [x.name]
+      name = %i[k n m j].find { |candidate| !taken.include?(candidate) }
+      name ||= (1..).lazy.map { |i| :"k#{i}" }.find { |candidate| !taken.include?(candidate) }
+      Var.new(name)
     end
 
     def to_zero(target) = target.is_a?(Equation) ? Sub.new(target.lhs, target.rhs) : Expression.lift(target)
@@ -92,7 +106,7 @@ module RCAS
 
     # ---- one equation, one unknown ----------------------------------------------
 
-    def univariate(f, x, depth)
+    def univariate(f, x, depth, all: false)
       return [] if depth > MAX_DEPTH
       f = f.simplify
       raise ArgumentError, "every value of #{x} is a solution" if Scalar.zero?(f)
@@ -100,7 +114,7 @@ module RCAS
 
       num, den = numerator_denominator(f, x)
       coeffs = polynomial_coefficients(num, x)
-      roots = coeffs ? polynomial_roots(coeffs) : transcendental(num, x, depth)
+      roots = coeffs ? polynomial_roots(coeffs) : transcendental(num, x, depth, all: all)
       roots = roots.map(&:simplify).reject { |r| Scalar.zero?(den.subs(x => r).simplify) }
       verify(f, x, roots)
     end
@@ -279,7 +293,7 @@ module RCAS
 
     # ---- transcendental equations -------------------------------------------------
 
-    def transcendental(f, x, depth)
+    def transcendental(f, x, depth, all: false)
       atoms = f.each_node.select { |n| depends?(n, x) && transcendental_atom?(n) }.uniq
       atoms = atoms.sort_by { |n| -n.each_node.count }
       t = Var.new(:"_s#{depth}")
@@ -292,7 +306,7 @@ module RCAS
         rescue NotImplementedError, ArgumentError
           next
         end
-        return values.flat_map { |v| invert(u, v, x, depth) }
+        return values.flat_map { |v| invert(u, v, x, depth, all: all) }
       end
 
       # x**(p/q): substitute t = x**(1/q)
@@ -353,18 +367,22 @@ module RCAS
       Simplify.rebuild_sum(constant, rebuilt)
     end
 
-    # Solutions of u = v for x, where u is a single atom containing x.
-    def invert(u, v, x, depth)
+    # Solutions of u = v for x, where u is a single atom containing x. With
+    # all: true the period of sin, cos and tan is added, with an integer
+    # parameter, so that every solution is covered and not just one period.
+    def invert(u, v, x, depth, all: false)
       case u
       when Fn
         arg = u.args.first
+        period = all ? period_parameter(arg - v, x) : nil
+        turn = ->(multiple) { period ? multiple * PI * period : Num.new(0) }
         targets =
           case u.name
           when :exp  then [Fn.new(:log, [v])]
           when :log  then [Fn.new(:exp, [v])]
-          when :sin  then [Fn.new(:asin, [v]), PI - Fn.new(:asin, [v])]
-          when :cos  then [Fn.new(:acos, [v]), -Fn.new(:acos, [v])]
-          when :tan  then [Fn.new(:atan, [v])]
+          when :sin  then [Fn.new(:asin, [v]) + turn.call(2), PI - Fn.new(:asin, [v]) + turn.call(2)]
+          when :cos  then [Fn.new(:acos, [v]) + turn.call(2), -Fn.new(:acos, [v]) + turn.call(2)]
+          when :tan  then [Fn.new(:atan, [v]) + turn.call(1)]
           when :atan then [Fn.new(:tan, [v])]
           when :asin then [Fn.new(:sin, [v])]
           when :acos then [Fn.new(:cos, [v])]
@@ -389,6 +407,7 @@ module RCAS
     # Drop candidates that numerically fail the equation (spurious branches).
     def verify(f, x, roots)
       roots.select do |r|
+        next true unless (r.variables - f.variables + [x.name]).empty? || r.variables.empty?
         value = begin
           f.evalf(x: r.evalf)
         rescue StandardError

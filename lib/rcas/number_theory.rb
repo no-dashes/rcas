@@ -214,6 +214,111 @@ module RCAS
 
     # Chinese remainder theorem: the smallest x >= 0 with x = r_i (mod m_i)
     # for every i. Moduli need not be coprime; an inconsistent system raises.
+    # Solutions of f(x) = 0 mod m, as the residues in 0...m. A linear
+    # congruence goes through the extended Euclidean algorithm, anything else
+    # is tested residue by residue, which is what a first course does.
+    def congruence(f, x, m)
+      m = integer_or_rational(m, "congruence").to_i
+      raise ArgumentError, "congruence: the modulus must be positive" unless m.positive?
+      x = Expression.lift(x)
+      coefficients = Solve.polynomial_coefficients(Solve.to_zero(f).simplify, x)
+      raise ArgumentError, "congruence: #{f} is not a polynomial in #{x}" if coefficients.nil?
+      values = coefficients.map { |c| integer_or_rational(c, "congruence").to_i }
+      return linear_congruence(values, m) if values.size == 2
+      raise ArgumentError, "congruence: the modulus #{m} is too large to search" if m > 100_000
+      (0...m).select { |r| horner(values, r, m).zero? }
+    end
+
+    def horner(coefficients, r, m) = coefficients.reverse.reduce(0) { |acc, c| (acc * r + c) % m }
+
+    # a*x + b = 0 mod m has gcd(a, m) solutions when that gcd divides b.
+    def linear_congruence(coefficients, m)
+      b, a = coefficients
+      g = a.gcd(m)
+      return [] unless (-b % m % g).zero?
+      step = m / g
+      first = (invmod(a / g, step) * (-b / g)) % step
+      (0...g).map { |i| (first + i * step) % m }
+    end
+
+    # The Legendre symbol (a/p): 0, 1 when a is a square modulo the odd prime
+    # p, and -1 when it is not (Euler's criterion).
+    def legendre(a, p)
+      a = integer_or_rational(a, "legendre").to_i
+      p = integer_or_rational(p, "legendre").to_i
+      raise ArgumentError, "legendre: p must be an odd prime" unless p > 2 && prime?(p)
+      value = a.pow((p - 1) / 2, p)
+      value > 1 ? value - p : value
+    end
+
+    # The Jacobi symbol, the Legendre symbol extended to odd composite n.
+    def jacobi(a, n)
+      a = integer_or_rational(a, "jacobi").to_i
+      n = integer_or_rational(n, "jacobi").to_i
+      raise ArgumentError, "jacobi: n must be positive and odd" unless n.positive? && n.odd?
+      a %= n
+      result = 1
+      while a != 0
+        while a.even?
+          a /= 2
+          result = -result if [3, 5].include?(n % 8)
+        end
+        a, n = n, a
+        result = -result if a % 4 == 3 && n % 4 == 3
+        a %= n
+      end
+      n == 1 ? result : 0
+    end
+
+    # The multiplicative order of a modulo m: the least k > 0 with a**k = 1.
+    def order(a, m)
+      a = integer_or_rational(a, "order").to_i
+      m = integer_or_rational(m, "order").to_i
+      raise ArgumentError, "order: a and m must be coprime" unless a.gcd(m) == 1
+      phi = totient(m)
+      divisors(phi).find { |d| a.pow(d, m) == 1 }
+    end
+
+    # A generator of the multiplicative group modulo m, when one exists.
+    def primitive_root(m)
+      m = integer_or_rational(m, "primitive_root").to_i
+      phi = totient(m)
+      candidate = (2...m).find { |a| a.gcd(m) == 1 && order(a, m) == phi }
+      raise ArgumentError, "primitive_root: there is none modulo #{m}" if candidate.nil? && m > 1
+      m == 1 ? 0 : candidate
+    end
+
+    # The continued fraction [a0; a1, a2, ...] of a rational or a real number.
+    def continued_fraction(value, terms = 10)
+      x = value.is_a?(Expression) ? value.evalf : value
+      x = Rational(x) if x.is_a?(Integer)
+      out = []
+      terms.times do
+        whole = x.floor
+        out << whole
+        rest = x - whole
+        break if rest.zero? || (rest.is_a?(Float) && rest.abs < 1e-12)
+        x = 1 / rest
+      end
+      out
+    end
+
+    # The fractions [a0], [a0; a1], ... of a continued fraction, the best
+    # rational approximations of the number.
+    def convergents(value, terms = 10)
+      coefficients = value.is_a?(Array) ? value : continued_fraction(value, terms)
+      previous = [1, 0]   # numerator, denominator of the fraction before
+      current = [coefficients.first, 1]
+      out = [Rational(current[0], current[1])]
+      coefficients.drop(1).each do |a|
+        nxt = [a * current[0] + previous[0], a * current[1] + previous[1]]
+        previous = current
+        current = nxt
+        out << Rational(current[0], current[1])
+      end
+      out
+    end
+
     def chrem(residues, moduli)
       raise ArgumentError, "chrem: give as many residues as moduli" unless residues.size == moduli.size && !moduli.empty?
       x = 0

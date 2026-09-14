@@ -166,6 +166,87 @@ module RCAS
         method: "Student t for a mean (normal when sigma is known), the chi-square distribution for a variance, and Wilson's score interval for a proportion [Wil27]."
       },
       proportion_interval: :confidence_interval,
+      nsolve: {
+        maths: "A root as a decimal, for an equation no formula solves: cos(x) = x has exactly one, and no expression in radicals, logarithms or roots gives it.",
+        method: "Bisection on a bracketing interval, taking a Newton step whenever it stays inside the bracket, so it converges quickly and cannot run away [PTVF07, §9.1-9.4]."
+      },
+      nintegrate: {
+        maths: "A definite integral as a decimal. Most elementary functions have no elementary antiderivative, so this is the usual way to a number; the result is an approximation and prints as one.",
+        method: "Adaptive Simpson quadrature, halving an interval until the two halves agree [PTVF07, §4.2]; an infinite range is mapped to a finite one by a substitution."
+      },
+      extrema: {
+        maths: "The high and low points of a graph. They lie among the critical points, where the derivative vanishes, and the second derivative tells a maximum from a minimum; where it also vanishes the first derivative changes sign, or does not, as for x**3.",
+        method: "solve on the derivative, then the sign of the second derivative, falling back to a numeric comparison on either side."
+      },
+      critical_points: :extrema,
+      inflections: { maths: "Where the curvature changes sign, so the graph turns from bending one way to the other; the second derivative vanishes and changes sign there.", method: "solve on the second derivative, with the third derivative or a sign check to confirm." },
+      asymptotes: {
+        maths: "The lines a graph approaches: vertical at a pole, horizontal or oblique at infinity, where the function comes arbitrarily close to a line y = m*x + c.",
+        method: "The zeros of the denominator for the vertical ones; for the others the limits of f and of f/x at plus and minus infinity."
+      },
+      tangent: { maths: "The line touching the graph at a point, f(a) + f'(a)*(x - a): the best linear approximation there, which is what the derivative means. The normal is perpendicular to it.", method: "Two evaluations of f and its derivative." },
+      normal: :tangent,
+      real_domain: { maths: "Where a real expression makes sense: denominators non-zero, even roots of non-negative numbers, logarithms of positive ones.", method: "Each condition becomes an inequality, and the sign-chart solver intersects the solutions." },
+      gradient: {
+        maths: "The vector of partial derivatives. It points in the direction of steepest increase and is perpendicular to the level curves, which is why it appears in every optimisation problem.",
+        method: "One derivative per variable."
+      },
+      hessian: { maths: "The matrix of second derivatives. Its definiteness classifies a critical point in several variables the way the second derivative does in one; the determinant test is the two-variable case.", method: "Second partial derivatives; they commute for the smooth functions rcas handles." },
+      jacobian: { maths: "The matrix of first derivatives of a map from several variables to several. It is the linear map the function looks like near a point, and its determinant is the factor by which areas or volumes change.", method: "One row per component." },
+      divergence: { maths: "How much a vector field spreads out of a point (the trace of its Jacobian); the curl measures how much it circulates; the Laplacian is the divergence of the gradient.", method: "The sums of the appropriate partial derivatives." },
+      curl: :divergence,
+      laplacian: :divergence,
+      lagrange: {
+        maths: "Extremes under a constraint: at a constrained extreme the gradient of the objective is a combination of the gradients of the constraints, because no direction along the constraint improves the value. The multipliers are those coefficients.",
+        method: "The multiplier equations together with the constraints are handed to the polynomial system solver [Spi08, ch. 17]."
+      },
+      point: { maths: "Analytic geometry: a point is a pair of coordinates, a line the solutions of a*x + b*y + c = 0, a circle the points at a fixed distance from a centre. Geometry becomes algebra, which is what makes it computable.", method: "Exact coordinates throughout, so a distance is a square root and a right angle is exactly pi/2." },
+      line: :point, circle: :point,
+      distance: { maths: "Between two points the Pythagorean length; from a point to a line the shortest one, along the perpendicular; between parallel lines the constant gap.", method: "The Pythagorean formula, and for a line the normal form |a*x + b*y + c| divided by the length of (a, b)." },
+      midpoint: :distance,
+      angle: { maths: "The angle in a corner, from the cosine rule in the form of the dot product: cos of the angle is the dot product over the product of the lengths.", method: "acos of that quotient, which folds to a multiple of pi at the familiar values." },
+      area: { maths: "The area of a triangle from its corners by the shoelace formula, half the absolute value of a cross product; for a circle pi*r**2.", method: "The determinant of the two edge vectors [Bra86]." },
+      perimeter: :area,
+      intersect: { maths: "Where two figures meet: two lines in one point unless they are parallel, a line and a circle in two points, one or none, two circles likewise.", method: "A 2 by 2 system for two lines; for a circle the foot of the perpendicular from the centre and the Pythagorean half-chord; two circles are subtracted to give the radical line." },
+      circumcircle: { maths: "The circle through three points, centred where the perpendicular bisectors meet, since that point is equidistant from all three.", method: "Intersecting two perpendicular bisectors." },
+      collinear?: { maths: "Whether three points lie on one line, which is exactly when the triangle they span has zero area.", method: "The cross product of the two edge vectors." },
+      centroid: { maths: "The average of the corners: the centre of mass of equal weights, where the medians of a triangle meet.", method: "The mean of the coordinates." },
+      perpendicular_bisector: { maths: "The line of all points equidistant from two given ones; it meets the segment at its midpoint at a right angle.", method: "The direction of the segment as the normal, through the midpoint." },
+      gram_schmidt: {
+        maths: "An orthogonal basis of the same span: each vector has the projection onto the earlier ones subtracted, so what remains is perpendicular to them. Normalising gives an orthonormal basis, in which coordinates are just dot products.",
+        method: "The classical Gram-Schmidt process, exactly, so the normalised vectors keep their square roots [Str16, ch. 4]."
+      },
+      project: { maths: "The projection of a vector onto another, or onto the span of several: the closest point of that subspace, with the difference perpendicular to it.", method: "The sum of the projections onto an orthogonal spanning set." },
+      least_squares: {
+        maths: "The best fit when a system has no solution: the x minimising the length of A*x - b. Geometrically b is projected onto the column space, which is why the residual is perpendicular to it.",
+        method: "The normal equations A'*A*x = A'*b, solved exactly [Str16, ch. 4]."
+      },
+      orthogonal?: :project,
+      laplace: {
+        maths: "The transform that turns differentiation into multiplication by s, so a linear differential equation becomes an algebraic one. Initial values enter the transform, which is why it suits initial value problems.",
+        method: "A table plus two rules: the first shift for exp(a*t)*f(t), and multiplication by t as differentiation in s [BD12, ch. 6]."
+      },
+      inverse_laplace: {
+        maths: "Back from the transform to the function, the step that finishes the solution of a differential equation.",
+        method: "Partial fractions, then the table read backwards: a linear factor gives an exponential, a repeated one a power of t, an irreducible quadratic a damped sine and cosine."
+      },
+      congruence: {
+        maths: "Solutions of a polynomial equation modulo m, the arithmetic of remainders. A linear congruence a*x = b has gcd(a, m) solutions when that gcd divides b, and none otherwise.",
+        method: "The extended Euclidean algorithm for the linear case, a search over the residues otherwise."
+      },
+      legendre: {
+        maths: "Whether a is a square modulo the odd prime p: the Legendre symbol is 1 when it is, -1 when it is not, 0 when p divides a. The Jacobi symbol extends it to odd composite moduli.",
+        method: "Euler's criterion for Legendre, quadratic reciprocity for Jacobi [Coh93, §1.4]."
+      },
+      jacobi: :legendre,
+      order: { maths: "The multiplicative order of a modulo m is the smallest k with a**k = 1; it divides Euler's phi (Lagrange's theorem). A primitive root is an element whose order is phi, that is a generator of the group.", method: "Testing the divisors of phi in increasing order." },
+      primitive_root: :order,
+      continued_fraction: {
+        maths: "Every real number is a0 + 1/(a1 + 1/(a2 + ...)); the expansion stops exactly for rationals, repeats for quadratic irrationals, and its convergents are the best rational approximations there are, which is how 355/113 approximates pi.",
+        method: "Repeatedly take the whole part and invert the rest; the convergents come from the recurrence p(n) = a(n)*p(n-1) + p(n-2) [Knu98, §4.5.3], [HW08, ch. 10]."
+      },
+      convergents: :continued_fraction,
+
 
       # ---- distributions ----------------------------------------------------------------
       Normal: {
@@ -230,7 +311,9 @@ module RCAS
     # turned into links by Background.url. Broad articles are preferred to
     # narrow ones, and aliases inherit the list of the entry they point at.
     # Every title was checked against the Wikipedia API on 2026-09-14 (see
-    # CLAUDE.md for the one-liner that repeats the check).
+    # CLAUDE.md for the one-liner that repeats the check). Two of them are
+    # deliberate ASCII redirects, because the canonical titles use an en dash:
+    # Line-line intersection and Gram-Schmidt process.
     READING = {
       simplify: ["Canonical form", "Computer algebra system"],
       expand: ["Distributive property"],
@@ -321,7 +404,37 @@ module RCAS
       trigsimp: ["List of trigonometric identities"],
       expand_trig: ["List of trigonometric identities"],
       expand_log: ["Logarithm"],
-      nextprime: ["Prime number"]
+      nextprime: ["Prime number"],
+      nsolve: ["Root-finding algorithm", "Newton's method", "Bisection method"],
+      nintegrate: ["Numerical integration", "Simpson's rule"],
+      extrema: ["Maximum and minimum", "Derivative test", "Critical point (mathematics)"],
+      inflections: ["Inflection point"],
+      asymptotes: ["Asymptote"],
+      tangent: ["Tangent", "Linear approximation"],
+      real_domain: ["Domain of a function"],
+      gradient: ["Gradient", "Partial derivative", "Level set"],
+      hessian: ["Hessian matrix", "Second partial derivative test"],
+      jacobian: ["Jacobian matrix and determinant"],
+      divergence: ["Divergence", "Curl (mathematics)", "Laplace operator"],
+      lagrange: ["Lagrange multiplier"],
+      point: ["Analytic geometry", "Cartesian coordinate system"],
+      distance: ["Euclidean distance", "Distance from a point to a line"],
+      angle: ["Angle", "Dot product"],
+      area: ["Shoelace formula", "Area"],
+      intersect: ["Line-line intersection", "Circle"],
+      circumcircle: ["Circumcircle"],
+      collinear?: ["Collinearity"],
+      centroid: ["Centroid"],
+      perpendicular_bisector: ["Bisection"],
+      gram_schmidt: ["Gram-Schmidt process", "Orthonormal basis"],
+      project: ["Projection (linear algebra)", "Vector projection"],
+      least_squares: ["Least squares", "Linear least squares"],
+      laplace: ["Laplace transform"],
+      inverse_laplace: ["Inverse Laplace transform"],
+      congruence: ["Modular arithmetic", "Chinese remainder theorem"],
+      legendre: ["Legendre symbol", "Quadratic reciprocity", "Jacobi symbol"],
+      order: ["Multiplicative order", "Primitive root modulo n"],
+      continued_fraction: ["Continued fraction", "Simple continued fraction"]
     }.freeze
 
     BASE = "https://en.wikipedia.org/wiki/"

@@ -1,6 +1,6 @@
 <p align="center">
   <img src="assets/rcas-logo.jpeg" alt="rcas - Ruby Computer Algebra System" width="360"><br>
-  <em>Reinventing the wheel instead of building a CAS</em>
+  <em>Reinventing the wheel instead of building a CAS</em>™
 </p>
 
 # rcas manual
@@ -24,6 +24,11 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
 
 <!-- toc -->
 - [Sessions and setup](#sessions-and-setup)
+- [Courses](#courses)
+  - [School](#school)
+  - [High school](#high-school)
+  - [College](#college)
+  - [University (undergraduate)](#university-undergraduate)
 - [1. Mathematics](#1-mathematics)
   - [1.1 Expressions](#11-expressions)
     - [Variables and operators](#variables-and-operators)
@@ -37,6 +42,9 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
     - [Derivatives](#derivatives)
     - [Antiderivatives](#antiderivatives)
     - [Definite integrals](#definite-integrals)
+    - [Numbers when the symbols run out](#numbers-when-the-symbols-run-out)
+    - [Curve sketching](#curve-sketching)
+    - [Several variables](#several-variables)
     - [Series](#series)
     - [Limits](#limits)
     - [Sums](#sums)
@@ -49,23 +57,27 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
   - [1.5 Domains and assumptions](#15-domains-and-assumptions)
   - [1.6 Polynomial rings](#16-polynomial-rings)
     - [gcd and division of expressions](#gcd-and-division-of-expressions)
-    - [Gröbner bases](#grbner-bases)
+    - [Gröbner bases](#gröbner-bases)
     - [Degree and coefficients](#degree-and-coefficients)
     - [Interpolation](#interpolation)
     - [Algebraic numbers](#algebraic-numbers)
     - [Finite fields](#finite-fields)
   - [1.7 Linear algebra](#17-linear-algebra)
+    - [Orthogonality and least squares](#orthogonality-and-least-squares)
   - [1.8 Differential equations and recurrences](#18-differential-equations-and-recurrences)
     - [Recurrences](#recurrences)
-  - [1.9 Statistics](#19-statistics)
+    - [Systems](#systems)
+    - [The Laplace transform](#the-laplace-transform)
+  - [1.9 Geometry](#19-geometry)
+  - [1.10 Statistics](#110-statistics)
     - [Descriptive statistics](#descriptive-statistics)
     - [Regression](#regression)
     - [Distributions](#distributions)
     - [Hypothesis tests](#hypothesis-tests)
     - [Confidence intervals](#confidence-intervals)
-  - [1.10 Plotting](#110-plotting)
+  - [1.11 Plotting](#111-plotting)
     - [Statistical plots](#statistical-plots)
-  - [1.11 Performance notes](#111-performance-notes)
+  - [1.12 Performance notes](#112-performance-notes)
 - [2. Reference](#2-reference)
 - [3. Files](#3-files)
 - [4. Sources](#4-sources)
@@ -127,6 +139,128 @@ Without the launcher, `require "rcas"` and use `:x`, `RCAS::ZZ` or
 Blocks passed to `hold` work in files and in irb; code assembled with
 `eval` is covered too because loading rcas turns on
 `RubyVM.keep_script_lines`.
+
+## Courses
+
+rcas is written for people who are learning the mathematics, not only for
+people who want the answer. These four tours say what it can do at each
+stage and where to read on; everything in them is a real session.
+
+### School
+
+Exact arithmetic is the point: a third plus a sixth is five sixths, not
+0.8333. Ruby divides integers, so write `1/2r` (or `1/2.0` when you do want
+a decimal) when you mean a fraction. Prime factorization, greatest common
+divisors, simple equations, distances and averages are all here, and `plot`
+draws a function in the terminal.
+
+```
+rcas> 2/3r + 1/6r
+=> (5/6)
+rcas> factor(360)
+=> 2**3*3**2*5
+rcas> [gcd(84, 36), lcm(4, 6), divisors(12)]
+=> [12, 12, [1, 2, 3, 4, 6, 12]]
+rcas> solve(eq(3*x + 5, 17), x)
+=> [4]
+rcas> distance(point(0, 0), point(3, 4))
+=> 5
+rcas> [mean([2, 4, 4, 5, 5]), median([2, 4, 4, 5, 5]), mode([2, 4, 4, 5, 5])]
+=> [4, 4, [4, 5]]
+```
+
+Read on: 1.1 Expressions, 1.2 Numbers and constants, 1.9 Geometry,
+1.10 Statistics, 1.11 Plotting.
+
+### High school
+
+Polynomials factor, quadratics and inequalities solve, and an inequality
+answers with the set of solutions (`[2, 3]` here is the closed interval,
+not a pair). Trigonometric equations give the solutions in one period, or
+the whole family with `all: true`. Then the first calculus: derivatives,
+curve sketching, definite integrals, sums, and probability.
+
+```
+rcas> factor(x**2 - 5*x + 6)
+=> (-2 + x)*(-3 + x)
+rcas> solve(x**2 - 5*x + 6, x)
+=> [2, 3]
+rcas> solve(x**2 - 5*x + 6 <= 0, x)
+=> [2, 3]
+rcas> solve(sin(x) - 1/2r, x, all: true)
+=> [pi/6 + 2*pi*k, 5*pi/6 + 2*pi*k]
+rcas> extrema(x**3 - 3*x, x)
+=> [[-1, 2, :maximum], [1, -2, :minimum]]
+rcas> integrate(x**2, x, 0, 3)
+=> 9
+rcas> sum(k, k: 1..100)
+=> 5050
+rcas> Binomial(10, 1/2r).probability(x >= 8)
+=> 7/128
+```
+
+Read on: 1.3 Calculus, 1.4 Equations and solving, 1.6 Polynomial rings,
+1.9 Geometry, 1.10 Statistics.
+
+### College
+
+Limits and series, the techniques of integration, differential equations,
+matrices and their eigenvalues, partial derivatives, and statistics with
+tests and confidence intervals. When a symbolic answer does not exist,
+`nsolve` and `nintegrate` give the number instead, and say that it is one.
+
+```
+rcas> limit(sin(x)/x, x, 0)
+=> 1
+rcas> series(exp(x), x, 0, 5)
+=> 1 + x + x**2/2 + x**3/6 + x**4/24 + O(x**5)
+rcas> integrate(1/(x**2 - 1), x)
+=> log(-1 + x)/2 - log(1 + x)/2
+rcas> dsolve(eq(D(y, x, 2) + y, 0), y, x)
+=> [y = C1*cos(x) + C2*sin(x)]
+rcas> matrix([[2, 1], [1, 2]]).eigenvalues
+=> [1, 3]
+rcas> gradient(x**2*y, [x, y])
+=> (2*x*y, x**2)
+rcas> ttest([5.1, 4.9, 5.6, 5.2, 5.0], mu: 5)
+=> one-sample t test: t = 1.32417, df = 4, p = 0.256044 (two-sided)
+```
+
+Read on: 1.3 Calculus, 1.7 Linear algebra, 1.8 Differential equations and
+recurrences, 1.10 Statistics.
+
+### University (undergraduate)
+
+Rings and fields as objects: polynomial rings over ZZ, QQ or a finite
+field, algebraic numbers with their minimal polynomials, Gröbner bases for
+polynomial systems. Laplace transforms and systems of differential
+equations for the applied courses, several-variable calculus, and the
+number theory of a first course in it.
+
+```
+rcas> QQ[x].(x**4 - 1).factor
+=> (-1 + x)*(1 + x)*(1 + x**2)
+rcas> groebner([x**2 + y**2 - 1, x - y], [x, y])
+=> [x - y, -1/2 + y**2]
+rcas> minpoly(sqrt(2) + sqrt(3))
+=> 1 - 10*x**2 + x**4
+rcas> GF(9).elements.first(4)
+=> [0, 1, 2, a]
+rcas> laplace(t*exp(3*t))
+=> 1/(-3 + s)**2
+rcas> dsolve([eq(D(x, t), y), eq(D(y, t), -x)], [x, y], t)
+=> [x = C1*sin(t) + C2*cos(t), y = C1*cos(t) - C2*sin(t)]
+rcas> [legendre(3, 7), order(3, 7)]
+=> [-1, 6]
+```
+
+Read on: 1.5 Domains and assumptions, 1.6 Polynomial rings, 1.8
+Differential equations and recurrences, and section 4, Sources, for the
+algorithms and where they come from.
+
+Each name explains itself: `doc(:factor)` (or `/help factor` in the chat)
+gives the signature, what the operation is mathematically, how rcas
+computes it, the sources and a link to read further.
 
 ## 1. Mathematics
 
@@ -414,6 +548,28 @@ rcas> [bernoulli(12), fibonacci(100), harmonic(4)]
 => [-691/2730, 354224848179261915075, 25/12]
 ```
 
+Modular arithmetic has its own vocabulary: `congruence(f, x, m)` solves
+f = 0 modulo m and returns the residues, `legendre(a, p)` says whether a is
+a square modulo an odd prime (`jacobi` extends it to odd composites),
+`order(a, m)` is the multiplicative order and `primitive_root(m)` a
+generator. `continued_fraction` and `convergents` give the best rational
+approximations of a number.
+
+```
+rcas> congruence(3*z - 4, z, 7)
+=> [6]
+rcas> congruence(z**2 - 1, z, 8)
+=> [1, 3, 5, 7]
+rcas> [legendre(2, 7), legendre(3, 7), jacobi(1001, 9907)]
+=> [1, -1, -1]
+rcas> [order(3, 7), primitive_root(7)]
+=> [6, 3]
+rcas> continued_fraction(415/93r)
+=> [4, 2, 6, 7]
+rcas> convergents(PI.evalf, 4)
+=> [(3/1), (22/7), (333/106), (355/113)]
+```
+
 ### 1.3 Calculus
 
 #### Derivatives
@@ -540,6 +696,80 @@ rcas> integrate(exp(-x**2), x: 0..1)
 => pi**(1/2)*erf(1)/2
 rcas> integrate(exp(-x**2), x: -oo..oo)
 => pi**(1/2)
+```
+
+#### Numbers when the symbols run out
+
+Not every equation has a solution in closed form, and most functions have
+no elementary antiderivative. `nsolve` finds a root as a decimal, from a
+bracketing range or a starting point, and `nintegrate` computes a definite
+integral, infinite bounds included. `evalf` on an unevaluated `integral`
+does the same, so a formal answer can always be turned into a number. These
+results are Floats and print as such; an exact answer is never quietly
+replaced by one.
+
+```
+rcas> nsolve(cos(x) - x, x: 0..1)
+=> 0.7390851332151607
+rcas> nsolve(x**3 - 2*x - 5, x, 2)
+=> 2.0945514815423265
+rcas> nintegrate(sin(x)/x, x: 0..1)
+=> 0.9460830703671829
+rcas> nintegrate(exp(-x**2), x: -oo..oo)
+=> 1.7724538509061416
+rcas> integrate(sin(x)/x, x: 0..1).evalf
+=> 0.9460830703671829
+```
+
+#### Curve sketching
+
+The questions asked of a graph: where it turns, where it bends the other
+way, which lines it approaches, what its tangent is, and where it is
+defined at all.
+
+```
+rcas> extrema(x**3 - 3*x, x)
+=> [[-1, 2, :maximum], [1, -2, :minimum]]
+rcas> inflections(x**3 - 3*x, x)
+=> [0]
+rcas> asymptotes((x**2 + 1)/x, x)
+=> {:vertical=>[0], :horizontal=>[], :oblique=>[x]}
+rcas> tangent(x**2, x, 1)
+=> -1 + 2*x
+rcas> real_domain(log(x - 1), x)
+=> (1, oo)
+```
+
+`extrema` returns the point, the value and the kind. The second derivative
+decides; where that vanishes too, as for `x**4`, the sign of the first
+derivative on either side does. `asymptotes` gives the vertical ones from
+the poles and the horizontal or oblique ones from the limits at infinity.
+
+#### Several variables
+
+`diff` already takes a partial derivative, since it differentiates with
+respect to the variable you name. These collect them: the gradient as a
+vector, the Hessian and the Jacobian as matrices, the divergence, curl and
+Laplacian of a field, iterated integrals over a box, and Lagrange
+multipliers for an extreme under a constraint.
+
+```
+rcas> gradient(x**2*y, [x, y])
+=> (2*x*y, x**2)
+rcas> hessian(x**2*y, [x, y])
+=> [2*y 2*x]
+   [2*x   0]
+rcas> jacobian([x*y, x + y], [x, y])
+=> [y x]
+   [1 1]
+rcas> laplacian(x**2 + y**2, [x, y])
+=> 4
+rcas> curl([y, -x, 0], [x, y, z])
+=> (0, 0, -2)
+rcas> integrate(x*y, x: 0..1, y: 0..2)
+=> 1
+rcas> lagrange(x + y, [x**2 + y**2 - 1], [x, y])
+=> [{x=>-2**(1/2)/2, y=>-2**(1/2)/2}, {x=>2**(1/2)/2, y=>2**(1/2)/2}]
 ```
 
 #### Series
@@ -839,6 +1069,20 @@ rcas> solve([x**2 - 1, y - x, z**2 - x], [x, y, z])
 => [{x=>1, y=>1, z=>1}, {x=>1, y=>1, z=>-1}, {x=>-1, y=>-1, z=>-i}, {x=>-1, y=>-1, z=>i}]
 ```
 
+A trigonometric equation has infinitely many solutions. `solve` returns the
+ones in a single period, which is what a textbook answer looks like;
+`all: true` adds the period with an integer parameter, so that the family
+is complete.
+
+```
+rcas> solve(sin(x) - 1/2r, x)
+=> [pi/6, 5*pi/6]
+rcas> solve(sin(x) - 1/2r, x, all: true)
+=> [pi/6 + 2*pi*k, 5*pi/6 + 2*pi*k]
+rcas> solve(tan(x) - 1, x, all: true)
+=> [pi/4 + pi*k]
+```
+
 Roots of irreducible polynomials of degree three or more are exact
 `RootOf` objects, except for binomials `a*x**n + b` and biquadratics
 `a*x**4 + b*x**2 + c`, which come out in radicals; `evalf` gives the
@@ -958,6 +1202,22 @@ rcas> RCAS.unicode = false
 
 A variable becomes a member of a set with `x.in(ZZ)` or `assume(x: ZZ)`.
 Expressions then infer the smallest set that must contain their value.
+A sign is an assumption too: `assume(x > 0)` (or `>=`, `<`, `<=`) lets
+simplification cancel a square against a square root and resolve `abs`,
+which it cannot do for an unknown sign, since `sqrt(x**2)` is `abs(x)`.
+
+```
+rcas> assume(x > 0)
+=> true
+rcas> sqrt(x**2).simplify
+=> x
+rcas> abs(x).simplify
+=> x
+rcas> assumptions
+=> {:x=>x > 0}
+rcas> forget
+=> true
+```
 
 ```
 rcas> x.in(ZZ); n.in(NN); assume(y: QQ)
@@ -1411,18 +1671,38 @@ rcas> m.inverse
 ```
 rcas> x.in(RR)
 => x
-rcas> s = RR.matrix([[x, 1], [1, x]])
+rcas> sm = RR.matrix([[x, 1], [1, x]])
 => [x 1]
    [1 x]
-rcas> s.det
+rcas> sm.det
 => -1 + x**2
-rcas> s.inverse
+rcas> sm.inverse
 => [ x/(-1 + x**2) -1/(-1 + x**2)]
    [-1/(-1 + x**2)  x/(-1 + x**2)]
-rcas> s.charpoly(l)
+rcas> sm.charpoly(l)
 => -1 + l**2 - 2*l*x + x**2
 rcas> forget
 => true
+```
+
+#### Orthogonality and least squares
+
+`gram_schmidt` turns a basis into an orthogonal one, or an orthonormal one
+with `normalize: true`, by subtracting from each vector its projection onto
+the earlier ones. `project(v, onto: u)` is that projection, for one vector
+or for a list spanning a subspace. `least_squares(A, b)` solves the normal
+equations, which is the best fit when `A*x = b` has no solution; it is the
+matrix form of `linreg` (section 1.10).
+
+```
+rcas> gram_schmidt([vector(1, 1, 0), vector(1, 0, 1)])
+=> [(1, 1, 0), (1/2, -1/2, 1)]
+rcas> gram_schmidt([vector(1, 1, 0), vector(1, 0, 1)], normalize: true)
+=> [(2**(1/2)/2, 2**(1/2)/2, 0), (2**(1/2)*3**(1/2)/6, -(2**(1/2)*3**(1/2))/6, 2**(1/2)*3**(1/2)/3)]
+rcas> project(vector(1, 2), onto: vector(1, 0))
+=> (1, 0)
+rcas> least_squares(matrix([[1, 1], [1, 2], [1, 3]]), vector(1, 2, 4))
+=> (-2/3, 3/2)
 ```
 
 ### 1.8 Differential equations and recurrences
@@ -1491,7 +1771,98 @@ rcas> rsolve(eq(u(n + 1), 3*u(n) + 2**n), u, n)
 => u(n) = -2**n + 3**n*C1
 ```
 
-### 1.9 Statistics
+#### Systems
+
+`dsolve` takes a list of equations and a list of unknown functions. A
+linear system with constant coefficients is solved through the eigenvalues
+of its matrix: real ones give exponentials, a conjugate pair gives a
+damped rotation, and a repeated eigenvalue with too few eigenvectors gives
+the `t*exp(lambda*t)` terms of a Jordan chain. A constant forcing term adds
+the steady state.
+
+```
+rcas> dsolve([eq(D(x, t), y), eq(D(y, t), -x)], [x, y], t)
+=> [x = C1*sin(t) + C2*cos(t), y = C1*cos(t) - C2*sin(t)]
+rcas> dsolve([eq(D(x, t), x + 2*y), eq(D(y, t), 3*x + 2*y)], [x, y], t)
+=> [x = 2*C1*exp(4*t)/3 - C2*exp(-t), y = C1*exp(4*t) + C2*exp(-t)]
+rcas> dsolve([eq(D(x, t), x), eq(D(y, t), x + y)], [x, y], t)
+=> [x = C2*exp(t), y = C1*exp(t) + C2*t*exp(t)]
+```
+
+#### The Laplace transform
+
+The transform turns differentiation into multiplication by `s`, which is
+why it solves linear equations by algebra. rcas computes it from the table
+with two rules, the first shift and multiplication by `t`, and inverts a
+rational transform through partial fractions.
+
+```
+rcas> laplace(exp(3*t), t, s)
+=> 1/(-3 + s)
+rcas> laplace(t*sin(t), t, s)
+=> 2*s/(1 + s**2)**2
+rcas> laplace(exp(-t)*sin(2*t), t, s)
+=> 2/(4 + (1 + s)**2)
+rcas> inverse_laplace(1/(s**2 + 2*s + 5), s, t)
+=> exp(-t)*sin(2*t)/2
+rcas> inverse_laplace(1/((s - 1)*(s - 2)), s, t)
+=> exp(2*t) - exp(t)
+```
+
+### 1.9 Geometry
+
+Plane geometry with exact coordinates. `point(x, y)`, `line(p, q)` (or
+`line(p, slope: m)`) and `circle(centre, r)` are the figures; a line is kept
+as `a*x + b*y + c = 0`, so vertical lines need no special case. The
+questions are `distance` (between points, from a point to a line, between
+parallel lines), `midpoint`, `angle`, `area`, `perimeter`, `collinear?`,
+`centroid`, `intersect`, `circumcircle`, `perpendicular_bisector`,
+`parallel_through` and `perpendicular_through`.
+
+```
+rcas> p1 = point(0, 0)
+=> (0, 0)
+rcas> p2 = point(4, 0)
+=> (4, 0)
+rcas> p3 = point(0, 3)
+=> (0, 3)
+rcas> [distance(p1, p2), distance(p2, p3), area(p1, p2, p3)]
+=> [4, 5, 6]
+rcas> angle(p2, p1, p3)
+=> pi/2
+rcas> angle(p1, p2, p3)
+=> acos(4/5)
+rcas> line(p2, p3)
+=> -12 + 3*x + 4*y = 0
+rcas> distance(p1, line(p2, p3))
+=> 12/5
+rcas> circumcircle(p1, p2, p3)
+=> circle((2, 3/2), 5/2)
+rcas> intersect(line(p1, p3), circle(p1, 2))
+=> [(0, 2), (0, -2)]
+rcas> perpendicular_bisector(p1, p2)
+=> -2 + x = 0
+rcas> circle(point(1, 2), 3).equation
+=> (-1 + x)**2 + (-2 + y)**2 = 9
+```
+
+Nothing is rounded: a distance is a square root, a right angle is exactly
+`pi/2`, and an angle that is not a familiar one stays as `acos(...)` until
+`evalf` is asked for a number. Coordinates may be symbolic.
+
+```
+rcas> midpoint(point(0, 0), point(px, py))
+=> (px/2, py/2)
+rcas> distance(point(0, 0), point(px, py))
+=> (px**2 + py**2)**(1/2)
+rcas> collinear?(point(0, 0), point(1, 1), point(2, 2))
+=> true
+```
+
+Not implemented: three dimensions, conics other than circles, and
+transformations (rotations, reflections) as objects.
+
+### 1.10 Statistics
 
 #### Descriptive statistics
 
@@ -1522,7 +1893,7 @@ rcas> [mean([d1, d2, d3]), variance([d1, d2])]
 `covariance` and `correlation` take two lists; `linreg(xs, ys, x)` is the
 least squares line as an expression in `x`.
 
-Section 1.10 draws these: `histogram`, `boxplot`, `barchart` and
+Section 1.11 draws these: `histogram`, `boxplot`, `barchart` and
 `scatter(xs, ys, fit: true)` with the least squares line.
 
 ```
@@ -1661,7 +2032,7 @@ rcas> proportion_interval(41, 100)
 Not implemented: analysis of variance, non-parametric tests (Wilcoxon,
 Kolmogorov-Smirnov), multiple regression and time series.
 
-### 1.10 Plotting
+### 1.11 Plotting
 
 `plot(f)` samples a function and draws it with Unicode braille dots, which
 needs nothing but a terminal; the result is what `inspect` shows, so a plot
@@ -1764,7 +2135,7 @@ rcas> boxplot("before" => [2, 4, 5, 5, 6, 7, 20], "after" => [3, 5, 6, 6, 7, 8],
 ```
 
 `barchart` takes the categories and their counts, so it pairs with
-`frequencies` (section 1.9), and `scatter(xs, ys, fit: true)` adds the
+`frequencies` (section 1.10), and `scatter(xs, ys, fit: true)` adds the
 least squares line, whose equation stays exact when the data is.
 
 ```
@@ -1799,7 +2170,7 @@ with 400 points, so a feature narrower than one pixel column can be missed;
 the y range is trimmed to the central 96 per cent of the sampled values
 when a pole would otherwise flatten the picture.
 
-### 1.11 Performance notes
+### 1.12 Performance notes
 
 `expand` and polynomial conversion combine like terms while multiplying,
 so a product of many sums never materialises more terms than the result
@@ -1833,13 +2204,16 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | combinatorics | `factorial binomial gamma` |
 | rewriting | `simplify expand cancel rationalize trigsimp expand_trig expand_log logcombine minpoly` |
 | rational functions | `numer denom apart gcd lcm quo rem divmod` |
-| integers | `factor ifactor isprime nextprime prevprime divisors totient invmod chrem` |
+| integers | `factor ifactor isprime nextprime prevprime divisors totient invmod chrem congruence legendre jacobi order primitive_root continued_fraction convergents` |
 | polynomial structure | `degree ldegree lcoeff tcoeff coeff coeffs collect resultant discriminant interpolate` |
 | constants | `PI E I oo` (bare `pi`, `π`, `oo`, `∞`) |
 | evaluation | `subs evalf` |
 | calculus | `integrate diff series taylor limit sum product` |
-| algebra | `solve eq factor groebner reduce` |
-| differential equations, recurrences | `D dsolve rsolve` |
+| numerics | `nsolve nintegrate` |
+| curve sketching | `critical_points extrema inflections asymptotes tangent normal real_domain` |
+| several variables | `gradient hessian jacobian divergence curl laplacian lagrange` |
+| algebra | `solve eq factor groebner reduce interval` |
+| differential equations, recurrences | `D dsolve rsolve laplace inverse_laplace` |
 | complex numbers | `re im conj arg` |
 | rounding | `floor ceil round mod` |
 | sequences | `bernoulli fibonacci harmonic` |
@@ -1847,9 +2221,10 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | distributions | `Normal Uniform Exponential Bernoulli Binomial Poisson Geometric DiscreteUniform StudentT ChiSquare FRatio pdf cdf probability` |
 | tests and intervals | `ttest ztest chisquare_test ftest binomial_test confidence_interval proportion_interval` |
 | plotting | `plot scatter histogram boxplot barchart` |
+| geometry | `point line circle distance midpoint angle area perimeter collinear? centroid intersect circumcircle perpendicular_bisector parallel_through perpendicular_through` |
 | special functions | `erf erfc` |
 | domains | `NN ZZ QQ RR CC` (also `ℕ ℤ ℚ ℝ ℂ`), `GF assume forget assumptions` |
-| linear algebra | `vector matrix` |
+| linear algebra | `vector matrix gram_schmidt least_squares project orthogonal?` |
 | holding | `hold evaluate` |
 | help | `doc` (`/help NAME` in rcas-chat) |
 
@@ -1859,10 +2234,10 @@ series taylor limit solve eq variables degree ldegree lcoeff tcoeff coeff
 coeffs domain in in? to_poly to_sexp hold-related evaluate`.
 
 Not implemented: the complete Risch algorithm and special functions beyond
-`erf` (`Ei`, `Si`), analysis of variance and non-parametric tests, three-dimensional and
-parametric plots, differential equations with variable coefficients beyond
-first order and systems of differential equations, limits of bounded
-oscillation (`sin(x)/x` at infinity), inequalities beyond
+`erf` (`Ei`, `Si`), analysis of variance and non-parametric tests,
+three-dimensional and parametric plots, geometry in space, Fourier
+transforms, group theory, differential equations with variable
+coefficients beyond first order, limits of bounded oscillation (`sin(x)/x` at infinity), inequalities beyond
 polynomial, rational and absolute-value ones, number fields with more than
 two generators, and Zeilberger's algorithm for definite hypergeometric sums.
 
@@ -1886,6 +2261,11 @@ lib/rcas/statistics.rb      descriptive statistics, covariance, correlation, lin
 lib/rcas/distributions.rb   Normal, Uniform, Exponential, Bernoulli, Binomial, Poisson, Geometric, DiscreteUniform, StudentT, ChiSquare, FRatio
 lib/rcas/special.rb         incomplete gamma and beta, numerically
 lib/rcas/hypothesis.rb      t, z, chi-square, F and binomial tests; confidence intervals
+lib/rcas/numerics.rb        nsolve and nintegrate: numbers when the symbols run out
+lib/rcas/analysis.rb        curve sketching and several variables
+lib/rcas/geometry.rb        points, lines and circles in the plane
+lib/rcas/linear_algebra.rb  orthogonality, projections and least squares
+lib/rcas/laplace.rb         the Laplace transform and its inverse
 lib/rcas/plot.rb            function plotting: braille art, SVG, PNG
 lib/rcas/docs.rb            doc(name): signatures and comments read from the source
 lib/rcas/background.rb      the mathematics behind each name, its sources and Wikipedia links
@@ -1965,11 +2345,21 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | Chinese remainder theorem, modular inverse, totient, divisors | number_theory.rb | [Coh93, §1.3]; [Knu98, §4.3.2]; [HW08, §5.5, §16.3] |
 | differential equations: separable, integrating factor, characteristic roots, undetermined coefficients, variation of parameters | ode.rb | [BD12, ch. 2-4] |
 | inequalities by sign charts over exact real roots | inequalities.rb | textbook; roots from solve.rb |
+| numeric roots (bisection with Newton steps) and adaptive Simpson quadrature | numerics.rb | [PTVF07, §4.2, §9.1-9.4] |
+| curve sketching: critical points, the second-derivative test, asymptotes from limits | analysis.rb | [Spi08, ch. 11] |
+| several variables: gradient, Hessian, Jacobian, Lagrange multipliers | analysis.rb | [Rud76, ch. 9]; [Spi08, ch. 17] |
+| analytic geometry: lines and circles, the shoelace area | geometry.rb | [Spi08, ch. 4]; [Bra86] |
+| Gram-Schmidt orthogonalization, least squares by the normal equations | linear_algebra.rb | [Str16, ch. 4] |
+| Laplace transform from the table with the shift rules, inverse by partial fractions | laplace.rb | [BD12, ch. 6] |
+| systems of differential equations by eigenvalues, with Jordan chains when defective | ode.rb | [BD12, ch. 7] |
+| congruences, Legendre and Jacobi symbols, multiplicative order, continued fractions | number_theory.rb | [Coh93, §1.4]; [Knu98, §4.5.3]; [HW08, ch. 10] |
 
 - [AS64] M. Abramowitz, I. A. Stegun (eds.), *Handbook of Mathematical
   Functions*, National Bureau of Standards 1964, ch. 7 (error function).
 - [BD12] W. E. Boyce, R. C. DiPrima, *Elementary Differential Equations and
   Boundary Value Problems*, 10th ed., Wiley 2012.
+- [Bra86] B. Braden, The surveyor's area formula, *College Mathematics
+  Journal* 17 (1986), 326-337.
 - [Bre80] R. P. Brent, An improved Monte Carlo factorization algorithm,
   *BIT* 20 (1980), 176-184.
 - [Bre65] J. E. Bresenham, Algorithm for computer control of a digital
@@ -2050,6 +2440,11 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   function integration, *Proc. SYMSAC '76*, ACM 1976, 219-226.
 - [Stu26] H. A. Sturges, The choice of a class interval, *J. Amer. Statist.
   Assoc.* 21 (1926), 65-66.
+- [Rud76] W. Rudin, *Principles of Mathematical Analysis*, 3rd ed.,
+  McGraw-Hill 1976.
+- [Spi08] M. Spivak, *Calculus*, 4th ed., Publish or Perish 2008.
+- [Str16] G. Strang, *Introduction to Linear Algebra*, 5th ed.,
+  Wellesley-Cambridge Press 2016.
 - [SW17] J. Sorenson, J. Webster, Strong pseudoprimes to twelve prime
   bases, *Math. Comp.* 86 (2017), 985-1003.
 - [Tra76] B. M. Trager, Algebraic factoring and rational function

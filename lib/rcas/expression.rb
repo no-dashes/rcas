@@ -192,7 +192,13 @@ module RCAS
 
     # x.eq(4) is the equation x = 4; solve(var) solves self = 0.
     def eq(other) = Equation.new(self, other)
-    def solve(var = nil) = Solve.solve(self, var)
+    def solve(var = nil, all: false) = Solve.solve(self, var, all: all)
+
+    # re, im, conj, arg: the complex parts (see ComplexParts)
+    def re = ComplexParts.re(self)
+    def im = ComplexParts.im(self)
+    def conj = ComplexParts.conj(self)
+    def arg = ComplexParts.arg(self)
 
     def plot(var = nil, from = nil, to = nil, **opts) = Plotting.plot(self, var, from, to, **opts)
     def series(x, a = 0, n = 6) = Limits.series(self, x, a, n)
@@ -211,7 +217,9 @@ module RCAS
     # Numeric evaluation: every number becomes a Float so roots and function
     # values fold, then the bindings are applied.
     def evalf(**bindings)
-      Expression.floatify_tree(self).call(**bindings.transform_values { |v| Expression.floatify(v) })
+      value = Expression.floatify_tree(self).call(**bindings.transform_values { |v| Expression.floatify(v) })
+      value = Numerics.resolve(value) if value.is_a?(Expression) && value.each_node.any? { |n| n.is_a?(Integral) }
+      value.is_a?(Num) ? value.value : value
     end
 
     # Every number becomes a Float, except integer exponents: x**2 stays

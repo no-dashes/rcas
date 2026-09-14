@@ -39,6 +39,7 @@ module RCAS
     module_function
 
     def dsolve(equation, y, x)
+      return system(equation, y, x) if equation.is_a?(Array)
       yv = Expression.lift(y)
       xv = Expression.lift(x)
       f = Solve.to_zero(equation).simplify
@@ -48,6 +49,119 @@ module RCAS
       when 1 then first_order(f, yv, xv)
       else constant_coefficients(f, yv, xv, order)
       end
+    end
+
+    # ---- systems, linear with constant coefficients ----------------------------
+    #
+    #   dsolve([eq(D(x, t), y), eq(D(y, t), -x)], [x, y], t)
+    #
+    # Written as u' = A u + c, the solution is a combination of exp(lambda*t)
+    # times the eigenvectors of A, with a conjugate pair giving the real pair
+    # exp(a*t)*(p*cos(b*t) - q*sin(b*t)) and its partner. A constant c adds the
+    # steady state -A^-1 c. A defective matrix (too few eigenvectors) is
+    # reported rather than guessed.
+    def system(equations, unknowns, t)
+      t = Expression.lift(t)
+      us = Array(unknowns).map { |u| Expression.lift(u) }
+      raise ArgumentError, "dsolve: #{equations.size} equations for #{us.size} unknowns" unless equations.size == us.size
+      derivatives = us.map { |u| Derivative.new(u, t) }
+      slots = us.each_index.map { |i| Var.new(:"_d#{i}") }        # linear_system wants variables
+      pattern = derivatives.zip(slots).to_h
+      flattened = equations.map { |e| Solve.to_zero(e).simplify.subs(pattern) }
+      solved = Solve.linear_system(flattened, slots).first
+      raise NotImplementedError, "dsolve: the system is not linear in the derivatives" if solved.nil? || solved.size != us.size
+
+      rows = []
+      forcing = []
+      slots.each do |d|
+        rhs = Expression.lift(solved[d]).expand
+        coefficients = us.map do |u|
+          c = Solve.polynomial_coefficients(rhs, u) or raise NotImplementedError, "dsolve: #{rhs} is not linear in #{u}"
+          value = c[1] || Num.new(0)
+          raise NotImplementedError, "dsolve: the coefficient #{value} is not constant" if Solve.depends?(value, t) || us.any? { |v| Solve.depends?(value, v) }
+          value
+        end
+        rows << coefficients
+        forcing << rhs.subs(us.to_h { |u| [u, Num.new(0)] }).simplify
+      end
+
+      matrix = MatrixSpace.new(RR, us.size, us.size).unchecked(rows)
+      solutions = homogeneous_system(matrix, t)
+      raise NotImplementedError, "dsolve: no solution basis found for this system" if solutions.size < us.size
+
+      general = us.each_index.map do |i|
+        solutions.each_with_index.map { |vector, k| Var.new(:"C#{k + 1}") * vector[i] }.reduce(:+)
+      end
+      unless forcing.all? { |c| Scalar.zero?(c) }
+        steady = steady_state(matrix, forcing, t)
+        general = general.each_with_index.map { |g, i| g + steady[i] }
+      end
+      us.each_with_index.map { |u, i| Equation.new(u, general[i].simplify) }
+    end
+
+    # One real solution vector per degree of freedom, as arrays of expressions.
+    def homogeneous_system(matrix, t)
+      out = []
+      seen = []
+      matrix.eigenvectors.each do |value, _multiplicity, vectors|
+        next if seen.any? { |v| Scalar.zero?((v - value).simplify) }
+        real, imaginary = ComplexParts.parts(Expression.lift(value))
+        vectors.each do |vector|
+          entries = vector.entries.map { |e| Expression.lift(e) }
+          if Scalar.zero?(imaginary)
+            out << entries.map { |e| (e * Fn.new(:exp, [value * t])).simplify }
+            out.concat(jordan_chain(matrix, value, entries, _multiplicity - vectors.size, t))
+          else
+            seen << Simplify.simplify(real - I * imaginary) # skip the conjugate
+            parts = entries.map { |e| ComplexParts.parts(e) }
+            wave = Fn.new(:exp, [real * t])
+            cosine = Fn.new(:cos, [imaginary * t])
+            sine = Fn.new(:sin, [imaginary * t])
+            out << parts.map { |p, q| (wave * (p * cosine - q * sine)).simplify }
+            out << parts.map { |p, q| (wave * (p * sine + q * cosine)).simplify }
+          end
+        end
+      end
+      out
+    end
+
+    # A repeated eigenvalue with too few eigenvectors: (A - lambda)w = v gives
+    # the next vector of the chain and the solution exp(lambda*t)*(t*v + w).
+    def jordan_chain(matrix, value, vector, missing, t)
+      out = []
+      previous = vector
+      order = 1
+      while out.size < missing
+        w = solve_singular(matrix, value, previous) or break
+        combination = w.each_index.map { |i| (previous[i] * t**order / RCAS.factorial(order) + w[i]).simplify }
+        out << combination.map { |e| (e * Fn.new(:exp, [value * t])).simplify }
+        previous = w
+        order += 1
+      end
+      out
+    end
+
+    # A particular solution of (A - lambda I) w = v, free variables set to zero.
+    def solve_singular(matrix, value, vector)
+      n = matrix.rows
+      ws = (0...n).map { |i| Var.new(:"_w#{i}") }
+      equations = (0...n).map do |i|
+        row = (0...n).map { |j| (matrix[i, j] - (i == j ? value : Num.new(0))) * ws[j] }.reduce(:+)
+        (row - vector[i]).simplify
+      end
+      solution = Solve.linear_system(equations, ws).first
+      return nil if solution.nil?
+      zeros = ws.to_h { |w| [w, Num.new(0)] }
+      ws.map { |w| Expression.lift(solution[w] || Num.new(0)).subs(zeros).simplify }
+    rescue StandardError
+      nil
+    end
+
+    # The constant solution of u' = A u + c.
+    def steady_state(matrix, forcing, t)
+      raise NotImplementedError, "dsolve: a forcing term depending on #{t} is not supported for systems" if forcing.any? { |c| Solve.depends?(c, t) }
+      raise NotImplementedError, "dsolve: the matrix is singular, so there is no constant solution" if Scalar.zero?(matrix.det)
+      matrix.solve(forcing.map { |c| Simplify.negate(c).simplify }).entries
     end
 
     # ---- first order ---------------------------------------------------------

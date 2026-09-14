@@ -1,6 +1,6 @@
 <p align="center">
   <img src="assets/rcas-logo.jpeg" alt="rcas - Ruby Computer Algebra System" width="480"><br>
-  <em>Reinventing the wheel instead of building a CAS</em>
+  <em>Reinventing the wheel instead of building a CAS</em>™
 </p>
 
 # rcas
@@ -152,5 +152,6 @@ runs the whole suite, including `test/manual_test.rb`, which executes every
 
 - [MANUAL.md](MANUAL.md): the user manual, with a table of contents,
   worked examples for every feature, a reference of functions, and
-  appendices on typeset output and `rcas-chat`.
+  appendices on typeset output and `rcas-chat`. `MANUAL-de.md` is the same
+  manual in German.
 - `LICENSE`: MIT.

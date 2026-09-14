@@ -152,4 +152,25 @@ class DomainsTest < Minitest::Test
   ensure
     RCAS.unicode = false
   end
+  def test_sign_assumptions
+    refute RCAS.nonnegative?(RCAS::Var.new(:x))
+    RCAS.assume(RCAS::Var.new(:x) > 0)
+    assert_equal :positive, RCAS.sign_of(RCAS::Var.new(:x))
+    assert RCAS.nonnegative?(RCAS::Var.new(:x))
+    assert_equal "x", RCAS.sqrt(RCAS::Var.new(:x)**2).simplify.to_s, "the square root of a square is the number itself now"
+    assert_equal "x", RCAS.abs(RCAS::Var.new(:x)).simplify.to_s
+    assert_equal "x > 0", RCAS.assumptions[:x].to_s, "the sign is listed as the statement it is"
+    RCAS.assume(RCAS::Var.new(:z) < 0)
+    assert_equal "-z", RCAS.abs(RCAS::Var.new(:z)).simplify.to_s
+    RCAS.assume(RCAS::Var.new(:w) >= 0)
+    assert_equal "w", RCAS.sqrt(RCAS::Var.new(:w)**2).simplify.to_s
+    # products and even powers follow
+    assert_equal :nonnegative, RCAS.sign_of(RCAS::Var.new(:q)**2)
+    assert_equal :positive, RCAS.sign_of(RCAS::Var.new(:x) * RCAS::Var.new(:x))
+    RCAS.forget(:x)
+    assert_equal "(x**2)**(1/2)", RCAS.sqrt(RCAS::Var.new(:x)**2).simplify.to_s, "and it is unsafe again once forgotten"
+    assert_raises(TypeError) { RCAS.assume(RCAS::Var.new(:x) > 1) }
+  ensure
+    RCAS.forget
+  end
 end

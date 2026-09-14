@@ -155,10 +155,18 @@ module RCAS
   # ---- variable assumptions ----------------------------------------------
 
   @assumptions = {}
+  @signs = {}
+
+  SIGNS = { :> => :positive, :>= => :nonnegative, :< => :negative, :<= => :nonpositive }.freeze
 
   class << self
-    # RCAS.assume(x: ZZ, y: RR)
-    def assume(table)
+    # RCAS.assume(x: ZZ, y: RR) declares domains, RCAS.assume(x > 0) a sign.
+    # Both may be given at once: assume(x > 0, n: ZZ).
+    def assume(*facts, **table)
+      facts.each do |fact|
+        raise TypeError, "#{fact.inspect} is not a domain or a sign like x > 0" unless fact.is_a?(Inequality)
+        assume_sign(fact)
+      end
       table.each do |name, domain|
         name = name.name if name.is_a?(Var)
         raise TypeError, "#{name.inspect} is not a variable" unless name.is_a?(Symbol)
@@ -168,14 +176,84 @@ module RCAS
       true
     end
 
+    # x > 0, x <= 0: the sign of a variable, which simplification and abs use.
+    def assume_sign(fact)
+      variable, relation = fact.lhs.is_a?(Var) ? [fact.lhs, fact.op] : [fact.rhs, Inequality::FLIP[fact.op]]
+      other = fact.lhs.is_a?(Var) ? fact.rhs : fact.lhs
+      sign = SIGNS[relation]
+      unless variable.is_a?(Var) && sign && other.is_a?(Num) && other.value.zero?
+        raise TypeError, "assume: a sign is x > 0, x >= 0, x < 0 or x <= 0, got #{fact}"
+      end
+      @signs[variable.name] = sign
+    end
+
     def forget(*names)
-      names = @assumptions.keys if names.empty?
-      names.each { |n| @assumptions.delete(n.is_a?(Var) ? n.name : n) }
+      if names.empty?
+        @assumptions.clear
+        @signs.clear
+        return true
+      end
+      names.each do |n|
+        key = n.is_a?(Var) ? n.name : n
+        @assumptions.delete(key)
+        @signs.delete(key)
+      end
       true
     end
 
-    def assumptions = @assumptions.dup
+    # Domains as number sets, signs as the inequality they stand for.
+    def assumptions = @assumptions.merge(@signs.to_h { |name, sign| [name, sign_statement(name, sign)] })
+
+    def sign_statement(name, sign)
+      relation = SIGNS.key(sign)
+      Inequality.new(Var.new(name), relation, Num.new(0))
+    end
     def assumption(name) = @assumptions[name]
+    def signs = @signs.dup
+
+    # :positive, :nonnegative, :negative, :nonpositive or nil, for a variable
+    # or for an expression whose factors are all known.
+    def sign_of(expr)
+      case expr
+      when Symbol then @signs[expr]
+      when Var then @signs[expr.name] || (assumption(expr.name)&.<=(NN) ? :nonnegative : nil)
+      when Num then numeric_sign(expr.value)
+      when Expression then expression_sign(expr)
+      end
+    end
+
+    def numeric_sign(value)
+      return nil unless value.is_a?(Numeric) && value.real?
+      return :positive if value.positive?
+      return :negative if value.negative?
+      :nonnegative
+    end
+
+    # A product of knowns, or an even power, or a sum of nonnegatives.
+    def expression_sign(expr)
+      case expr
+      when Pow
+        return :nonnegative if expr.exponent.is_a?(Num) && expr.exponent.value.is_a?(Integer) && expr.exponent.value.even?
+        sign_of(expr.base) == :positive ? :positive : nil
+      when Mul
+        combine_signs(sign_of(expr.left), sign_of(expr.right))
+      when Add
+        left = sign_of(expr.left)
+        right = sign_of(expr.right)
+        return :positive if [left, right].all? { |s| %i[positive nonnegative].include?(s) } && [left, right].include?(:positive)
+        %i[positive nonnegative].include?(left) && %i[positive nonnegative].include?(right) ? :nonnegative : nil
+      end
+    end
+
+    def combine_signs(left, right)
+      return nil if left.nil? || right.nil?
+      return :positive if left == :positive && right == :positive
+      return :nonnegative if %i[positive nonnegative].include?(left) && %i[positive nonnegative].include?(right)
+      return :negative if [left, right].count(:negative) == 1 && [left, right].all? { |s| %i[positive negative].include?(s) }
+      nil
+    end
+
+    def nonnegative?(expr) = %i[positive nonnegative].include?(sign_of(expr))
   end
 
   # Infers the smallest number set an expression's value must lie in, given

@@ -98,6 +98,14 @@ module RCAS
       [opts.select { |k, _| PLOT_OPTIONS.include?(k) }, opts.reject { |k, _| PLOT_OPTIONS.include?(k) }]
     end
 
+    # One definite integral per range, innermost first.
+    def self.iterated_integral(expr, ranges)
+      ranges.reduce(Expression.lift(expr)) do |acc, (name, r)|
+        var, from, to = range_arguments(nil, nil, nil, { name => r }, "integrate", discrete: false)
+        Integrate.definite(acc, Expression.lift(var), from, to)
+      end
+    end
+
     def self.range_arguments(k, from, to, range, name, discrete:)
       unless range.empty?
         raise ArgumentError, "#{name}: give one variable, e.g. #{name}(f, k: 1..n)" unless range.size == 1 && k.nil?
@@ -133,8 +141,77 @@ module RCAS
     # evalf(pi), evalf(sqrt(2)*x, x: 3): the numeric value as a Float
     def evalf(f, **bindings) = Expression.lift(f).evalf(**bindings)
 
-    # integrate(x**2 * exp(x), x); definite: integrate(x**2, x, 0, 1) or integrate(x**2, x: 0..1)
+    # congruence(3*x - 4, x, 7) solves modulo 7; legendre(a, p), jacobi(a, n), order(a, m),
+    # primitive_root(m), continued_fraction(x, n), convergents(x, n)
+    def congruence(f, x, m) = NumberTheory.congruence(f, x, m)
+    def legendre(a, p) = NumberTheory.legendre(a, p)
+    def jacobi(a, n) = NumberTheory.jacobi(a, n)
+    def order(a, m) = NumberTheory.order(a, m)
+    def primitive_root(m) = NumberTheory.primitive_root(m)
+    def continued_fraction(x, terms = 10) = NumberTheory.continued_fraction(x, terms)
+    def convergents(x, terms = 10) = NumberTheory.convergents(x, terms)
+
+    # laplace(exp(3*t), t, s) and inverse_laplace(1/(s - 3), s, t): the transform
+    # that turns differentiation into multiplication by s
+    def laplace(f, t = :t, s = :s) = Laplace.transform(f, t, s)
+    def inverse_laplace(f, s = :s, t = :t) = Laplace.inverse(f, s, t)
+
+    # gram_schmidt(vectors, normalize: false), least_squares(A, b), project(v, onto: u),
+    # orthogonal?(u, v): orthogonality and the normal equations
+    def gram_schmidt(vectors, normalize: false) = LinearAlgebra.gram_schmidt(vectors, normalize: normalize)
+    def least_squares(matrix, target) = LinearAlgebra.least_squares(matrix, target)
+    def project(v, onto:) = LinearAlgebra.project(v, onto: onto)
+    def orthogonal?(u, v) = LinearAlgebra.orthogonal?(u, v)
+
+    # point(0, 0), line(p, q) or line(p, slope: 2), circle(centre, r): plane geometry
+    def point(x, y = nil) = Geometry.point(x, y)
+    def line(first, second = nil, slope: nil) = Geometry.line(first, second, slope: slope)
+    def circle(centre, radius) = Geometry.circle(centre, radius)
+    # distance(a, b) between points, a point and a line or parallel lines; midpoint, angle(a, b, c),
+    # area(a, b, c), perimeter, collinear?, centroid, intersect(a, b), circumcircle(a, b, c),
+    # perpendicular_bisector(p, q), parallel_through(l, p), perpendicular_through(l, p)
+    def distance(a, b) = Geometry.distance(a, b)
+    def midpoint(p, q) = Geometry.midpoint(p, q)
+    def angle(a, b, c = nil) = b.is_a?(Geometry::Line) ? Geometry.line_angle(a, b) : Geometry.angle(a, b, c)
+    def area(a, b = nil, c = nil) = Geometry.area(a, b, c)
+    def perimeter(a, b = nil, c = nil) = Geometry.perimeter(a, b, c)
+    def collinear?(a, b, c) = Geometry.collinear?(a, b, c)
+    def centroid(*points) = Geometry.centroid(*points)
+    def intersect(a, b) = Geometry.intersect(a, b)
+    def circumcircle(a, b, c) = Geometry.circumcircle(a, b, c)
+    def perpendicular_bisector(p, q) = Geometry.perpendicular_bisector(p, q)
+    def parallel_through(l, p) = Geometry.parallel_through(l, p)
+    def perpendicular_through(l, p) = Geometry.perpendicular_through(l, p)
+
+    # critical_points(f, x), extrema(f, x) => [[x, f(x), :minimum|:maximum|:saddle], ...],
+    # inflections(f, x), asymptotes(f, x), tangent(f, x, a), normal(f, x, a), real_domain(f, x)
+    def critical_points(f, var = nil) = Analysis.critical_points(f, var)
+    def extrema(f, var = nil) = Analysis.extrema(f, var)
+    def inflections(f, var = nil) = Analysis.inflections(f, var)
+    def asymptotes(f, var = nil) = Analysis.asymptotes(f, var)
+    def tangent(f, var = nil, at = nil) = Analysis.tangent(f, var, at)
+    def normal(f, var = nil, at = nil) = Analysis.normal(f, var, at)
+    def real_domain(f, var = nil) = Analysis.real_domain(f, var)
+
+    # gradient(f, [x, y]), hessian(f, vars), jacobian([f, g], vars), divergence(field, vars),
+    # curl(field, [x, y, z]), laplacian(f, vars), lagrange(f, [g], vars): several variables
+    def gradient(f, vars = nil) = Analysis.gradient(f, vars)
+    def hessian(f, vars = nil) = Analysis.hessian(f, vars)
+    def jacobian(fs, vars = nil) = Analysis.jacobian(fs, vars)
+    def divergence(field, vars = nil) = Analysis.divergence(field, vars)
+    def curl(field, vars = nil) = Analysis.curl(field, vars)
+    def laplacian(f, vars = nil) = Analysis.laplacian(f, vars)
+    def lagrange(f, constraints, vars = nil) = Analysis.lagrange(f, constraints, vars)
+
+    # nsolve(cos(x) - x, x: 0..1) or nsolve(f, x, guess): a root as a Float when no formula applies
+    def nsolve(f, var = nil, guess = nil, **range) = Numerics.nsolve(f, var, guess, **range)
+    # nintegrate(sin(x)/x, x: 0..1): a definite integral as a Float, infinite bounds included
+    def nintegrate(f, var = nil, from = nil, to = nil, **range) = Numerics.nintegrate(f, var, from, to, **range)
+
+    # integrate(x**2 * exp(x), x); definite: integrate(x**2, x, 0, 1) or integrate(x**2, x: 0..1);
+    # iterated: integrate(x*y, x: 0..1, y: 0..2) integrates over x first
     def integrate(expr, var = nil, from = nil, to = nil, **range)
+      return Functions.iterated_integral(expr, range) if range.size > 1
       var, from, to = Functions.range_arguments(var, from, to, range, "integrate", discrete: false) if var.nil? || from
       from.nil? ? Integrate.integrate(expr, var) : Integrate.definite(expr, var, from, to)
     end
@@ -210,9 +287,12 @@ module RCAS
     def evaluate(expr) = Expression.lift(expr).evaluate
     alias doit evaluate
 
+    # interval(0, 1) is [0, 1]; interval(0, 1, right_open: true) is [0, 1)
+    def interval(low, high, **open) = Interval.new(low, high, **open)
+
     # eq(x**2, 4) builds an equation; solve(eq(x**2, 4), x) solves it.
     def eq(lhs, rhs) = Equation.new(lhs, rhs)
-    def solve(target, vars = nil) = Solve.solve(target, vars)
+    def solve(target, vars = nil, all: false) = Solve.solve(target, vars, all: all)
 
     # groebner([x**2 + y**2 - 1, x - y], [x, y]): reduced Gröbner basis; order: :lex (default), :grlex, :grevlex
     def groebner(polys, vars = nil, order: :lex) = Groebner.groebner(polys, vars, order: order)
@@ -315,10 +395,12 @@ module RCAS
 
     # D(y, x) is the derivative of the unknown function y; dsolve solves ODEs.
     def D(expr, var, order = 1) = Derivative.new(expr, var, order)
+    # dsolve(eq, y, x); a system: dsolve([eq(D(x, t), y), eq(D(y, t), -x)], [x, y], t)
     def dsolve(equation, y, x) = ODE.dsolve(equation, y, x)
 
     # assume(x: ZZ, y: RR) declares variable domains; assumptions lists them.
-    def assume(table) = RCAS.assume(table)
+    # assume(x: ZZ) declares a domain, assume(x > 0) a sign; assumptions lists both
+    def assume(*facts, **table) = RCAS.assume(*facts, **table)
     def forget(*names) = RCAS.forget(*names)
     def assumptions = RCAS.assumptions
 
@@ -441,6 +523,8 @@ module RCAS
         (PI / 2 - v).simplify
       when :abs
         return Num.new(arg.value.abs) if arg.is_a?(Num)
+        return arg if RCAS.nonnegative?(arg)
+        return Simplify.negate(arg).simplify if %i[negative nonpositive].include?(RCAS.sign_of(arg))
         d = arg.domain
         d && d <= NN ? arg : nil
       when :sign

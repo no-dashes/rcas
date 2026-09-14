@@ -169,4 +169,23 @@ class LinearAlgebraTest < Minitest::Test
     assert_equal "[i 0]\n[0 1]", m.to_s
     assert_equal "(1 + 2*i)*x", (Complex(1, 2) * :x).to_s
   end
+  def test_gram_schmidt
+    basis = RCAS.gram_schmidt([RCAS.vector(1, 1, 0), RCAS.vector(1, 0, 1)])
+    assert_equal ["(1, 1, 0)", "(1/2, -1/2, 1)"], basis.map(&:to_s)
+    assert RCAS.orthogonal?(basis[0], basis[1])
+    orthonormal = RCAS.gram_schmidt([RCAS.vector(1, 1, 0), RCAS.vector(1, 0, 1)], normalize: true)
+    orthonormal.each { |v| assert_equal "1", RCAS::LinearAlgebra.norm(v).to_s, "every vector has length one" }
+    assert RCAS.orthogonal?(orthonormal[0], orthonormal[1])
+    assert_equal 1, RCAS.gram_schmidt([RCAS.vector(1, 0), RCAS.vector(2, 0)]).size, "a dependent vector drops out"
+  end
+
+  def test_projection_and_least_squares
+    assert_equal "(1, 0)", RCAS.project(RCAS.vector(1, 2), onto: RCAS.vector(1, 0)).to_s
+    assert_equal "(1, 1, 0)", RCAS.project(RCAS.vector(1, 1, 5), onto: [RCAS.vector(1, 0, 0), RCAS.vector(0, 1, 0)]).to_s
+    fit = RCAS.least_squares(RCAS.matrix([[1, 1], [1, 2], [1, 3]]), RCAS.vector(1, 2, 4))
+    assert_equal "(-2/3, 3/2)", fit.to_s
+    line = RCAS.linreg([1, 2, 3], [1, 2, 4], :x)
+    assert_equal "-2/3 + 3*x/2", line.to_s, "the same line as linreg finds"
+    assert_raises(ArgumentError) { RCAS.least_squares(RCAS.matrix([[1, 2], [2, 4]]), RCAS.vector(1, 2)) }
+  end
 end
