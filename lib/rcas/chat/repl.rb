@@ -14,7 +14,7 @@ module RCAS
       CONTINUE = "  "
 
       COMMANDS = {
-        "/help" => "show this help",
+        "/help [NAME]" => "these commands, or what one function, set or class does",
         "/output [text|tex|both|latex]" => "how results are shown: ASCII, typeset picture, both, or text + LaTeX source",
         "/backend [katex|latex]" => "typesetting backend (KaTeX + Chrome, or a TeX installation)",
         "/scale N" => "zoom factor for typeset output (1 = natural size)",
@@ -247,7 +247,7 @@ module RCAS
         name, arg = text.split(/\s+/, 2)
         arg = arg.to_s.strip
         case name
-        when "/help" then help
+        when "/help" then help(arg)
         when "/settings" then settings_command(arg)
         when "/output", "/tex" then output(arg)
         when "/backend" then backend(arg)
@@ -306,13 +306,46 @@ module RCAS
         report(e)
       end
 
-      def help
+      # /help lists the commands; /help factor explains one name.
+      def help(arg = "")
+        return help_for(arg.strip) unless arg.strip.empty?
         commands = COMMANDS.reject { |k, _| !@assistant.available? && ASSISTANT_COMMANDS.include?(k.split.first) }
         width = commands.keys.map(&:size).max
         commands.each { |k, v| @ui.puts "  #{Style.cyan(k.ljust(width))}  #{v}" }
         @ui.puts
         tail = @assistant.available? ? " or, if it is not Ruby, a question for Claude" : ""
         @ui.info("Anything else is Ruby (x + 1, e.expand, ZZ[x].(x**2 - 1).factor)#{tail}.")
+        @ui.info("/help factor, /help ZZ, /help Matrix explain one name.")
+      end
+
+      # One command, or one function, set or class (from the source, see Docs).
+      def help_for(name)
+        if name.start_with?("/")
+          entry = COMMANDS.find { |k, _| k.split(/[\s\[]/).first == name }
+          return @ui.error("unknown command #{name}; try /help") if entry.nil?
+          return @ui.puts("  #{Style.cyan(entry[0])}  #{entry[1]}")
+        end
+        doc = Docs.doc(name)
+        @ui.puts("  #{Style.cyan(doc.signature)}")
+        doc.lines.each { |l| @ui.puts("    #{l}") }
+        @ui.info("also: #{doc.also}") if doc.also
+        doc.background&.each do |label, text| # the label is coloured, the prose is not
+          wrapped = RCAS::Documentation.wrap("  #{label}: ", text)
+          head = "  #{label}:"
+          @ui.puts("  #{Style.cyan("#{label}:")}#{wrapped.first[head.size..]}")
+          wrapped.drop(1).each { |line| @ui.puts(line) }
+        end
+        doc.sources&.each_with_index do |source, i|
+          wrapped = RCAS::Documentation.wrap(i.zero? ? "  sources: " : "           ", source)
+          @ui.puts(i.zero? ? "  #{Style.cyan('sources:')}#{wrapped.first[10..]}" : wrapped.first)
+          wrapped.drop(1).each { |line| @ui.puts(line) }
+        end
+        doc.reading&.each_with_index do |link, i|
+          @ui.puts(i.zero? ? "  #{Style.cyan('read:')} #{link}" : "        #{link}")
+        end
+        @ui.info("manual: #{doc.sections.join('; ')}") unless doc.sections.empty?
+      rescue Docs::NotFound => e
+        @ui.error(e.message)
       end
 
       def assistant_command(name, arg)

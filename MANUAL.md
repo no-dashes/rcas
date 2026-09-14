@@ -76,6 +76,7 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
   - [Input](#input)
   - [Claude](#claude)
   - [Output modes](#output-modes)
+  - [Help](#help)
   - [Errors](#errors)
   - [Sessions](#sessions)
   - [Commands](#commands)
@@ -116,6 +117,10 @@ indeterminate (a prime, say). `p(expr)` therefore raises `NoMethodError` in
 `Kernel.p(expr)`. Plain `irb` with `require "rcas"` is unaffected.
 - Results print as text. `show(obj)` typesets a value (Appendix A);
   `bin/rcas-chat` (Appendix B) shows pictures inline.
+- `doc(:factor)`, `doc("ZZ")`, `doc(:Matrix)` explain one name: its
+  signature, the comment above it in the source, the mathematics behind it
+  and the manual sections that cover it. `bin/rcas-chat` has the same under
+  `/help factor`.
 
 Without the launcher, `require "rcas"` and use `:x`, `RCAS::ZZ` or
 `include RCAS::Sets`, and `RCAS.sin(:x)` / `RCAS.assume(x: RCAS::ZZ)`.
@@ -1829,6 +1834,7 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | domains | `NN ZZ QQ RR CC GF assume forget assumptions` |
 | linear algebra | `vector matrix` |
 | holding | `hold evaluate` |
+| help | `doc` (`/help NAME` in rcas-chat) |
 
 Methods on expressions: `simplify expand factor cancel rationalize collect
 numer denom apart gcd lcm quo rem divmod subs call evalf to_f diff integrate
@@ -1864,6 +1870,8 @@ lib/rcas/distributions.rb   Normal, Uniform, Exponential, Bernoulli, Binomial, P
 lib/rcas/special.rb         incomplete gamma and beta, numerically
 lib/rcas/hypothesis.rb      t, z, chi-square, F and binomial tests; confidence intervals
 lib/rcas/plot.rb            function plotting: braille art, SVG, PNG
+lib/rcas/docs.rb            doc(name): signatures and comments read from the source
+lib/rcas/background.rb      the mathematics behind each name, its sources and Wikipedia links
 lib/rcas/solve.rb           equations, solve, systems
 lib/rcas/groebner.rb        Gröbner bases: Buchberger, normal forms, monomial orders
 lib/rcas/interpolate.rb     Newton interpolation
@@ -2232,6 +2240,37 @@ of Appendix A; `/settings` shows them, `/settings save` writes them to
 removes that file. `/latex EXPR` prints the LaTeX of an expression, `/show
 EXPR` typesets one regardless of the mode, `/png EXPR FILE` writes a file.
 
+### Help
+
+`/help` lists the commands; `/help factor`, `/help ZZ`, `/help Matrix` or
+`/help /output` explain one name. Most of it is read from the source at the
+moment you ask: the `def` line, the comment above it (rcas documents every
+public function that way) and the manual sections that mention the name, so
+it cannot drift from the code. `maths:` and `method:` add the mathematical
+background: what the operation is and how rcas computes it. `sources:`
+expands the citations from section 4 in full, and `read:` links the English
+Wikipedia article on the topic for a first orientation. `doc(:factor)`
+shows the same in `bin/rcas`.
+
+```
+❯ /help gcd
+  gcd(f, g)
+    gcd(f, g), lcm(f, g) of integers or polynomials
+  also: e.gcd
+  maths: The greatest common divisor: the polynomial (or integer) of
+         largest degree dividing both, unique up to a unit.
+  method: Euclid's algorithm with primitive pseudo-remainder sequences,
+          which keeps the coefficients from blowing up [Knu98, §4.6.1],
+          [GCL92].
+  sources: [Knu98] D. E. Knuth, The Art of Computer Programming, vol. 2:
+           Seminumerical Algorithms, 3rd ed., Addison-Wesley 1998
+           [GCL92] K. O. Geddes, S. R. Czapor, G. Labahn, Algorithms for
+           Computer Algebra, Kluwer 1992
+  read: https://en.wikipedia.org/wiki/Euclidean_algorithm
+        https://en.wikipedia.org/wiki/Polynomial_greatest_common_divisor
+  manual: 1.6 Polynomial rings; Integers and primes; gcd and division of expressions
+```
+
 ### Errors
 
 An error is shown in one line. An `ArgumentError` from an rcas function
@@ -2273,7 +2312,7 @@ Claude's calls, when the session is resumed.
 ### Commands
 
 ```
-/help                             this list
+/help [NAME]                      these commands, or what one name does
 /output [text|tex|both|latex]     how results are shown
 /backend [katex|latex]            typesetting backend
 /scale N                          zoom factor for pictures

@@ -26,6 +26,7 @@ module RCAS
       root.variables.empty? ? root.simplify : root
     end
 
+    # pi and oo (also π and ∞): the constants PI and OO under bare names
     def pi = PI
     def oo = OO
     def π = PI
@@ -54,6 +55,7 @@ module RCAS
       Limits.series(f, x, a, n)
     end
 
+    # taylor(exp(x), x, 0, 5): the series without the O term
     def taylor(f, x = nil, a = 0, n = 6, **opts)
       x, a, n = Functions.point_arguments(x, a, n, opts, "taylor")
       Limits.taylor(f, x, a, n)
@@ -161,6 +163,7 @@ module RCAS
       pf.resultant(pg, x && Expression.lift(x).name).to_expr
     end
 
+    # discriminant(x**2 + b*x + c, x): the discriminant of a polynomial
     def discriminant(f, x = nil)
       pf = Groebner.lift([f], x && [x]).last.first
       pf.discriminant(x && Expression.lift(x).name).to_expr
@@ -254,6 +257,9 @@ module RCAS
     def cdf(dist, x) = dist.cdf(x)
     def probability(dist, event) = dist.probability(event)
 
+    # doc(:factor), doc("ZZ"), doc(:Matrix): what a name does, from the source
+    def doc(name) = Docs.doc(name)
+
     # plot(sin(x)), plot(f, x: -3..3), plot([f, g], x: 0..1), plot(Normal(0, 1)): a Plot,
     # shown as braille art; .show for a picture, .save("f.svg"), .to_svg, .to_png
     def plot(f, var = nil, from = nil, to = nil, **opts) = Plotting.plot(f, var, from, to, **opts)
@@ -266,6 +272,7 @@ module RCAS
       Plotting.boxplot(data || series, **options)
     end
 
+    # barchart(frequencies(data)) or barchart(names, counts): one bar per category
     def barchart(categories = nil, counts = nil, **opts)
       options, series = Functions.split_plot_options(opts)
       Plotting.barchart(categories || series, counts, **options)

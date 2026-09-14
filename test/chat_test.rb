@@ -279,6 +279,48 @@ class ChatWithoutClaudeTest < Minitest::Test
   end
 end
 
+# /help NAME explains one function, set or class from the source.
+class ChatHelpTest < Minitest::Test
+  def setup
+    RCAS::Chat::Style.enabled = false
+    RCAS::Render.inline = false
+  end
+
+  def teardown
+    RCAS::Chat::Style.enabled = nil
+    RCAS::Render.inline = nil
+  end
+
+  def repl(input)
+    out = StringIO.new
+    offline = ->(ws, ui, model) { RCAS::Chat::Assistant.new(ws, ui, model: model).tap { |a| a.define_singleton_method(:available?) { false } } }
+    RCAS::Chat::REPL.new(input: StringIO.new(input), output: out, assistant_factory: offline, persist: false, mode: :text).run
+    out.string
+  end
+
+  def test_one_name
+    out = repl("/help factor\n")
+    assert_includes out, "factor(obj, extension: nil)"
+    assert_includes out, "factor(x**2 - 1)"
+    assert_includes out, "also: e.factor"
+    assert_includes out, "manual:"
+  end
+
+  def test_sets_classes_and_commands
+    assert_includes repl("/help ZZ\n"), "Membership is by value"
+    assert_includes repl("/help Polynomial\n"), "methods: "
+    assert_includes repl("/help /output\n"), "how results are shown"
+    assert_includes repl("/help /nosuch\n"), "unknown command /nosuch"
+  end
+
+  def test_a_typo_and_the_plain_list
+    assert_includes repl("/help facter\n"), "did you mean factor"
+    plain = repl("/help\n")
+    assert_includes plain, "/plotstyle"
+    assert_includes plain, "/help factor, /help ZZ, /help Matrix explain one name."
+  end
+end
+
 # /plotstyle switches between braille art and an inline picture.
 class ChatPlotStyleTest < Minitest::Test
   def setup
