@@ -939,6 +939,23 @@ rcas> [ZZ.ring?, ZZ.field?, QQ.field?]
 => [true, false, true]
 ```
 
+`ℕ ℤ ℚ ℝ ℂ` are the same sets under their usual symbols; they are constants,
+so `ℤ[x]` is `ZZ[x]`. Output stays ASCII unless you ask otherwise:
+`RCAS.unicode = true` (or `/unicode on` in `bin/rcas-chat`, or
+`RCAS_UNICODE=1`) prints `ℤ`, `π` and `∞` instead of `ZZ`, `pi` and `oo`.
+Typeset output is unaffected, since LaTeX has its own names for them.
+
+```
+rcas> [ℤ == ZZ, ℚ[x] == QQ[x], ℝ.include?(2.0)]
+=> [true, true, true]
+rcas> RCAS.unicode = true
+=> true
+rcas> [ZZ[x], PI, OO]
+=> [ℤ[x], π, ∞]
+rcas> RCAS.unicode = false
+=> false
+```
+
 A variable becomes a member of a set with `x.in(ZZ)` or `assume(x: ZZ)`.
 Expressions then infer the smallest set that must contain their value.
 
@@ -1831,7 +1848,7 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | tests and intervals | `ttest ztest chisquare_test ftest binomial_test confidence_interval proportion_interval` |
 | plotting | `plot scatter histogram boxplot barchart` |
 | special functions | `erf erfc` |
-| domains | `NN ZZ QQ RR CC GF assume forget assumptions` |
+| domains | `NN ZZ QQ RR CC` (also `ℕ ℤ ℚ ℝ ℂ`), `GF assume forget assumptions` |
 | linear algebra | `vector matrix` |
 | holding | `hold evaluate` |
 | help | `doc` (`/help NAME` in rcas-chat) |
@@ -2318,6 +2335,7 @@ Claude's calls, when the session is resumed.
 /scale N                          zoom factor for pictures
 /theme dark|light                 colour of the pictures
 /plotstyle [text|image]           how plots are shown
+/unicode [on|off]                 print ℤ, π and ∞ instead of ZZ, pi and oo
 /latex EXPR   /show EXPR   /png EXPR FILE
 /ask TEXT                         ask Claude (also: ? TEXT)        [with Claude configured]
 /vars                             the session's variables

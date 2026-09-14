@@ -279,6 +279,48 @@ class ChatWithoutClaudeTest < Minitest::Test
   end
 end
 
+# /unicode switches the double-struck letters on for output.
+class ChatUnicodeTest < Minitest::Test
+  def setup
+    RCAS::Chat::Style.enabled = false
+    RCAS::Render.inline = false
+  end
+
+  def teardown
+    RCAS::Chat::Style.enabled = nil
+    RCAS::Render.inline = nil
+    RCAS.unicode = false
+  end
+
+  def repl(input)
+    out = StringIO.new
+    offline = ->(ws, ui, model) { RCAS::Chat::Assistant.new(ws, ui, model: model).tap { |a| a.define_singleton_method(:available?) { false } } }
+    RCAS::Chat::REPL.new(input: StringIO.new(input), output: out, assistant_factory: offline, persist: false, mode: :text).run
+    out.string
+  end
+
+  def test_the_command
+    out = repl(["/unicode", "ZZ[x]", "/unicode on", "ZZ[x]", "/unicode off", "ZZ[x]", "/unicode maybe"].join("\n") + "\n")
+    assert_includes out, "unicode off"
+    assert_includes out, "=> ZZ[x]"
+    assert_includes out, "unicode on"
+    assert_includes out, "=> ℤ[x]"
+    assert_includes out, "usage: /unicode on|off"
+    assert_includes repl("/help\n"), "/unicode"
+  end
+
+  def test_the_setting_is_stored
+    assert_includes RCAS::Chat::Settings::KEYS, "unicode"
+    RCAS.unicode = true
+    ui = RCAS::Chat::UI.new(out: StringIO.new, mode: :text)
+    assistant = RCAS::Chat::Assistant.new(RCAS::Chat::Workspace.new, ui).tap { |a| a.define_singleton_method(:available?) { false } }
+    assert_equal true, RCAS::Chat::Settings.current(ui, assistant)["unicode"]
+    RCAS.unicode = false
+    RCAS::Chat::Settings.apply("unicode" => true)
+    assert RCAS.unicode?
+  end
+end
+
 # /help NAME explains one function, set or class from the source.
 class ChatHelpTest < Minitest::Test
   def setup

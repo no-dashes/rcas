@@ -103,7 +103,7 @@ module RCAS
     end
 
     def constant(key)
-      return nil unless key.match?(/\A[A-Z]/) && RCAS.const_defined?(key)
+      return nil unless key.match?(/\A[[:upper:]]/) && RCAS.const_defined?(key)
       value = RCAS.const_get(key)
       location = Object.const_source_location("RCAS::#{key}")
       lines = location && location.first ? comment_above(location.first, location.last) : []
@@ -228,7 +228,7 @@ module RCAS
       return [] unless File.file?(MANUAL)
       pattern = /(?<![A-Za-z_])#{Regexp.escape(key)}(?![A-Za-z_])/
       found = count_mentions(pattern)
-      found = count_mentions(/(?<![A-Za-z_])#{Regexp.escape(key)}(?![A-Za-z_])/i) if found.empty? && key.match?(/\A[A-Z]/)
+      found = count_mentions(/(?<![A-Za-z_])#{Regexp.escape(key)}(?![A-Za-z_])/i) if found.empty? && key.match?(/\A[[:upper:]]/)
       found.first(MAX_SECTIONS)
     rescue SystemCallError, IOError
       []

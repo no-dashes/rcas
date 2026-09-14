@@ -20,6 +20,7 @@ module RCAS
         "/scale N" => "zoom factor for typeset output (1 = natural size)",
         "/theme [dark|light]" => "colour of typeset output for your terminal background",
         "/plotstyle [text|image]" => "how plots are shown: braille art or a picture",
+        "/unicode [on|off]" => "print ℤ, π and ∞ instead of ZZ, pi and oo",
         "/latex EXPR" => "print the LaTeX source of a Ruby expression",
         "/show EXPR" => "typeset a Ruby expression regardless of the output mode",
         "/png EXPR FILE" => "write the typeset expression to a PNG file",
@@ -260,6 +261,7 @@ module RCAS
           Render.theme = arg
           @ui.info("theme #{arg}")
         when "/plotstyle" then plotstyle(arg)
+        when "/unicode" then unicode(arg)
         when "/latex" then @ui.puts(LaTeX.of(@workspace.eval(arg).first))
         when "/show"
           value, = @workspace.eval(arg)
@@ -369,6 +371,12 @@ module RCAS
         Plot.style = arg unless arg.empty?
         note = Plot.image? && !Plot.pictures?(@ui.io) ? " (no inline pictures here, so plots stay text)" : ""
         @ui.info("plotstyle #{Plot.style}#{note}")
+      end
+
+      def unicode(arg)
+        return @ui.error("usage: /unicode on|off") unless arg.empty? || %w[on off].include?(arg)
+        RCAS.unicode = (arg == "on") unless arg.empty?
+        @ui.info("unicode #{RCAS.unicode? ? 'on' : 'off'}")
       end
 
       def output(arg)

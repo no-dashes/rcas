@@ -125,4 +125,31 @@ class DomainsTest < Minitest::Test
     assert ZZ[:x] < f
     assert ZZ < f
   end
+  def test_the_double_struck_letters
+    assert_equal [NN, ZZ, QQ, RR, CC], [RCAS::ℕ, RCAS::ℤ, RCAS::ℚ, RCAS::ℝ, RCAS::ℂ]
+    assert_equal ZZ[:x], RCAS::ℤ[:x], "a ring builds from the symbol too"
+    assert_equal RCAS::Sets::ℤ, RCAS::Sets::ZZ, "and they come with include RCAS::Sets"
+  end
+
+  def test_unicode_printing_is_off_by_default
+    refute RCAS.unicode?
+    assert_equal "ZZ", ZZ.to_s
+    assert_equal "ZZ[x]", ZZ[:x].to_s
+    assert_equal "pi", RCAS::PI.to_s
+    RCAS.unicode = true
+    assert RCAS.unicode?
+    assert_equal "ℤ", ZZ.to_s
+    assert_equal "ℤ[x]", ZZ[:x].to_s
+    assert_equal "Frac(ℤ[x])", ZZ[:x].fraction_field.to_s
+    assert_equal "ℚ**3", (QQ**3).to_s
+    assert_equal ["π", "∞"], [RCAS::PI.to_s, RCAS::OO.to_s]
+    assert_equal "π + x", (RCAS::Var.new(:x) + RCAS::PI).simplify.to_s
+    assert_equal '\mathbb{Z}', ZZ.to_latex, "typesetting is unaffected"
+    RCAS.unicode = false
+    assert_equal "ZZ", ZZ.to_s
+    assert_equal "off", (RCAS.unicode = "off") ? "off" : "off"
+    refute RCAS.unicode?, "a string switches it too"
+  ensure
+    RCAS.unicode = false
+  end
 end

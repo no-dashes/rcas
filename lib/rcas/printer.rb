@@ -22,7 +22,7 @@ module RCAS
       when Mul then binary(expr, "*")
       when Div then binary(expr, "/")
       when Pow then "#{wrap(expr.base, POWER, :left)}**#{wrap(expr.exponent, POWER, :right)}"
-      when Const then expr.name.to_s
+      when Const then RCAS.symbol(expr.name)
       when RootOf then "RootOf(#{print(expr.poly.to_expr.subs(Var.new(expr.var) => Var.new(:x)))}, #{expr.index})"
       when Fn
         return "e" if expr.name == :exp && expr.args == [Num.new(1)]

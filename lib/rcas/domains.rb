@@ -12,6 +12,24 @@ module RCAS
     end
   end
 
+  # The double-struck letters. They are always available as input (ℤ[x] is
+  # ZZ[x]); whether results print that way is the unicode setting, which is
+  # off by default so that output stays ASCII and pastes anywhere.
+  UNICODE = { "NN" => "ℕ", "ZZ" => "ℤ", "QQ" => "ℚ", "RR" => "ℝ", "CC" => "ℂ",
+              "pi" => "π", "oo" => "∞" }.freeze
+
+  class << self
+    def unicode? = @unicode.nil? ? ENV["RCAS_UNICODE"] == "1" : @unicode
+
+    # RCAS.unicode = true prints ℤ, π and ∞ instead of ZZ, pi and oo.
+    def unicode=(value)
+      @unicode = value.nil? ? nil : !(value == false || value.to_s == "off" || value.to_s == "false")
+    end
+
+    # The name to print for +ascii+ under the current setting.
+    def symbol(ascii) = unicode? ? UNICODE.fetch(ascii.to_s, ascii.to_s) : ascii.to_s
+  end
+
   # Common protocol of NN, ZZ, QQ, RR, CC, polynomial rings and fraction fields.
   class Domain
     def include?(_obj) = raise(NotImplementedError)
@@ -46,8 +64,8 @@ module RCAS
     def vector(*entries) = (self**entries.size)[*entries]
     def matrix(rows) = MatrixSpace.new(self, rows.size, rows.first.size)[*rows]
 
-    def to_s = name
-    def inspect = name
+    def to_s = RCAS.symbol(name)
+    def inspect = to_s
   end
 
   # NN, ZZ, QQ, RR, CC. Membership is by value for exact types (2/1 is an
@@ -111,13 +129,26 @@ module RCAS
   RR = NumberSet.new(:RR, 3)
   CC = NumberSet.new(:CC, 4)
 
-  # `include RCAS::Sets` brings NN, ZZ, QQ, RR, CC into scope.
+  # The double-struck letters are constants, not methods: Ruby reads ℤ as an
+  # uppercase letter and therefore as a constant. ℤ[x] is ZZ[x].
+  ℕ = NN
+  ℤ = ZZ
+  ℚ = QQ
+  ℝ = RR
+  ℂ = CC
+
+  # `include RCAS::Sets` brings NN, ZZ, QQ, RR, CC (and ℕ ℤ ℚ ℝ ℂ) into scope.
   module Sets
     NN = RCAS::NN
     ZZ = RCAS::ZZ
     QQ = RCAS::QQ
     RR = RCAS::RR
     CC = RCAS::CC
+    ℕ = RCAS::NN
+    ℤ = RCAS::ZZ
+    ℚ = RCAS::QQ
+    ℝ = RCAS::RR
+    ℂ = RCAS::CC
     ALL = [NN, ZZ, QQ, RR, CC].freeze
   end
 
