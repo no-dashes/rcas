@@ -246,19 +246,25 @@ module RCAS
     def cdf(dist, x) = dist.cdf(x)
     def probability(dist, event) = dist.probability(event)
 
-# ttest(data, mu: 0), ttest(xs, ys), ttest(xs, ys, paired: true), ztest(data, sigma: 2, mu: 0):
-# tests of location; alternative: :two_sided (default), :less, :greater
-def ttest(data, other = nil, **opts) = Hypothesis.ttest(data, other, **opts)
-def ztest(data, sigma:, mu: 0, alternative: :two_sided) = Hypothesis.ztest(data, sigma: sigma, mu: mu, alternative: alternative)
-# chisquare_test(counts, expected: nil): goodness of fit; chisquare_test(rows): independence
-def chisquare_test(observed, **opts) = Hypothesis.chisquare_test(observed, **opts)
-# ftest(xs, ys): the ratio of two sample variances
-def ftest(xs, ys, alternative: :two_sided) = Hypothesis.ftest(xs, ys, alternative: alternative)
-# binomial_test(9, 10, p: 1/2r): exact, the p value stays a rational
-def binomial_test(successes, trials, p: Rational(1, 2), alternative: :two_sided) = Hypothesis.binomial_test(successes, trials, p: p, alternative: alternative)
-# confidence_interval(data, level: 0.95, sigma: nil, parameter: :mean|:variance|:stdev), proportion_interval(k, n)
-def confidence_interval(data, **opts) = Hypothesis.confidence_interval(data, **opts)
-def proportion_interval(successes, trials, level: 0.95) = Hypothesis.proportion_interval(successes, trials, level: level)
+    # plot(sin(x)), plot(f, x: -3..3), plot([f, g], x: 0..1), plot(Normal(0, 1)): a Plot,
+    # shown as braille art; .show for a picture, .save("f.svg"), .to_svg, .to_png
+    def plot(f, var = nil, from = nil, to = nil, **opts) = Plotting.plot(f, var, from, to, **opts)
+    # scatter(xs, ys) or scatter(points): data points
+    def scatter(xs, ys = nil, **opts) = Plotting.scatter(xs, ys, **opts)
+
+    # ttest(data, mu: 0), ttest(xs, ys), ttest(xs, ys, paired: true), ztest(data, sigma: 2, mu: 0):
+    # tests of location; alternative: :two_sided (default), :less, :greater
+    def ttest(data, other = nil, **opts) = Hypothesis.ttest(data, other, **opts)
+    def ztest(data, sigma:, mu: 0, alternative: :two_sided) = Hypothesis.ztest(data, sigma: sigma, mu: mu, alternative: alternative)
+    # chisquare_test(counts, expected: nil): goodness of fit; chisquare_test(rows): independence
+    def chisquare_test(observed, **opts) = Hypothesis.chisquare_test(observed, **opts)
+    # ftest(xs, ys): the ratio of two sample variances
+    def ftest(xs, ys, alternative: :two_sided) = Hypothesis.ftest(xs, ys, alternative: alternative)
+    # binomial_test(9, 10, p: 1/2r): exact, the p value stays a rational
+    def binomial_test(successes, trials, p: Rational(1, 2), alternative: :two_sided) = Hypothesis.binomial_test(successes, trials, p: p, alternative: alternative)
+    # confidence_interval(data, level: 0.95, sigma: nil, parameter: :mean|:variance|:stdev), proportion_interval(k, n)
+    def confidence_interval(data, **opts) = Hypothesis.confidence_interval(data, **opts)
+    def proportion_interval(successes, trials, level: 0.95) = Hypothesis.proportion_interval(successes, trials, level: level)
 
     # mean(data), median, mode, variance(data, sample: true), stdev, quantile(data, p), quartiles, iqr,
     # moment(data, k), skewness, kurtosis, geometric_mean, harmonic_mean, frequencies: on a list or a distribution

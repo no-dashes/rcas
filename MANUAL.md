@@ -63,7 +63,8 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
     - [Distributions](#distributions)
     - [Hypothesis tests](#hypothesis-tests)
     - [Confidence intervals](#confidence-intervals)
-  - [1.10 Performance notes](#110-performance-notes)
+  - [1.10 Plotting](#110-plotting)
+  - [1.11 Performance notes](#111-performance-notes)
 - [2. Reference](#2-reference)
 - [3. Files](#3-files)
 - [4. Sources](#4-sources)
@@ -1634,7 +1635,81 @@ rcas> proportion_interval(41, 100)
 Not implemented: analysis of variance, non-parametric tests (Wilcoxon,
 Kolmogorov-Smirnov), multiple regression and time series.
 
-### 1.10 Performance notes
+### 1.10 Plotting
+
+`plot(f)` samples a function and draws it with Unicode braille dots, which
+needs nothing but a terminal; the result is what `inspect` shows, so a plot
+appears as soon as you type it. The range is `-10..10` unless you give one.
+Values that are complex, infinite or undefined leave a gap, and a jump
+across a pole breaks the line instead of drawing a vertical stroke. The
+axes are dotted guides, drawn when the origin is inside the picture.
+
+```
+rcas> plot(sin(x), x: 0..2*PI, width: 30, height: 6)
+=>  1.1 ┤⠀⠀⠀⠀⣀⡤⠖⠒⠒⠤⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+        │⠀⠀⣠⠞⠁⠀⠀⠀⠀⠀⠈⠙⢦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+        │⣠⠞⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢆⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+        │⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠱⣅⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⢀⡵⠋
+        │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⣄⡀⠀⠀⠀⠀⠀⢀⡴⠋⠀⠀
+   -1.1 ┤⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⠒⠤⠤⠴⠚⠉⠀⠀⠀⠀
+        └──────────────────────────────
+         0                        6.283
+rcas> plot(1/x, x: -3..3, width: 30, height: 6)
+=>   9.12 ┤⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢽⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+          │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠝⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+          │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠅⠙⠢⠤⣀⣀⣀⣀⣀⣀⣀⠀⠀⠀⠀
+          │⠓⠒⠓⠒⠓⠒⠓⠒⠓⠒⠧⠤⣅⡀⠁⠅⠁⠀⠁⠀⠁⠀⠁⠀⠁⠈⠉⠉⠉⠉
+          │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠱⡀⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   -8.194 ┤⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+          └──────────────────────────────
+           -3                           3
+```
+
+`plot([f, g], x: a..b)` draws several functions and names them underneath,
+`plot(distribution)` draws a density (a discrete one as stems over its
+support), and `scatter(xs, ys)` draws data points.
+
+```
+rcas> plot([x**2, x**3], x: -1..1, width: 30, height: 6)
+=>  1.1 ┤⠲⣄⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣠⡶
+        │⠀⠀⠙⠲⢤⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠅⠀⠀⠀⠀⠀⠀⠀⠀⣀⣤⣶⠟⠁⠀
+        │⠀⠀⠀⠀⠀⠈⠉⠓⠲⠤⢄⣀⣀⣀⣀⣅⣀⣀⣀⣠⣤⣶⠾⠝⠛⠉⠀⠀⠀⠀
+        │⠁⠀⠁⠀⣁⡤⠕⠒⠋⠉⠉⠉⠉⠉⠉⠅⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀
+        │⠀⢀⡴⠋⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   -1.1 ┤⠞⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+        └──────────────────────────────
+         -1                           1
+     x**2, x**3
+rcas> plot(Binomial(6, 1/2r), width: 30, height: 6)
+=> Binomial(6, 1/2)
+   0.3273 ┤⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡆⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+          │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡀⠀⠀⠀⠀⡇⠀⠀⠀⢀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+          │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⡇⠀⠀⠀⢸⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+          │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⡇⠀⠀⠀⢸⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+          │⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⡇⠀⠀⠀⠀⡇⠀⠀⠀⢸⠀⠀⠀⠀⢸⠀⠀⠀⠀⠀
+        0 ┤⡄⠀⠀⠀⠀⡇⠀⠀⠀⠀⡇⠀⠀⠀⠀⡇⠀⠀⠀⢸⠀⠀⠀⠀⢸⠀⠀⠀⠀⢠
+          └──────────────────────────────
+           0                            6
+rcas> scatter([1, 2, 3, 4], [2, 4, 7, 8], width: 30, height: 6)
+=> 8.3 ┤⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠂⠀
+       │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠂⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+       │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+       │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+       │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   1.7 ┤⠀⠠⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+       └──────────────────────────────
+        0.85                      4.15
+```
+
+`width:`, `height:`, `y:`, `title:` and `labels:` shape the picture.
+`to_svg` and `save("f.svg")` write a vector picture and need nothing;
+`to_png("f.png")` and `show` (an inline picture in iTerm2) rasterize it
+with the same headless Chrome the typeset output uses. Sampling is uniform
+with 400 points, so a feature narrower than one pixel column can be missed;
+the y range is trimmed to the central 96 per cent of the sampled values
+when a pole would otherwise flatten the picture.
+
+### 1.11 Performance notes
 
 `expand` and polynomial conversion combine like terms while multiplying,
 so a product of many sums never materialises more terms than the result
@@ -1681,6 +1756,7 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | statistics | `mean median mode variance stdev quantile quartiles iqr moment skewness kurtosis geometric_mean harmonic_mean frequencies covariance correlation linreg` |
 | distributions | `Normal Uniform Exponential Bernoulli Binomial Poisson Geometric DiscreteUniform StudentT ChiSquare FRatio pdf cdf probability` |
 | tests and intervals | `ttest ztest chisquare_test ftest binomial_test confidence_interval proportion_interval` |
+| plotting | `plot scatter` |
 | special functions | `erf erfc` |
 | domains | `NN ZZ QQ RR CC GF assume forget assumptions` |
 | linear algebra | `vector matrix` |
@@ -1692,7 +1768,8 @@ series taylor limit solve eq variables degree ldegree lcoeff tcoeff coeff
 coeffs domain in in? to_poly to_sexp hold-related evaluate`.
 
 Not implemented: the complete Risch algorithm and special functions beyond
-`erf` (`Ei`, `Si`), analysis of variance and non-parametric tests, differential equations with variable coefficients beyond
+`erf` (`Ei`, `Si`), analysis of variance and non-parametric tests, three-dimensional and
+parametric plots, differential equations with variable coefficients beyond
 first order and systems of differential equations, limits of bounded
 oscillation (`sin(x)/x` at infinity), inequalities beyond
 polynomial, rational and absolute-value ones, number fields with more than
@@ -1718,6 +1795,7 @@ lib/rcas/statistics.rb      descriptive statistics, covariance, correlation, lin
 lib/rcas/distributions.rb   Normal, Uniform, Exponential, Bernoulli, Binomial, Poisson, Geometric, DiscreteUniform, StudentT, ChiSquare, FRatio
 lib/rcas/special.rb         incomplete gamma and beta, numerically
 lib/rcas/hypothesis.rb      t, z, chi-square, F and binomial tests; confidence intervals
+lib/rcas/plot.rb            function plotting: braille art, SVG, PNG
 lib/rcas/solve.rb           equations, solve, systems
 lib/rcas/groebner.rb        Gröbner bases: Buchberger, normal forms, monomial orders
 lib/rcas/interpolate.rb     Newton interpolation
@@ -1777,6 +1855,7 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | incomplete gamma and beta by series and continued fractions (Lentz) | special.rb | [AS64, §6.5, §26.5]; [PTVF07, §6.2, §6.4]; [Len76] |
 | t, chi-square and F tests, exact binomial test, confidence intervals | hypothesis.rb | [Ros14, ch. 8-9]; Welch's degrees of freedom [Wel47]; Wilson's score interval [Wil27] |
 | gamma variates for sampling (Marsaglia-Tsang) | distributions.rb | [MT00] |
+| plotting: braille canvas (the technique of drawille and UnicodePlots.jl), line drawing | plot.rb | [Bre65] |
 | Gaussian integrals: exp(quadratic) by completing the square, x**n exp(quadratic) by reduction | integrate_substitutions.rb | [AS64, §7.1, §7.4] |
 | polynomial systems: lex Gröbner basis and triangular back-substitution; resultants for two equations with parameters | solve.rb | [CLO15, ch. 2 §8, ch. 3 §1]; [GCL92, ch. 9-10] |
 | Newton interpolation by divided differences | interpolate.rb | [Knu98, §4.6.4]; [vzGG13, ch. 5] |
@@ -1799,6 +1878,8 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   Boundary Value Problems*, 10th ed., Wiley 2012.
 - [Bre80] R. P. Brent, An improved Monte Carlo factorization algorithm,
   *BIT* 20 (1980), 176-184.
+- [Bre65] J. E. Bresenham, Algorithm for computer control of a digital
+  plotter, *IBM Systems Journal* 4 (1965), 25-30.
 - [Bro05] M. Bronstein, *Symbolic Integration I: Transcendental Functions*,
   2nd ed., Springer 2005.
 - [Buc65] B. Buchberger, *Ein Algorithmus zum Auffinden der Basiselemente des

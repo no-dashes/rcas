@@ -28,8 +28,14 @@ module RCAS
 
     FUNCTIONS = {
       sin: '\sin', cos: '\cos', tan: '\tan', atan: '\arctan',
-      sinh: '\sinh', cosh: '\cosh', tanh: '\tanh', log: '\ln'
+      sinh: '\sinh', cosh: '\cosh', tanh: '\tanh', log: '\ln',
+      asin: '\arcsin', acos: '\arccos', gamma: '\Gamma', zeta: '\zeta', arg: '\arg',
+      sign: '\operatorname{sgn}', erf: '\operatorname{erf}', erfc: '\operatorname{erfc}'
     }.freeze
+
+    # Functions with a notation of their own, by the number of arguments.
+    BRACKETED = { abs: ['\left|', '\right|'], floor: ['\left\lfloor ', '\right\rfloor'], ceil: ['\left\lceil ', '\right\rceil'] }.freeze
+    INDEXED = { bernoulli: "B", fibonacci: "F", harmonic: "H" }.freeze
 
     # Functions written as \sin^{2}(x) rather than \left(\sin(x)\right)^{2}.
     POWER_FUNCTIONS = %i[sin cos tan sinh cosh tanh].freeze
@@ -247,10 +253,33 @@ module RCAS
         return "e^{#{print(arg)}}"
       when :sqrt
         return "\\sqrt{#{print(args.first)}}"
+      when :gamma, :zeta
+        return "#{FUNCTIONS[expr.name]}\\left(#{print(args.first)}\\right)" if args.size == 1
+      when :factorial
+        return "#{factorial_base(args.first)}!"
+      when :binomial
+        return "\\binom{#{print(args[0])}}{#{print(args[1])}}" if args.size == 2
+      when :mod
+        return "#{wrap(args[0], MULTIPLICATIVE, :left)} \\bmod #{wrap(args[1], MULTIPLICATIVE, :right)}" if args.size == 2
+      when :conj
+        return "\\overline{#{print(args.first)}}"
+      when :re, :im
+        return "\\#{expr.name == :re ? 'Re' : 'Im'}#{function_argument(args.first)}"
+      when *BRACKETED.keys
+        open, close = BRACKETED[expr.name]
+        return "#{open}#{print(args.first)}#{close}"
+      when *INDEXED.keys
+        return "#{INDEXED[expr.name]}_{#{print(args.first)}}"
       end
       head = FUNCTIONS[expr.name] || "\\operatorname{#{escape(expr.name)}}"
       return "#{head}#{function_argument(args.first)}" if args.size == 1
       "#{head}\\left(#{args.map { |a| print(a) }.join(', ')}\\right)"
+    end
+
+    # 5!, n!, (n + 1)!
+    def factorial_base(arg)
+      atom = arg.is_a?(Var) || (arg.is_a?(Num) && !arg.value.negative? && (arg.value.is_a?(Integer) || arg.value.is_a?(Float)))
+      atom ? print(arg) : "\\left(#{print(arg)}\\right)"
     end
 
     def function_argument(arg)

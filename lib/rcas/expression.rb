@@ -194,6 +194,7 @@ module RCAS
     def eq(other) = Equation.new(self, other)
     def solve(var = nil) = Solve.solve(self, var)
 
+    def plot(var = nil, from = nil, to = nil, **opts) = Plotting.plot(self, var, from, to, **opts)
     def series(x, a = 0, n = 6) = Limits.series(self, x, a, n)
     def taylor(x, a = 0, n = 6) = Limits.taylor(self, x, a, n)
     def limit(x, a, dir = nil) = Limits.limit(self, x, a, dir)

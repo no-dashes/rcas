@@ -40,6 +40,8 @@ was wrong or your rocket doesn't reach the moon in time.
 
 Optional, only for the typeset output and the chat front end:
 
+- Plots need nothing: `plot(sin(x))` draws in any terminal, and `save("f.svg")`
+  writes a picture. `plot(...).to_png` and `show` use the same Chrome as below.
 - Typeset pictures (`show`, `to_png`, and `bin/rcas-chat`): either `node`
   plus `npm install` in the project directory (fetches KaTeX, see
   `package.json`) and a local Google Chrome / Chromium, or a TeX
