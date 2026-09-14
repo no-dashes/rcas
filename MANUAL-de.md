@@ -647,14 +647,25 @@ rückgängig. Für jeden Term werden der Reihe nach vier Schichten versucht:
    `1/u`, `c**u` und `exp sin cos tan log atan sinh cosh` eines linearen
    Arguments, die Substitution nach der Kettenregel (`x*exp(x**2)`,
    `sin(x)*cos(x)**3`, `log(x)/x`) und partielle Integration für ein Polynom
-   mal einen exponentiellen oder trigonometrischen Faktor sowie für `log`-
-   und `atan`-Faktoren.
+   mal einen exponentiellen oder trigonometrischen Faktor sowie für einen
+   Faktor, der beim Ableiten einfacher wird (`log atan asin acos erf erfc`).
+   Beträge und Vorzeichen eines linearen Arguments gehören auch hierher:
+   `abs(u)` ist `u*sign(u)`, und `sign(u)` ist auf jeder Seite der Nullstelle
+   von `u` konstant, lässt sich also aus dem Integral ziehen; die
+   Integrationskonstante wird dann so gewählt, dass die Stammfunktion an
+   dieser Nullstelle stetig ist, was ein bestimmtes Integral darüber hinweg
+   auch braucht.
 2. **Rationale Funktionen, exakt.** Die Hermite-Reduktion beseitigt
    mehrfache Nennerfaktoren; der logarithmische Teil kommt aus der
    Rothstein-Trager-Resultante, deren rationale Nullstellen `log`-Terme
    liefern und deren irreduzible quadratische Faktoren `log` plus `atan`
-   mit Quadratwurzeln geben. Nullstellen vom Grad drei oder höher bleiben
-   als `integral(...)` stehen.
+   mit Quadratwurzeln geben. Hat eine Nullstelle Grad drei oder höher, wird
+   der Nenner über seine irreduziblen Faktoren in Partialbrüche zerlegt, und
+   eine Quartik ohne ungerade Potenzen, `x**4 + a*x**2 + b`, wird in reelle
+   quadratische Faktoren zerlegt: `(x**2 + s*x + t)*(x**2 - s*x + t)` mit
+   `t = sqrt(b)` und `s = sqrt(2*t - a)`, oder `(x**2 + p)*(x**2 + q)`, wenn
+   `a**2 - 4*b` positiv ist. Das macht aus `1/(x**4 + 1)` zwei Logarithmen
+   und zwei Arkustangens. Alles andere bleibt als `integral(...)` stehen.
 3. **Risch-Norman-Heuristik.** Der Integrand wird als Laurent-Polynom in
    `x` und seinen transzendenten Atomen geschrieben (`exp(u)`, `log(u)`,
    `sin(u)`/`cos(u)`, `sinh`/`cosh`, `atan`, `c**u`, Wurzeln wie `x**(1/2)`,
@@ -668,7 +679,9 @@ rückgängig. Für jeden Term werden der Reihe nach vier Schichten versucht:
    rationalen Teil und Stücke `P(x)/sqrt(Q)` zerlegt, die sich auf
    `S(x)*sqrt(Q)` und die beiden Grundformen `log(sqrt(Q) + ...)` und
    `asin(...)` zurückführen; lineare Nenner laufen über `x - alpha = 1/t`.
-   Wurzeln aus einer linearen Form (`sqrt(x)/(1 + x)`), rationale
+   Wurzeln aus einer linearen Form (`sqrt(x)/(1 + x)`) oder aus einem
+   Quotienten zweier linearer Formen (`sqrt((1 - x)/(1 + x))`, die
+   Möbius-Substitution), rationale
    Funktionen von `exp(k*x)` (auch `sinh`, `cosh`) und von `sin(x)`,
    `cos(x)` (`tan(x/2)`, die Weierstraß-Substitution) werden zu rationalen
    Funktionen der neuen Variablen und gehen an Schicht 2. Gerade Potenzen
@@ -677,12 +690,38 @@ rückgängig. Für jeden Term werden der Reihe nach vier Schichten versucht:
    als `log((1 + sin(x))/cos(x)) - sin(x)` herauskommt und nicht in
    `tan(x/2)`.
 
+
+```
+rcas> integrate(abs(x), x)
+=> x**2*sign(x)/2
+rcas> integrate(abs(x - 1), x: 0..3)
+=> 5/2
+rcas> integrate(erf(x), x)
+=> exp(-x**2)/pi**(1/2) + x*erf(x)
+rcas> integrate(x/(x**4 + x**2 + 1), x)
+=> 3**(1/2)*atan(3**(1/2)*(1 + 2*x**2)/3)/3
+rcas> integrate(1/(x**4 + 1), x: 0..oo)
+=> 2**(1/2)*pi/4
+rcas> integrate(sqrt((1 - x)/(1 + x)), x)
+=> 2*((1 - x)/(1 + x))**(1/2)/(1 + (1 - x)/(1 + x)) - 2*atan(((1 - x)/(1 + x))**(1/2))
+rcas> integrate(floor(x), x)
+=> integral(floor(x), x)
+```
+
+Dieselbe Maschinerie liefert `sqrt(tan(x))` in Logarithmen und Arkustangens,
+über den quartischen Nenner, den die Substitution `t = sqrt(tan(x))`
+zurücklässt. Ein Integrand, den rcas nicht einmal ableiten kann (`floor(x)`
+oder eine unbekannte Funktion), bleibt ein `integral(...)`, statt einen
+Fehler auszulösen.
+
 Stammfunktionen mit Wurzeln und Logarithmen sind formal: sie abzuleiten
 gibt den Integranden überall dort zurück, wo beide reell sind, und an einer
 Singularität des Integranden kann die Konstante springen (wie in jedem CAS).
 Irreduzible quadratische Nenner unter einer Wurzel
 (`1/((x**2 + 1)*sqrt(x**2 + 2))`) und Radikanden vom Grad drei oder höher
-bleiben als `integral(...)` stehen.
+bleiben als `integral(...)` stehen, ebenso eine rationale Funktion, deren
+Nenner einen reellen Faktor vom Grad drei oder höher braucht
+(`1/(x**3 - 2)`, `1/(x**8 + 1)`).
 
 Die Testsuite prüft jede Stammfunktion, indem sie sie ableitet und an
 einigen Stellen numerisch mit dem Integranden vergleicht.
@@ -2417,6 +2456,7 @@ Literaturangaben stehen in der Sprache der Werke.
 | rationale Integration: Hermite-Reduktion (Macks lineare Fassung), logarithmischer Teil nach Lazard-Rioboo-Trager, Rothstein-Trager-Resultante | integrate.rb | [Her72]; [Mac75]; [Bro05, §2.2, §2.4, §2.5]; [RT76]; [LR90]; [GCL92, ch. 11] |
 | Risch-Norman-Heuristik (paralleler Risch) | integrate.rb | [NM77]; [GS89] |
 | rationalisierende Substitutionen: Wurzel aus einer quadratischen Form (Reduktion auf S*sqrt(Q) + lambda*int 1/sqrt(Q), x - alpha = 1/t), Wurzeln linearer Formen, Exponentialfunktionen, tan(x/2) | integrate_substitutions.rb | [Zor15, §5.7]; [Har16, ch. V-VI] |
+| reelle quadratische Faktoren eines biquadratischen Nenners; Möbius-Substitution für die Wurzel aus einem Quotienten linearer Formen | integrate.rb, integrate_substitutions.rb | [Har16, ch. II-III]; [GCL92, ch. 11] |
 | Puiseux-Reihen mit Logarithmustermen, Grenzwerte über den führenden Term | series.rb | Potenzreihenarithmetik wie in [Knu98, §4.7]; die Grenzwertstrategie ist die des Lehrbuchs, nicht Gruntz' MRV-Algorithmus [Gru96] |
 | Faulhaber-Summen durch Newton-Interpolation, Bernoulli-Zahlen, zeta(2m) | summation.rb | [GKP94, §6.5]; Euler-Maclaurin-Rest [GKP94, §9.5] |
 | Gospers Algorithmus mit der Gradschranke für den Polynomansatz | summation.rb | [Gos78]; [PWZ96, ch. 5] |

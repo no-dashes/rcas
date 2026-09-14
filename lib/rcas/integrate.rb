@@ -22,20 +22,24 @@ module RCAS
   # Indefinite integration.
   #
   # 1. linearity, constant factors, a table of elementary forms with a
-  #    linear argument, derivative-divides substitution, integration by parts
+  #    linear argument, abs/sign of a linear argument, derivative-divides
+  #    substitution, integration by parts
   # 2. rational functions exactly: Hermite reduction for the rational part,
   #    Lazard-Rioboo-Trager for the logarithmic part (log and atan terms
-  #    with roots of degree <= 2 of the Rothstein-Trager resultant)
+  #    with roots of degree <= 2 of the Rothstein-Trager resultant), and
+  #    partial fractions over the real quadratic factors of a biquadratic
+  #    denominator for what that leaves (1/(x**4 + 1))
   # 3. a Risch-Norman heuristic: an ansatz that is a Laurent polynomial in x
   #    and the transcendental/algebraic atoms of the integrand, plus log
   #    terms, whose undetermined coefficients are found by linear algebra
   # 4. rationalizing substitutions (integrate_substitutions.rb): square roots
-  #    of quadratics, roots of linear forms, exponentials, sin/cos
+  #    of quadratics, roots of linear forms and of ratios of them, exponentials, sin/cos
   #
   # Sources (keys: MANUAL.md, Sources): Hermite reduction [Her72] in Mack's
   # linear form [Mac75], [Bro05, §2.2]; Rothstein-Trager resultant [RT76],
   # [Bro05, §2.4]; Lazard-Rioboo-Trager [LR90], [Bro05, §2.5]; the whole
-  # rational case also [GCL92, ch. 11]; Risch-Norman [NM77], [GS89].
+  # rational case also [GCL92, ch. 11]; Risch-Norman [NM77], [GS89];
+  # decomposition into real quadratic factors [Har16, ch. II].
   module Integrate
     MAX_DEPTH = 8
     MAX_UNKNOWNS = 400
@@ -109,12 +113,34 @@ module RCAS
         return r && (coeff * r).simplify
       end
 
-      result = table(f, x) || rational(f, x) || substitution(f, x, depth) ||
-               by_parts(f, x, depth) || Substitutions.radical(f, x, depth) || Substitutions.gaussian(f, x) || heurisch(f, x) ||
-               Substitutions.root_of_linear(f, x, depth) || Substitutions.exponential(f, x, depth) ||
-               Substitutions.trigonometric(f, x, depth) || shift(f, x, depth)
+      result = begin
+        table(f, x) || piecewise(f, x, depth) || rational(f, x) || substitution(f, x, depth) ||
+          by_parts(f, x, depth) || Substitutions.radical(f, x, depth) || Substitutions.gaussian(f, x) || heurisch(f, x) ||
+          Substitutions.root_of_linear(f, x, depth) || Substitutions.root_of_ratio(f, x, depth) ||
+          Substitutions.exponential(f, x, depth) ||
+          Substitutions.trigonometric(f, x, depth) || shift(f, x, depth)
+      rescue ArgumentError => e
+        raise unless e.message.start_with?(NO_DERIVATIVE) # floor(x), an unknown function
+        nil
+      end
       result&.simplify
     end
+
+    # Cancel with each radical held as an atom, so that for example
+    # x*(1 + x/sqrt(1 + x**2))/(sqrt(1 + x**2) + x) collapses to x/sqrt(1 + x**2).
+    def atom_cancel(g, x)
+      roots = g.each_node.select do |n|
+        n.is_a?(Pow) && n.exponent.is_a?(Num) && n.exponent.value.is_a?(Rational) &&
+          !n.exponent.value.integer? && depends?(n.base, x)
+      end.uniq
+      return g if roots.empty?
+      forward = roots.each_with_index.to_h { |r, i| [r, Var.new(:"_rad#{i}")] }
+      forward.invert.then { |back| g.subs(forward).cancel.subs(back) }
+    end
+
+    # Differentiating is how the rules look for substitutions, so an integrand
+    # with no derivative rule stays an unevaluated integral instead of raising.
+    NO_DERIVATIVE = "don't know the derivative"
 
     def depends?(expr, x) = expr.variables.include?(x.name)
     def complete?(expr) = expr.each_node.none? { |n| n.is_a?(Integral) }
@@ -129,7 +155,11 @@ module RCAS
 
     # a*x + b => [a, b], else nil
     def linear(u, x)
-      a = u.diff(x)
+      a = begin
+        u.diff(x)
+      rescue ArgumentError
+        return nil
+      end
       return nil if depends?(a, x) || Scalar.zero?(a)
       b = (u - a * x).simplify
       return nil if depends?(b, x)
@@ -211,11 +241,14 @@ module RCAS
 
     # ---- layer 1: integration by parts ----------------------------------------
 
+    # Functions that get simpler when differentiated, so u in u*dv.
+    BY_PARTS = %i[log atan asin acos erf erfc].freeze
+
     def by_parts(f, x, depth)
       _, factors = Simplify.factorize(f)
       parts = factors.map { |b, e| Simplify.power_node(b, e) }
-      u = parts.find { |g| g.is_a?(Fn) && %i[log atan].include?(g.name) } ||
-          parts.find { |g| g.is_a?(Pow) && g.base.is_a?(Fn) && %i[log atan].include?(g.base.name) && g.exponent.is_a?(Num) && g.exponent.integer? && g.exponent.value.positive? }
+      u = parts.find { |g| g.is_a?(Fn) && BY_PARTS.include?(g.name) } ||
+          parts.find { |g| g.is_a?(Pow) && g.base.is_a?(Fn) && BY_PARTS.include?(g.base.name) && g.exponent.is_a?(Num) && g.exponent.integer? && g.exponent.value.positive? }
       if u.nil?
         u = parts.find { |g| polynomial_in?(g, x) }
         rest = parts - [u]
@@ -224,10 +257,78 @@ module RCAS
       end
       dv = Simplify.product_node(parts - [u])
       v = attempt(dv, x, depth + 1)
-      return nil unless v && complete?(v)
-      rest = attempt((u.diff(x) * v).simplify, x, depth + 1)
-      return nil unless rest && complete?(rest)
+      return nil unless v && complete?(v) && !harder?(v, dv)
+      rest = integrate_forms((u.diff(x) * v).simplify, x, depth + 1)
+      return nil unless rest
       (u * v - rest).simplify
+    end
+
+    # v brings in a function dv did not have, so integrating u' * v would be a
+    # step backwards (x**2*exp(-x**2): v = erf, and u'*v is the original problem).
+    SPECIAL = %i[erf erfc].freeze
+
+    def harder?(v, dv)
+      names = ->(e) { e.each_node.filter_map { |n| n.name if n.is_a?(Fn) } }
+      (names.call(v) & SPECIAL).any? && (names.call(dv) & SPECIAL).empty?
+    end
+
+    # u' * v often needs a normal form before it can be integrated: a common
+    # denominator for u = atan(1/x), a rationalized one for u = log(x + sqrt(x**2 + 1)).
+    def integrate_forms(g, x, depth)
+      seen = []
+      [-> { g }, -> { g.cancel }, -> { atom_cancel(g, x) }, -> { g.rationalize.cancel }].each do |form|
+        h = form.call.simplify
+        next if seen.include?(h)
+        seen << h
+        r = attempt(h, x, depth)
+        return r if r && complete?(r)
+      rescue ArgumentError, DomainError, ZeroDivisionError
+        next
+      end
+      nil
+    end
+
+    # ---- layer 1: absolute values and signs -------------------------------------
+
+    # |u| is u*sign(u), and sign(u) is constant on each side of the root of u,
+    # so it can be treated as a constant factor: with g = A(x) + B(x)*sign(u)
+    # the integral is INT A + sign(u)*(F - F(x0)), F the integral of B and x0
+    # the root of u. The constant makes the antiderivative continuous there,
+    # which is what a definite integral across the root needs. Only a linear u
+    # (one sign change, at a point we can name) is handled. [Zor15, ch. 6]
+    def piecewise(f, x, depth)
+      nodes = f.each_node.select { |n| n.is_a?(Fn) && %i[abs sign].include?(n.name) && depends?(n.args.first, x) }.uniq
+      return nil if nodes.empty?
+      u = nodes.first.args.first
+      return nil unless nodes.all? { |n| n.args.first == u }
+      a, b = linear(u, x)
+      return nil if a.nil?
+
+      sgn = Var.new(:"_sg#{depth}")
+      g = f.subs(nodes.to_h { |n| [n, n.name == :abs ? (u * sgn) : sgn] })
+      plus = g.subs(sgn => Num.new(1)).simplify
+      minus = g.subs(sgn => Num.new(-1)).simplify
+      even = ((plus + minus) / 2).simplify   # sign(u)**2 == 1
+      odd = ((plus - minus) / 2).simplify
+
+      total = Num.new(0)
+      unless Scalar.zero?(even)
+        r = attempt(even, x, depth + 1)
+        return nil unless r && complete?(r)
+        total += r
+      end
+      return total.simplify if Scalar.zero?(odd)
+
+      r = attempt(odd, x, depth + 1)
+      return nil unless r && complete?(r)
+      root = (-b / a).simplify
+      value = begin
+        r.subs(x => root).simplify
+      rescue StandardError
+        return nil
+      end
+      return nil if value.each_node.any? { |n| n.is_a?(Num) && !n.value.finite? } || depends?(value, x)
+      (total + Fn.new(:sign, [u]) * (r - value)).simplify
     end
 
     # Substitute x = (v - b)/a for a linear sub-expression a*x + b, so that
@@ -312,9 +413,114 @@ module RCAS
       common = a.gcd(dstar)
       a = a.exact_div(common)
       dstar = dstar.exact_div(common)
-      logs = log_part(a, dstar, x)
+      logs = log_part(a, dstar, x) || real_log_part(a, dstar, x)
       result += logs || Integral.new((a.to_expr / dstar.to_expr).simplify, x)
       result.simplify
+    end
+
+    # ---- layer 2: real quadratic factors ----------------------------------------
+
+    # What Lazard-Rioboo-Trager leaves when a root of the Rothstein-Trager
+    # resultant has degree higher than two: split a/d into partial fractions
+    # over the irreducible factors of d and integrate each one. Factors of
+    # degree at most two go back to the resultant method; a biquadratic
+    # x**4 + a*x**2 + b is split into the real quadratics the textbook uses,
+    # (x**2 + s*x + t)(x**2 - s*x + t) with t = sqrt(b) and s = sqrt(2*t - a).
+    # That is the classical decomposition into real factors [Har16, ch. II],
+    # and it is what makes 1/(x**4 + 1) come out in logs and arc tangents.
+    def real_log_part(a, d, x)
+      pieces = partial_fractions(a, d) or return nil
+      total = Num.new(0)
+      pieces.each do |n, f|
+        part = f.degree <= 2 ? log_part(n, f, x) : biquadratic_logs(n, f, x)
+        return nil if part.nil?
+        total += part
+      end
+      total.simplify
+    end
+
+    # a/d with d squarefree => [[numerator, irreducible factor], ...], from
+    # n_i = a * (d/f_i)**(-1) mod f_i (the factors are pairwise coprime).
+    def partial_fractions(a, d)
+      factors = d.factor.factors.map { |f, _| f }
+      return nil if factors.size < 2 && d.degree < 3
+      factors.map do |f|
+        rest = d.exact_div(f)
+        g, s, = rest.xgcd(f)
+        return nil unless g.constant?
+        [((a * s) % f) * Scalar.div(Num.new(1), g.leading_coefficient), f]
+      end
+    end
+
+    # n/(x**4 + a*x**2 + b), the quartic irreducible over QQ: with the real
+    # split above, n/(q+ * q-) = (A*x + B)/q+ + (C*x + D)/q- and each piece is
+    # a logarithm plus an arc tangent.
+    def biquadratic_logs(n, f, x)
+      cs = Solve.polynomial_coefficients(f.to_expr, x)
+      return nil unless cs && cs.size == 5 && Scalar.zero?(cs[1]) && Scalar.zero?(cs[3]) && Scalar.one?(cs[4])
+      b = cs[0]
+      a = cs[2]
+      ns = Solve.polynomial_coefficients(n.to_expr, x) or return nil
+      n0, n1, n2, n3 = Array.new(4) { |i| ns[i] || Num.new(0) }
+      disc = (a**2 - 4 * b).simplify
+      return even_split(n0, n1, n2, n3, a, disc, x) if positive?(disc)
+      t = RCAS.sqrt(b)
+      s2 = (2 * t - a).simplify
+      w2 = (2 * t + a).simplify
+      return nil unless positive?(s2) && positive?(w2)
+      sq = RCAS.sqrt(s2)
+      w = RCAS.sqrt(w2)
+
+      k = ((n1 - t * n3) / sq).simplify   # D - B
+      m = (n0 / t).simplify               # B + D
+      j = ((n2 - m) / sq).simplify        # C - A
+      bb = ((m - k) / 2).simplify
+      dd = ((m + k) / 2).simplify
+      aa = ((n3 - j) / 2).simplify
+      cc = ((n3 + j) / 2).simplify
+
+      qplus = (x**2 + sq * x + t).simplify
+      qminus = (x**2 - sq * x + t).simplify
+      (aa / 2 * Fn.new(:log, [qplus]) + (2 * bb - aa * sq) / w * Fn.new(:atan, [((2 * x + sq) / w).simplify]) +
+        cc / 2 * Fn.new(:log, [qminus]) + (2 * dd + cc * sq) / w * Fn.new(:atan, [((2 * x - sq) / w).simplify])).simplify
+    end
+
+    # The other real split of x**4 + a*x**2 + b: when a**2 - 4*b is positive the
+    # quartic is (x**2 + p)*(x**2 + q) with p, q = (a +- sqrt(a**2 - 4*b))/2,
+    # both irrational (a rational pair would have factored over QQ already).
+    def even_split(n0, n1, n2, n3, a, disc, x)
+      r = RCAS.sqrt(disc)
+      p = ((a + r) / 2).simplify
+      q = ((a - r) / 2).simplify
+      gap = (q - p).simplify
+      return nil if Scalar.zero?(gap)
+      aa = ((n1 - p * n3) / gap).simplify
+      bb = ((n0 - p * n2) / gap).simplify
+      first = quadratic_log(aa, bb, p, x) or return nil
+      second = quadratic_log((n3 - aa).simplify, (n2 - bb).simplify, q, x) or return nil
+      (first + second).simplify
+    end
+
+    # INT (A*x + B)/(x**2 + c) dx, an arc tangent for c > 0 and a logarithm
+    # for c < 0 (where x**2 + c has the two real roots +-sqrt(-c)).
+    def quadratic_log(aa, bb, c, x)
+      log = (aa / 2 * Fn.new(:log, [(x**2 + c).simplify])).simplify
+      return log if Scalar.zero?(bb)
+      if positive?(c)
+        root = RCAS.sqrt(c)
+        (log + bb / root * Fn.new(:atan, [(x / root).simplify])).simplify
+      elsif positive?((-c).simplify)
+        m = RCAS.sqrt((-c).simplify)
+        (log + bb / (2 * m) * (Fn.new(:log, [(x - m).simplify]) - Fn.new(:log, [(x + m).simplify]))).simplify
+      end
+    end
+
+    # A constant expression that is definitely positive (radicals included).
+    def positive?(e)
+      v = e.evalf
+      v.is_a?(Numeric) && v.real? && v > 1e-12
+    rescue StandardError
+      false
     end
 
     # Mack's linear Hermite reduction: a/d = g' + a2/d* with d* squarefree.

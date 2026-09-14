@@ -627,12 +627,24 @@ Four layers are tried in order for every term:
    `c**u` and `exp sin cos tan log atan sinh cosh` of a linear argument,
    derivative-divides substitution (`x*exp(x**2)`, `sin(x)*cos(x)**3`,
    `log(x)/x`), and integration by parts for a polynomial times an
-   exponential or trigonometric factor and for `log` / `atan` factors.
+   exponential or trigonometric factor and for a factor that gets simpler
+   when differentiated (`log atan asin acos erf erfc`). Absolute values and
+   signs of a linear argument belong here too: `abs(u)` is `u*sign(u)`, and
+   `sign(u)` is constant on each side of the root of `u`, so it comes out of
+   the integral; the constant of integration is then chosen to make the
+   antiderivative continuous at that root, which is what a definite integral
+   across it needs.
 2. **Rational functions, exactly.** Hermite reduction strips repeated
    denominator factors; the logarithmic part comes from the
    Rothstein-Trager resultant, whose rational roots give `log` terms and
    whose quadratic irreducible factors give `log` plus `atan` with square
-   roots. Roots of degree three or more are left as an `integral(...)`.
+   roots. When a root has degree three or more, the denominator is split
+   into partial fractions over its irreducible factors, and a quartic
+   without odd powers, `x**4 + a*x**2 + b`, is decomposed into real
+   quadratic factors: `(x**2 + s*x + t)*(x**2 - s*x + t)` with `t = sqrt(b)`
+   and `s = sqrt(2*t - a)`, or `(x**2 + p)*(x**2 + q)` when `a**2 - 4*b` is
+   positive. That is what turns `1/(x**4 + 1)` into two logarithms and two
+   arc tangents. Anything else is left as an `integral(...)`.
 3. **Risch-Norman heuristic.** The integrand is written as a Laurent
    polynomial in `x` and its transcendental atoms (`exp(u)`, `log(u)`,
    `sin(u)`/`cos(u)`, `sinh`/`cosh`, `atan`, `c**u`, roots such as
@@ -645,7 +657,8 @@ Four layers are tried in order for every term:
    of `x` and `sqrt(a*x**2 + b*x + c)` is split into a rational part and
    `P(x)/sqrt(Q)` pieces, which reduce to `S(x)*sqrt(Q)` plus the two basic
    forms `log(sqrt(Q) + ...)` and `asin(...)`; linear denominators go through
-   `x - alpha = 1/t`. Roots of a linear form (`sqrt(x)/(1 + x)`), rational
+   `x - alpha = 1/t`. Roots of a linear form (`sqrt(x)/(1 + x)`) or of a ratio
+   of two linear forms (`sqrt((1 - x)/(1 + x))`, the Möbius substitution), rational
    functions of `exp(k*x)` (also `sinh`, `cosh`) and of `sin(x)`, `cos(x)`
    (`tan(x/2)`, the Weierstrass substitution) become rational functions of
    the new variable and are handed to layer 2. Even powers of `sin` or `cos`
@@ -653,11 +666,36 @@ Four layers are tried in order for every term:
    first, so `sin(x)**2/cos(x)` comes out as `log((1 + sin(x))/cos(x)) -
    sin(x)` rather than in `tan(x/2)`.
 
+
+```
+rcas> integrate(abs(x), x)
+=> x**2*sign(x)/2
+rcas> integrate(abs(x - 1), x: 0..3)
+=> 5/2
+rcas> integrate(erf(x), x)
+=> exp(-x**2)/pi**(1/2) + x*erf(x)
+rcas> integrate(x/(x**4 + x**2 + 1), x)
+=> 3**(1/2)*atan(3**(1/2)*(1 + 2*x**2)/3)/3
+rcas> integrate(1/(x**4 + 1), x: 0..oo)
+=> 2**(1/2)*pi/4
+rcas> integrate(sqrt((1 - x)/(1 + x)), x)
+=> 2*((1 - x)/(1 + x))**(1/2)/(1 + (1 - x)/(1 + x)) - 2*atan(((1 - x)/(1 + x))**(1/2))
+rcas> integrate(floor(x), x)
+=> integral(floor(x), x)
+```
+
+The same machinery gives `sqrt(tan(x))` in logarithms and arc tangents, by
+way of the quartic denominator that the substitution `t = sqrt(tan(x))`
+leaves behind. An integrand rcas cannot even differentiate, `floor(x)` or an
+unknown function, stays an `integral(...)` instead of raising.
+
 Antiderivatives with square roots and logarithms are formal: differentiating
 them gives back the integrand wherever both are real, and at a singularity of
 the integrand the constant may jump (as in every CAS). Irreducible quadratic
 denominators under a root (`1/((x**2 + 1)*sqrt(x**2 + 2))`) and radicands of
-degree three or more are left as `integral(...)`.
+degree three or more are left as `integral(...)`, and so is a rational
+function whose denominator needs a real factor of degree three or more
+(`1/(x**3 - 2)`, `1/(x**8 + 1)`).
 
 The test suite checks every antiderivative by differentiating it and
 comparing numerically with the integrand at a few points.
@@ -2347,6 +2385,7 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | rational integration: Hermite reduction (Mack's linear version), Lazard-Rioboo-Trager logarithmic part, Rothstein-Trager resultant | integrate.rb | [Her72]; [Mac75]; [Bro05, §2.2, §2.4, §2.5]; [RT76]; [LR90]; [GCL92, ch. 11] |
 | Risch-Norman heuristic (parallel Risch) | integrate.rb | [NM77]; [GS89] |
 | rationalizing substitutions: sqrt of a quadratic (reduction to S*sqrt(Q) + lambda*int 1/sqrt(Q), x - alpha = 1/t), roots of linear forms, exponentials, tan(x/2) | integrate_substitutions.rb | [Zor15, §5.7]; [Har16, ch. V-VI] |
+| real quadratic factors of a biquadratic denominator; the Möbius substitution for a root of a ratio of linear forms | integrate.rb, integrate_substitutions.rb | [Har16, ch. II-III]; [GCL92, ch. 11] |
 | Puiseux series with log terms, limits by the leading term | series.rb | power series arithmetic as in [Knu98, §4.7]; the limit strategy is the textbook one, not Gruntz's MRV algorithm [Gru96] |
 | Faulhaber sums by Newton interpolation, Bernoulli numbers, zeta(2m) | summation.rb | [GKP94, §6.5]; Euler-Maclaurin tail [GKP94, §9.5] |
 | Gosper's algorithm with the degree bound for the polynomial ansatz | summation.rb | [Gos78]; [PWZ96, ch. 5] |

@@ -64,7 +64,7 @@ module RCAS
       },
       integrate: {
         maths: "An antiderivative F with F' = f, or a definite integral F(b) - F(a) with limits at infinite or singular ends. Not every elementary function has an elementary antiderivative, so a piece that has none stays an integral(...) node.",
-        method: "Four layers: a table of standard forms with derivative-divides substitution and integration by parts; rational functions exactly by Hermite reduction and the Lazard-Rioboo-Trager logarithmic part [Her72], [Mac75], [LR90], [Bro05]; a Risch-Norman ansatz whose undetermined coefficients come from linear algebra [NM77]; and substitutions that rationalize roots, exponentials and sin/cos [Zor15]."
+        method: "Four layers: a table of standard forms with derivative-divides substitution, integration by parts and absolute values of a linear argument; rational functions exactly by Hermite reduction and the Lazard-Rioboo-Trager logarithmic part [Her72], [Mac75], [LR90], [Bro05], falling back on the real quadratic factors of a biquadratic denominator [Har16]; a Risch-Norman ansatz whose undetermined coefficients come from linear algebra [NM77]; and substitutions that rationalize roots, ratios of linear forms, exponentials and sin/cos [Zor15]."
       },
       limit: {
         maths: "The value a function approaches, one-sided with dir:, and at infinity. A two-sided limit whose sides disagree stays unevaluated rather than being invented.",

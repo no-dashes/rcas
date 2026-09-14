@@ -243,6 +243,35 @@ module RCAS
         r.subs(t => base**Rational(1, n)).simplify
       end
 
+      # ---- R(x, ((a x + b)/(c x + d))^(1/n)) -------------------------------------
+
+      # The Moebius substitution: t = ((a*x + b)/(c*x + d))**(1/n) turns
+      # x = (d*t**n - b)/(a - c*t**n) and the whole integrand into a rational
+      # function of t. Covers sqrt((1 - x)/(1 + x)) and its relatives, which
+      # the root-of-a-linear-form rule above cannot reach. [Har16, ch. III]
+      def root_of_ratio(f, x, depth)
+        powers = f.each_node.select { |n| n.is_a?(Pow) && n.exponent.is_a?(Num) && n.exponent.value.is_a?(Rational) && !n.exponent.value.integer? && depends?(n.base, x) }
+        bases = powers.map(&:base).uniq
+        return nil unless bases.size == 1
+        base = bases.first.simplify
+        a, b = Integrate.linear(RationalFunction.numer(base), x)
+        c, d = Integrate.linear(RationalFunction.denom(base), x)
+        return nil unless [a, b, c, d].all? { |v| v && exact_num?(v) }
+        return nil if Scalar.zero?(c) # a linear form: root_of_linear did that
+        det = (a * d - b * c).simplify
+        return nil if Scalar.zero?(det)
+
+        n = powers.map { |p| p.exponent.value.denominator }.reduce(1) { |l, e| l.lcm(e) }
+        t = Var.new(:"_m#{depth}")
+        xt = ((d * t**n - b) / (a - c * t**n)).simplify
+        g = replace_root(f, base, t, n).subs(x => xt)
+        g = (g * xt.diff(t)).cancel
+        return nil if depends?(g, x)
+        r = Integrate.attempt(g, t, depth + 1)
+        return nil unless r && Integrate.complete?(r)
+        r.subs(t => base**Rational(1, n)).simplify
+      end
+
       # ---- R(exp(k x)) ---------------------------------------------------------------
 
       def exponential(f, x, depth)
