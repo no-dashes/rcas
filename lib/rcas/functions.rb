@@ -88,6 +88,14 @@ module RCAS
       [x, infinity(a), n]
     end
 
+    # boxplot("a" => xs, width: 40): Ruby hands both over as keywords, so the
+    # named series and the plot options have to be told apart here.
+    PLOT_OPTIONS = %i[title label labels x y bins density fit width height].freeze
+
+    def self.split_plot_options(opts)
+      [opts.select { |k, _| PLOT_OPTIONS.include?(k) }, opts.reject { |k, _| PLOT_OPTIONS.include?(k) }]
+    end
+
     def self.range_arguments(k, from, to, range, name, discrete:)
       unless range.empty?
         raise ArgumentError, "#{name}: give one variable, e.g. #{name}(f, k: 1..n)" unless range.size == 1 && k.nil?
@@ -249,8 +257,19 @@ module RCAS
     # plot(sin(x)), plot(f, x: -3..3), plot([f, g], x: 0..1), plot(Normal(0, 1)): a Plot,
     # shown as braille art; .show for a picture, .save("f.svg"), .to_svg, .to_png
     def plot(f, var = nil, from = nil, to = nil, **opts) = Plotting.plot(f, var, from, to, **opts)
-    # scatter(xs, ys) or scatter(points): data points
+    # scatter(xs, ys) or scatter(points), fit: true adds the least squares line
     def scatter(xs, ys = nil, **opts) = Plotting.scatter(xs, ys, **opts)
+    # histogram(data, bins: 8), boxplot(data) or boxplot("a" => xs, "b" => ys), barchart(frequencies(data))
+    def histogram(data, **opts) = Plotting.histogram(data, **opts)
+    def boxplot(data = nil, **opts)
+      options, series = Functions.split_plot_options(opts)
+      Plotting.boxplot(data || series, **options)
+    end
+
+    def barchart(categories = nil, counts = nil, **opts)
+      options, series = Functions.split_plot_options(opts)
+      Plotting.barchart(categories || series, counts, **options)
+    end
 
     # ttest(data, mu: 0), ttest(xs, ys), ttest(xs, ys, paired: true), ztest(data, sigma: 2, mu: 0):
     # tests of location; alternative: :two_sided (default), :less, :greater

@@ -279,6 +279,52 @@ class ChatWithoutClaudeTest < Minitest::Test
   end
 end
 
+# /plotstyle switches between braille art and an inline picture.
+class ChatPlotStyleTest < Minitest::Test
+  def setup
+    RCAS::Chat::Style.enabled = false
+    RCAS::Render.inline = false
+  end
+
+  def teardown
+    RCAS::Chat::Style.enabled = nil
+    RCAS::Render.inline = nil
+    RCAS::Plot.style = :text
+  end
+
+  def repl(input)
+    out = StringIO.new
+    offline = ->(ws, ui, model) { RCAS::Chat::Assistant.new(ws, ui, model: model).tap { |a| a.define_singleton_method(:available?) { false } } }
+    RCAS::Chat::REPL.new(input: StringIO.new(input), output: out, assistant_factory: offline, persist: false, mode: :text).run
+    out.string
+  end
+
+  def test_the_command_reports_and_validates
+    out = repl(["/plotstyle", "/plotstyle image", "/plotstyle bogus"].join("\n") + "\n")
+    assert_includes out, "plotstyle text"
+    assert_includes out, "plotstyle image (no inline pictures here, so plots stay text)"
+    assert_includes out, "usage: /plotstyle text|image"
+    assert_includes repl("/help\n"), "/plotstyle"
+  end
+
+  def test_plots_stay_text_without_a_terminal
+    out = repl(["/plotstyle image", "plot(x, x: 0..1, width: 6, height: 2)"].join("\n") + "\n")
+    assert_includes out, "┤", "the art is printed when no picture can be drawn"
+    assert_includes out, "=> ", "and it is an ordinary result, not an empty line"
+  end
+
+  def test_the_setting_is_stored
+    assert_includes RCAS::Chat::Settings::KEYS, "plotstyle"
+    RCAS::Plot.style = :image
+    ui = RCAS::Chat::UI.new(out: StringIO.new, mode: :text)
+    assistant = RCAS::Chat::Assistant.new(RCAS::Chat::Workspace.new, ui).tap { |a| a.define_singleton_method(:available?) { false } }
+    assert_equal "image", RCAS::Chat::Settings.current(ui, assistant)["plotstyle"]
+    RCAS::Plot.style = :text
+    RCAS::Chat::Settings.apply("plotstyle" => "image")
+    assert RCAS::Plot.image?, "the file sets the style at startup"
+  end
+end
+
 class ChatSessionTest < Minitest::Test
   def setup
     RCAS.forget

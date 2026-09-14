@@ -19,6 +19,7 @@ module RCAS
         "/backend [katex|latex]" => "typesetting backend (KaTeX + Chrome, or a TeX installation)",
         "/scale N" => "zoom factor for typeset output (1 = natural size)",
         "/theme [dark|light]" => "colour of typeset output for your terminal background",
+        "/plotstyle [text|image]" => "how plots are shown: braille art or a picture",
         "/latex EXPR" => "print the LaTeX source of a Ruby expression",
         "/show EXPR" => "typeset a Ruby expression regardless of the output mode",
         "/png EXPR FILE" => "write the typeset expression to a PNG file",
@@ -258,14 +259,16 @@ module RCAS
           return @ui.error("usage: /theme dark|light") unless %w[dark light].include?(arg)
           Render.theme = arg
           @ui.info("theme #{arg}")
+        when "/plotstyle" then plotstyle(arg)
         when "/latex" then @ui.puts(LaTeX.of(@workspace.eval(arg).first))
         when "/show"
           value, = @workspace.eval(arg)
-          @ui.typeset(value, force: true)
+          value.is_a?(Plot) ? @ui.plot_picture(value, force: true) : @ui.typeset(value, force: true)
         when "/png"
           code, file = arg.split(/\s+(?=\S+\z)/, 2)
           return @ui.error("usage: /png EXPR FILE.png") if file.nil?
-          Render.png(@workspace.eval(code).first, File.expand_path(file))
+          value, = @workspace.eval(code)
+          value.is_a?(Plot) ? value.to_png(File.expand_path(file)) : Render.png(value, File.expand_path(file))
           @ui.info("wrote #{file}")
         when "/ask" then @assistant.available? ? ask(arg) : @ui.error("unknown command /ask; try /help")
         when "/vars"
@@ -326,6 +329,13 @@ module RCAS
           @assistant.reset
           @ui.info("conversation cleared; variables kept")
         end
+      end
+
+      def plotstyle(arg)
+        return @ui.error("usage: /plotstyle #{Plot::STYLES.join('|')}") unless arg.empty? || Plot::STYLES.include?(arg.to_sym)
+        Plot.style = arg unless arg.empty?
+        note = Plot.image? && !Plot.pictures?(@ui.io) ? " (no inline pictures here, so plots stay text)" : ""
+        @ui.info("plotstyle #{Plot.style}#{note}")
       end
 
       def output(arg)

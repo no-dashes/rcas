@@ -31,11 +31,31 @@ module RCAS
     COLORS = %w[#2563eb #dc2626 #059669 #d97706 #7c3aed #0891b2].freeze
     DEFAULT_RANGE = (-10.0..10.0)
 
-    Curve = Struct.new(:label, :points, :marker)
+    Curve = Struct.new(:label, :points, :marker, :width)
 
-    attr_reader :curves, :var, :xlo, :xhi, :ylo, :yhi, :title, :width, :height
+    # How a front end shows a plot: :text (braille art, works everywhere) or
+    # :image (an inline picture, needs an iTerm2-style terminal and Chrome).
+    # RCAS_PLOT_STYLE sets the default; rcas-chat has /plotstyle.
+    STYLES = %i[text image].freeze
 
-    def initialize(curves, var:, xlo:, xhi:, ylo:, yhi:, title: nil, width: 60, height: 15)
+    class << self
+      def style = @style || ENV.fetch("RCAS_PLOT_STYLE", "text").to_sym
+
+      def style=(value)
+        wanted = value.to_s.to_sym
+        raise Error, "plot style must be one of #{STYLES.join(', ')}" unless STYLES.include?(wanted)
+        @style = wanted
+      end
+
+      def image? = style == :image
+
+      # Can this terminal show pictures at all?
+      def pictures?(io = $stdout) = Render.inline?(io) && !Render.which(*Render::KaTeX::CHROME_CANDIDATES).nil?
+    end
+
+    attr_reader :curves, :var, :xlo, :xhi, :ylo, :yhi, :title, :width, :height, :ylabels, :xlabels
+
+    def initialize(curves, var:, xlo:, xhi:, ylo:, yhi:, title: nil, width: 60, height: 15, ylabels: nil, xlabels: nil)
       @curves = curves
       @var = var
       @xlo = xlo
@@ -45,6 +65,8 @@ module RCAS
       @title = title
       @width = width
       @height = height
+      @ylabels = ylabels   # { value => text } instead of the y range
+      @xlabels = xlabels   # [[value, text], ...] instead of the x range
       freeze
     end
 
@@ -82,7 +104,14 @@ module RCAS
         x, y = point
         px = pixel_x(x)
         py = pixel_y(y)
-        if curve.marker == :stem
+        if curve.marker == :bar
+          draw_bar(canvas, x, y, curve.width)
+          previous = point
+          next
+        elsif curve.marker == :box
+          draw_box(canvas, curve)
+          return
+        elsif curve.marker == :stem
           base = pixel_y([0.0, ylo].max)
           canvas.line(px, base, px, py)
           canvas.set(px, py)
@@ -95,6 +124,30 @@ module RCAS
         end
         previous = point
       end
+    end
+
+    # A filled bar of +span+ x units, centred on x, standing on the baseline.
+    def draw_bar(canvas, x, y, span)
+      left = pixel_x(x - span / 2.0) + 1
+      right = pixel_x(x + span / 2.0) - 1
+      right = left if right < left
+      base = pixel_y([0.0, ylo].max)
+      top = pixel_y(y)
+      (left..right).each { |px| canvas.line(px, base, px, top) }
+    end
+
+    # Box and whiskers: [low, q1, median, q3, high, *outliers] at one height.
+    def draw_box(canvas, curve)
+      low, q1, median, q3, high = curve.points.first(5).map(&:first)
+      y = curve.points.first.last
+      middle = pixel_y(y)
+      half = [(middle - pixel_y(y + curve.width)).abs, 1].max
+      canvas.line(pixel_x(low), middle, pixel_x(q1), middle)          # whiskers
+      canvas.line(pixel_x(q3), middle, pixel_x(high), middle)
+      [low, high].each { |v| canvas.line(pixel_x(v), middle - half, pixel_x(v), middle + half) }
+      [q1, q3, median].each { |v| canvas.line(pixel_x(v), middle - half, pixel_x(v), middle + half) }
+      [middle - half, middle + half].each { |row| canvas.line(pixel_x(q1), row, pixel_x(q3), row) }
+      curve.points.drop(5).each { |v, _| canvas.set(pixel_x(v), middle) } # outliers
     end
 
     # A pole: the two samples straddle the whole picture in opposite directions.
@@ -116,28 +169,59 @@ module RCAS
 
     # y labels in a gutter, the canvas, then the x axis and its labels.
     def frame(rows)
-      top = self.class.label(yhi)
-      bottom = self.class.label(ylo)
-      gutter = [top.size, bottom.size].max
+      gutter_labels = row_labels(rows.size)
+      gutter = gutter_labels.compact.map(&:size).max || 0
       lines = []
       lines << title if title
       rows.each_with_index do |row, i|
-        mark = if i.zero? then top.rjust(gutter) + " ┤"
-               elsif i == rows.size - 1 then bottom.rjust(gutter) + " ┤"
-               else (" " * gutter) + " │"
-               end
+        mark = gutter_labels[i] ? gutter_labels[i].rjust(gutter) + " ┤" : (" " * gutter) + " │"
         lines << mark + row
       end
       lines << (" " * (gutter + 1)) + "└" + "─" * width
-      left = self.class.label(xlo)
-      right = self.class.label(xhi)
-      pad = [width - left.size - right.size, 1].max
-      lines << (" " * (gutter + 2)) + left + (" " * pad) + right
-      lines << "  " + legend if curves.size > 1 || curves.first&.label
+      lines << (" " * (gutter + 2)) + column_labels
+      lines << "  " + legend if legend && !legend.empty?
       lines.join("\n")
     end
 
-    def legend = curves.map(&:label).compact.join(", ")
+    # The label for each canvas row: the y range, or the names of a box plot.
+    def row_labels(count)
+      return Array.new(count) { |i| i.zero? ? self.class.label(yhi) : (i == count - 1 ? self.class.label(ylo) : nil) } unless ylabels
+      labels = Array.new(count)
+      ylabels.each do |value, text|
+        row = pixel_y(value) / 4
+        labels[row] = text.to_s if row.between?(0, count - 1)
+      end
+      labels
+    end
+
+    # Under the axis: the ends of the x range, or names centred on their bars.
+    def column_labels
+      unless xlabels
+        left = self.class.label(xlo)
+        right = self.class.label(xhi)
+        return left + (" " * [width - left.size - right.size, 1].max) + right
+      end
+      line = " " * width
+      xlabels.each do |value, text|
+        text = text.to_s
+        start = pixel_x(value) / 2 - (text.size - 1) / 2
+        start = [[start, 0].max, width - text.size].min
+        next if start.negative? || line[start, text.size].to_s.strip != ""
+        line[start, text.size] = text
+      end
+      line.rstrip
+    end
+
+    def legend
+      names = curves.map(&:label).compact
+      names.empty? ? nil : names.join(", ")
+    end
+
+    # Counts deserve a whole number at the top of the axis.
+    def self.head_room(heights)
+      top = heights.max * 1.08
+      heights.all? { |h| h == h.round } ? top.ceil.to_f : top
+    end
 
     # ---- pictures --------------------------------------------------------------
 
@@ -180,7 +264,26 @@ module RCAS
       end
       curves.each_with_index do |curve, i|
         color = COLORS[i % COLORS.size]
-        if curve.marker
+        if curve.marker == :bar
+          base = sy.call([0.0, ylo].max)
+          curve.points.each do |x, y|
+            x0 = sx.call(x - curve.width / 2.0)
+            x1 = sx.call(x + curve.width / 2.0)
+            top_y = sy.call(y)
+            parts << %(<rect x="#{x0.round(2)}" y="#{top_y.round(2)}" width="#{[(x1 - x0).abs - 1, 1].max.round(2)}" height="#{(base - top_y).abs.round(2)}" fill="#{color}" fill-opacity="0.75" stroke="#{color}"/>)
+          end
+        elsif curve.marker == :box
+          low, q1, median, q3, high = curve.points.first(5).map(&:first)
+          y = curve.points.first.last
+          middle = sy.call(y)
+          half = (middle - sy.call(y + curve.width)).abs
+          parts << %(<line x1="#{sx.call(low).round(2)}" y1="#{middle.round(2)}" x2="#{sx.call(high).round(2)}" y2="#{middle.round(2)}" stroke="#{color}" stroke-width="1.5"/>)
+          parts << %(<rect x="#{sx.call(q1).round(2)}" y="#{(middle - half).round(2)}" width="#{(sx.call(q3) - sx.call(q1)).abs.round(2)}" height="#{(2 * half).round(2)}" fill="#{color}" fill-opacity="0.2" stroke="#{color}" stroke-width="1.5"/>)
+          [[low, 0.6], [high, 0.6], [median, 1.0]].each do |value, scale_factor|
+            parts << %(<line x1="#{sx.call(value).round(2)}" y1="#{(middle - half * scale_factor).round(2)}" x2="#{sx.call(value).round(2)}" y2="#{(middle + half * scale_factor).round(2)}" stroke="#{color}" stroke-width="#{value == median ? 2.5 : 1.5}"/>)
+          end
+          curve.points.drop(5).each { |v, _| parts << %(<circle cx="#{sx.call(v).round(2)}" cy="#{middle.round(2)}" r="3" fill="none" stroke="#{color}"/>) }
+        elsif curve.marker
           base = sy.call([0.0, ylo].max).round(2)
           curve.points.compact.select { |_, y| inside?(y) }.each do |x, y|
             cx = sx.call(x).round(2)
@@ -248,18 +351,21 @@ module RCAS
       path
     end
 
+    def picture?(io = $stdout) = self.class.pictures?(io)
+
+    # The picture alone: true when one was written, false when it could not be.
+    def picture(io: $stdout)
+      return false unless picture?(io)
+      io.print(Render.inline_image(to_png, name: "plot.png"))
+      io.puts
+      true
+    rescue Error, Render::Error
+      false
+    end
+
     # Inline in iTerm2 when the terminal and Chrome allow it, text otherwise.
     def show(io: $stdout)
-      if Render.inline?(io) && Render.which(*Render::KaTeX::CHROME_CANDIDATES)
-        begin
-          io.print(Render.inline_image(to_png, name: "plot.png"))
-          io.puts
-          return nil
-        rescue Error, Render::Error
-          nil
-        end
-      end
-      io.puts(to_s)
+      io.puts(to_s) unless picture(io: io)
       nil
     end
 
@@ -376,19 +482,118 @@ module RCAS
     end
 
     # Points of data: scatter([1, 2], [3, 4]) or scatter([[1, 3], [2, 4]])
-    def scatter(xs, ys = nil, title: nil, label: nil, x: nil, y: nil, width: 60, height: 15)
-      pairs = if ys.nil?
-                xs.map { |p| [numeric(p[0]), numeric(p[1])] }
+    def scatter(xs, ys = nil, fit: false, title: nil, label: nil, x: nil, y: nil, width: 60, height: 15)
+      given = if ys.nil?
+                xs.map { |p| [p[0], p[1]] }
               else
                 raise ArgumentError, "scatter: the lists must have the same length" unless xs.size == ys.size
-                xs.zip(ys).map { |a, b| [numeric(a), numeric(b)] }
+                xs.zip(ys)
               end
-      pairs = pairs.reject { |a, b| a.nil? || b.nil? }
+      given = given.select { |a, b| numeric(a) && numeric(b) }
+      pairs = given.map { |a, b| [numeric(a), numeric(b)] }
       raise ArgumentError, "scatter: no points to draw" if pairs.empty?
       lo, hi = x ? [numeric(x.begin), numeric(x.end)] : padded(pairs.map(&:first))
-      curve = Plot::Curve.new(label, pairs, :dot)
-      ylo, yhi = y ? [numeric(y.begin), numeric(y.end)] : padded(pairs.map(&:last))
-      Plot.new([curve], var: Var.new(:x), xlo: lo, xhi: hi, ylo: ylo, yhi: yhi, title: title, width: width, height: height)
+      curves = [Plot::Curve.new(label, pairs, :dot)]
+      if fit # the least squares line of section 1.9
+        line = Statistics.linreg(given.map(&:first), given.map(&:last), :x)
+        curves << Plot::Curve.new(line.to_s, sample(line, Var.new(:x), lo, hi, 2), false)
+      end
+      ylo, yhi = y ? [numeric(y.begin), numeric(y.end)] : padded(curves.flat_map { |c| c.points.compact.map(&:last) })
+      Plot.new(curves, var: Var.new(:x), xlo: lo, xhi: hi, ylo: ylo, yhi: yhi, title: title, width: width, height: height)
+    end
+
+    # ---- statistical plots -------------------------------------------------------
+
+    # histogram(data, bins: 8): counts per bin, or shares with density: true.
+    # The default number of bins is Sturges' rule [Stu26].
+    def histogram(data, bins: nil, density: false, title: nil, label: nil, x: nil, y: nil, width: 60, height: 15)
+      values = Statistics.data(data, "histogram").map { |v| numeric(v) }.compact
+      raise ArgumentError, "histogram: no numeric data" if values.empty?
+      lo, hi = x ? [numeric(x.begin), numeric(x.end)] : [values.min, values.max]
+      lo, hi = [lo - 0.5, hi + 0.5] if (hi - lo).abs < 1e-12
+      count = bins || [[Math.log2(values.size).ceil + 1, 1].max, 50].min
+      raise ArgumentError, "histogram: bins must be a positive integer" unless count.is_a?(Integer) && count.positive?
+      step = (hi - lo) / count
+      counts = Array.new(count, 0)
+      values.each do |v|
+        next if v < lo || v > hi
+        index = [((v - lo) / step).floor, count - 1].min
+        counts[index] += 1
+      end
+      heights = density ? counts.map { |c| c.to_f / values.size } : counts.map(&:to_f)
+      points = counts.each_index.map { |i| [lo + (i + 0.5) * step, heights[i]] }
+      curve = Plot::Curve.new(label, points, :bar, step)
+      top = y ? numeric(y.end) : Plot.head_room(heights)
+      bottom = y ? numeric(y.begin) : 0.0
+      Plot.new([curve], var: Var.new(:x), xlo: lo, xhi: hi, ylo: bottom, yhi: top <= bottom ? bottom + 1 : top,
+               title: title, width: width, height: height)
+    end
+
+    # boxplot(data), boxplot([xs, ys]) or boxplot("before" => xs, "after" => ys):
+    # median, quartiles, whiskers to the last value within 1.5 interquartile
+    # ranges and the remaining values as outliers [Tuk77].
+    def boxplot(data, title: nil, x: nil, width: 60, height: nil)
+      series = series_of(data, "boxplot")
+      boxes = series.map do |name, values|
+        numbers = values.map { |v| numeric(v) }.compact.sort
+        raise ArgumentError, "boxplot: #{name || 'the data'} has no numeric values" if numbers.empty?
+        [name, numbers, five_numbers(numbers)]
+      end
+      all = boxes.flat_map { |_, numbers, _| numbers }
+      lo, hi = x ? [numeric(x.begin), numeric(x.end)] : padded(all)
+      curves = boxes.each_with_index.map do |(name, numbers, summary), i|
+        y = boxes.size - i
+        low, q1, median, q3, high = summary
+        outliers = numbers.reject { |v| v.between?(low, high) }.map { |v| [v, y] }
+        Plot::Curve.new(nil, [[low, y], [q1, y], [median, y], [q3, y], [high, y], *outliers], :box, 0.22)
+      end
+      labels = boxes.each_with_index.to_h { |(name, _, _), i| [boxes.size - i, name.to_s] }
+      Plot.new(curves, var: Var.new(:x), xlo: lo, xhi: hi, ylo: 0.4, yhi: boxes.size + 0.6,
+               title: title, width: width, height: height || [4 * boxes.size + 2, 6].max, ylabels: labels)
+    end
+
+    # [whisker low, q1, median, q3, whisker high]
+    def five_numbers(sorted)
+      q1 = numeric(Statistics.quantile(sorted, Rational(1, 4)))
+      median = numeric(Statistics.median(sorted))
+      q3 = numeric(Statistics.quantile(sorted, Rational(3, 4)))
+      reach = 1.5 * (q3 - q1)
+      low = sorted.find { |v| v >= q1 - reach } || sorted.first
+      high = sorted.reverse.find { |v| v <= q3 + reach } || sorted.last
+      [low, q1, median, q3, high]
+    end
+
+    # barchart(frequencies(data)), barchart({"apples" => 3, "pears" => 5}) or
+    # barchart(%w[a b], [3, 5]): one bar per category.
+    def barchart(categories, counts = nil, title: nil, label: nil, y: nil, width: 60, height: 15)
+      pairs = if counts
+                raise ArgumentError, "barchart: the lists must have the same length" unless categories.size == counts.size
+                categories.zip(counts)
+              else
+                categories.to_a
+              end
+      raise ArgumentError, "barchart: no categories" if pairs.empty?
+      heights = pairs.map { |_, c| numeric(c) or raise ArgumentError, "barchart: #{c} is not a number" }
+      points = heights.each_with_index.map { |h, i| [i + 1.0, h] }
+      curve = Plot::Curve.new(label, points, :bar, 0.72)
+      top = y ? numeric(y.end) : Plot.head_room(heights)
+      Plot.new([curve], var: Var.new(:x), xlo: 0.4, xhi: pairs.size + 0.6, ylo: y ? numeric(y.begin) : 0.0,
+               yhi: top.positive? ? top : 1.0, title: title, width: width, height: height,
+               xlabels: pairs.each_with_index.map { |(name, _), i| [i + 1.0, name.to_s] })
+    end
+
+    # A hash of named series, a list of series, or one series.
+    def series_of(data, name)
+      case data
+      when Hash then data.map { |k, v| [k, Statistics.data(v, name)] }
+      when Array
+        if data.first.is_a?(Array)
+          data.each_with_index.map { |values, i| [(i + 1).to_s, Statistics.data(values, name)] }
+        else
+          [["", Statistics.data(data, name)]]
+        end
+      else raise ArgumentError, "#{name}: give a list, a list of lists or a hash of named lists"
+      end
     end
 
     def padded(values)

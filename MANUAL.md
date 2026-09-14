@@ -64,6 +64,7 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
     - [Hypothesis tests](#hypothesis-tests)
     - [Confidence intervals](#confidence-intervals)
   - [1.10 Plotting](#110-plotting)
+    - [Statistical plots](#statistical-plots)
   - [1.11 Performance notes](#111-performance-notes)
 - [2. Reference](#2-reference)
 - [3. Files](#3-files)
@@ -1499,6 +1500,9 @@ rcas> [mean([d1, d2, d3]), variance([d1, d2])]
 `covariance` and `correlation` take two lists; `linreg(xs, ys, x)` is the
 least squares line as an expression in `x`.
 
+Section 1.10 draws these: `histogram`, `boxplot`, `barchart` and
+`scatter(xs, ys, fit: true)` with the least squares line.
+
 ```
 rcas> [covariance([1, 2, 3], [2, 4, 7]), correlation([1, 2, 3], [2, 4, 6])]
 => [5/2, 1]
@@ -1701,10 +1705,74 @@ rcas> scatter([1, 2, 3, 4], [2, 4, 7, 8], width: 30, height: 6)
         0.85                      4.15
 ```
 
+#### Statistical plots
+
+`histogram(data, bins: 4)` counts the values in equal bins (the number of
+bins follows Sturges' rule unless you give one; `density: true` shows
+shares instead of counts), and `boxplot` draws the median, the quartiles
+and whiskers reaching the last value within 1.5 interquartile ranges, with
+anything beyond as an outlier. Several named series are drawn one above
+the other.
+
+```
+rcas> histogram([2, 4, 4, 5, 5, 5, 6, 6, 7, 9, 3, 5], bins: 4, width: 40, height: 7)
+=> 7 ┤⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+     │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+     │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+     │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⢀⣀⣀⣀⣀⣀⣀⣀⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+     │⢀⣀⣀⣀⣀⣀⣀⣀⣀⣀⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⢸⣿⣿⣿⣿⣿⣿⣿⣿⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+     │⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⢸⣿⣿⣿⣿⣿⣿⣿⣿⡇⣀⣀⣀⣀⣀⣀⣀⣀⣀⡀
+   0 ┤⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⢸⣿⣿⣿⣿⣿⣿⣿⣿⡇⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇
+     └────────────────────────────────────────
+      2                                      9
+rcas> boxplot("before" => [2, 4, 5, 5, 6, 7, 20], "after" => [3, 5, 6, 6, 7, 8], title: "reaction times", width: 40)
+=> reaction times
+          │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+          │⠀⠀⡀⠀⠀⠀⠀⣀⣀⣀⣀⡀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   before ┤⠀⠀⣇⣀⣀⣀⣀⡇⡇⠀⠀⣇⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠀⠀
+          │⠀⠀⡇⠀⠀⠀⠀⣇⣇⣀⣀⡇⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+          │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+          │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+          │⠀⠀⠀⠀⡇⠀⠀⠀⢸⠉⡏⢹⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+    after ┤⠀⠀⠀⠀⡏⠉⠉⠉⢹⠀⡇⢸⠉⠉⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+          │⠀⠀⠀⠀⠁⠀⠀⠀⠈⠉⠉⠉⠀⠀⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+          │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+          └────────────────────────────────────────
+           1.1                                 20.9
+```
+
+`barchart` takes the categories and their counts, so it pairs with
+`frequencies` (section 1.9), and `scatter(xs, ys, fit: true)` adds the
+least squares line, whose equation stays exact when the data is.
+
+```
+rcas> barchart(frequencies([:a, :b, :a, :c, :a, :b]), width: 40, height: 6)
+=> 4 ┤⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+     │⠀⠀⠀⢠⣤⣤⣤⣤⣤⣤⣤⣤⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+     │⠀⠀⠀⢸⣿⣿⣿⣿⣿⣿⣿⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+     │⠀⠀⠀⢸⣿⣿⣿⣿⣿⣿⣿⣿⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+     │⠀⠀⠀⢸⣿⣿⣿⣿⣿⣿⣿⣿⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⠀⠀⠀⠀⣶⣶⣶⣶⣶⣶⣶⣶⡆⠀⠀⠀
+   0 ┤⠀⠀⠀⢸⣿⣿⣿⣿⣿⣿⣿⣿⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⡇⠀⠀⠀
+     └────────────────────────────────────────
+             a            b           c
+rcas> scatter([1, 2, 3, 4], [2, 4, 7, 8], fit: true, width: 40, height: 7)
+=> 9.062 ┤⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⡠⠤⠒
+         │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠀⠀⠀⢀⣀⡠⠤⠒⠊⠉⠀⠈⠀⠀
+         │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⠤⠔⠒⠉⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+         │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⠤⠔⠒⠉⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+         │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⡠⠤⠖⠊⠉⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+         │⠀⠀⠀⠀⢀⣀⠤⠔⠒⠉⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   1.438 ┤⠤⠒⠊⠉⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+         └────────────────────────────────────────
+          0.85                                4.15
+     21*x/10
+```
+
 `width:`, `height:`, `y:`, `title:` and `labels:` shape the picture.
 `to_svg` and `save("f.svg")` write a vector picture and need nothing;
 `to_png("f.png")` and `show` (an inline picture in iTerm2) rasterize it
-with the same headless Chrome the typeset output uses. Sampling is uniform
+with the same headless Chrome the typeset output uses; in `bin/rcas-chat`,
+`/plotstyle image` makes every plot appear as a picture (Appendix B). Sampling is uniform
 with 400 points, so a feature narrower than one pixel column can be missed;
 the y range is trimmed to the central 96 per cent of the sampled values
 when a pole would otherwise flatten the picture.
@@ -1756,7 +1824,7 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | statistics | `mean median mode variance stdev quantile quartiles iqr moment skewness kurtosis geometric_mean harmonic_mean frequencies covariance correlation linreg` |
 | distributions | `Normal Uniform Exponential Bernoulli Binomial Poisson Geometric DiscreteUniform StudentT ChiSquare FRatio pdf cdf probability` |
 | tests and intervals | `ttest ztest chisquare_test ftest binomial_test confidence_interval proportion_interval` |
-| plotting | `plot scatter` |
+| plotting | `plot scatter histogram boxplot barchart` |
 | special functions | `erf erfc` |
 | domains | `NN ZZ QQ RR CC GF assume forget assumptions` |
 | linear algebra | `vector matrix` |
@@ -1856,6 +1924,7 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | t, chi-square and F tests, exact binomial test, confidence intervals | hypothesis.rb | [Ros14, ch. 8-9]; Welch's degrees of freedom [Wel47]; Wilson's score interval [Wil27] |
 | gamma variates for sampling (Marsaglia-Tsang) | distributions.rb | [MT00] |
 | plotting: braille canvas (the technique of drawille and UnicodePlots.jl), line drawing | plot.rb | [Bre65] |
+| histogram bin count, box plot whiskers at 1.5 interquartile ranges | plot.rb | [Stu26]; [Tuk77] |
 | Gaussian integrals: exp(quadratic) by completing the square, x**n exp(quadratic) by reduction | integrate_substitutions.rb | [AS64, §7.1, §7.4] |
 | polynomial systems: lex Gröbner basis and triangular back-substitution; resultants for two equations with parameters | solve.rb | [CLO15, ch. 2 §8, ch. 3 §1]; [GCL92, ch. 9-10] |
 | Newton interpolation by divided differences | interpolate.rb | [Knu98, §4.6.4]; [vzGG13, ch. 5] |
@@ -1954,10 +2023,13 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   of Exponential and Primitive Functions*, PhD thesis, University of
   Wisconsin-Madison 1976; B. M. Trager, Algebraic factoring and rational
   function integration, *Proc. SYMSAC '76*, ACM 1976, 219-226.
+- [Stu26] H. A. Sturges, The choice of a class interval, *J. Amer. Statist.
+  Assoc.* 21 (1926), 65-66.
 - [SW17] J. Sorenson, J. Webster, Strong pseudoprimes to twelve prime
   bases, *Math. Comp.* 86 (2017), 985-1003.
 - [Tra76] B. M. Trager, Algebraic factoring and rational function
   integration, *Proc. SYMSAC '76*, ACM 1976, 219-226.
+- [Tuk77] J. W. Tukey, *Exploratory Data Analysis*, Addison-Wesley 1977.
 - [vzGG13] J. von zur Gathen, J. Gerhard, *Modern Computer Algebra*, 3rd
   ed., Cambridge University Press 2013.
 - [Wel47] B. L. Welch, The generalization of 'Student's' problem when
@@ -2148,6 +2220,12 @@ calls alike:
 | `both` | text, then the picture (the default in iTerm2) |
 | `latex` | text, then the LaTeX source |
 
+Plots are braille art by default, in every mode. `/plotstyle image` shows
+them as pictures instead, where the terminal and Chrome allow it (otherwise
+the art stays, and the command says so); `/show plot(...)` draws one picture
+whatever the style, and `/png plot(...) FILE` writes it. `RCAS_PLOT_STYLE`
+sets the default outside a session.
+
 `/backend katex|latex`, `/scale N` and `/theme dark|light` are the settings
 of Appendix A; `/settings` shows them, `/settings save` writes them to
 `~/.rcas/settings.json` as defaults for later sessions, and `/settings reset`
@@ -2200,6 +2278,7 @@ Claude's calls, when the session is resumed.
 /backend [katex|latex]            typesetting backend
 /scale N                          zoom factor for pictures
 /theme dark|light                 colour of the pictures
+/plotstyle [text|image]           how plots are shown
 /latex EXPR   /show EXPR   /png EXPR FILE
 /ask TEXT                         ask Claude (also: ? TEXT)        [with Claude configured]
 /vars                             the session's variables

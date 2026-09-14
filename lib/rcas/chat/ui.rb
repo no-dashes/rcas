@@ -31,6 +31,7 @@ module RCAS
 
       def tex? = %i[tex both].include?(@mode)
 
+      def io = @out
       def puts(text = "") = @out.puts(text)
       def print(text) = @out.print(text)
       def flush = @out.flush
@@ -88,7 +89,16 @@ module RCAS
 
       # ---- results ------------------------------------------------------------
 
+      # A plot is braille art unless /plotstyle image asks for a picture.
+      def plot_picture(value, force: false)
+        return false unless force || Plot.image?
+        return false unless value.picture?(@out)
+        print "   "
+        value.picture(io: @out)
+      end
+
       def result(value)
+        return if value.is_a?(Plot) && plot_picture(value)
         show_text = @mode != :tex || !typesettable?(value) || !Render.inline?(@out)
         if show_text
           lines = text_of(value).lines.map(&:chomp)

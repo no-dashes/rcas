@@ -111,7 +111,8 @@ reset` deletes the file. The file is plain JSON:
   "output": "latex",
   "backend": "katex",
   "scale": 1.5,
-  "theme": "dark"
+  "theme": "dark",
+  "plotstyle": "image"
 }
 ```
 
@@ -120,6 +121,7 @@ reset` deletes the file. The file is plain JSON:
 | output mode: `text`, `tex` (picture only), `both`, `latex` (text + source). Default: `both` in iTerm2 when a renderer is installed, `text` otherwise | `RCAS_TEX_INLINE=0` forces text | `--output=MODE`, `--tex`, `--no-tex` | `/output MODE` |
 | typesetting backend `katex` or `latex` (default: whichever is installed, KaTeX first) | `RCAS_TEX_BACKEND` | `--backend=katex\|latex` | `/backend katex\|latex` |
 | picture zoom, colour theme | `RCAS_TEX_SCALE`, `RCAS_TEX_THEME=light\|dark` | | `/scale N`, `/theme dark\|light` |
+| how plots are shown: `text` (braille art, the default) or `image` (a picture, where the terminal and Chrome allow it) | `RCAS_PLOT_STYLE` | | `/plotstyle text\|image` |
 | line width for wrapping long results (default: terminal width) | `RCAS_TEX_WRAP`, `COLUMNS` | | |
 | plain-language questions (optional, see above): credentials | `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` | | |
 | their model (default `claude-opus-5`) and server-side fallback on refusal; settings keys `model`, `fallbacks` | `RCAS_MODEL`, `RCAS_FALLBACKS=0` | `--model ID` | `/model ID`, `/fallbacks on\|off` |
@@ -129,7 +131,7 @@ reset` deletes the file. The file is plain JSON:
 
 Everything in the first column except colours and the KaTeX helpers can be
 stored in `settings.json` under the keys `output`, `backend`, `scale`,
-`theme`, `wrap`, `model`, `fallbacks`.
+`theme`, `wrap`, `plotstyle`, `model`, `fallbacks`.
 
 Sessions: `-c` / `--continue` reopens the most recent one, `-r` / `--resume`
 opens a picker, `--resume NAME` (or an id prefix, or a list number) goes

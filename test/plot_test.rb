@@ -115,4 +115,91 @@ class PlotTest < Minitest::Test
     assert_raises(RCAS::Plot::Error) { RCAS.plot(RCAS.log(X), x: -3..-1) }
     assert_raises(ArgumentError) { RCAS.scatter([1, 2], [1]) }
   end
+def test_style_and_pictures
+  assert_equal :text, RCAS::Plot.style, "text art is the default"
+  refute RCAS::Plot.image?
+  RCAS::Plot.style = "image"
+  assert RCAS::Plot.image?
+  assert_equal :image, RCAS::Plot.style
+  assert_raises(RCAS::Plot::Error) { RCAS::Plot.style = :ascii }
+  assert_equal :image, RCAS::Plot.style, "a bad value leaves the style alone"
+  # a StringIO is not a terminal, so no picture can be drawn there
+  plot = RCAS.plot(X, x: 0..1, width: 6, height: 2)
+  refute RCAS::Plot.pictures?(StringIO.new)
+  refute plot.picture?(StringIO.new)
+  out = StringIO.new
+  refute plot.picture(io: out)
+  assert_equal "", out.string
+  plot.show(io: out)
+  assert_equal plot.to_s + "\n", out.string, "show falls back to the text art"
+ensure
+  RCAS::Plot.style = :text
+end
+  DATA = [2, 4, 4, 4, 5, 5, 7, 9, 3, 6, 5, 4, 8, 5, 6, 2, 7, 5, 4, 6].freeze
+
+  def test_histogram
+    plot = RCAS.histogram(DATA, bins: 4)
+    curve = plot.curves.first
+    assert_equal :bar, curve.marker
+    assert_equal 4, curve.points.size
+    assert_equal DATA.size, curve.points.sum { |_, count| count }, "every value falls in a bin"
+    assert_equal [2.0, 9.0], [plot.xlo, plot.xhi]
+    assert_equal 0.0, plot.ylo, "counts stand on zero"
+    assert_equal plot.yhi, plot.yhi.round, "the top of a count axis is a whole number"
+    assert_in_delta 1.75, curve.width, 1e-9, "four bins over 2..9"
+    # Sturges' rule sets the default
+    assert_equal Math.log2(DATA.size).ceil + 1, RCAS.histogram(DATA).curves.first.points.size
+    shares = RCAS.histogram(DATA, bins: 4, density: true).curves.first
+    assert_in_delta 1.0, shares.points.sum { |_, v| v }, 1e-12
+    flat = RCAS.histogram([3, 3, 3]).curves.first
+    assert_equal 3, flat.points.sum { |_, c| c }, "a constant sample is counted, not dropped"
+    assert_raises(ArgumentError) { RCAS.histogram(DATA, bins: 0) }
+    assert_raises(ArgumentError) { RCAS.histogram([]) }
+  end
+
+  def test_boxplot
+    plot = RCAS.boxplot([2, 4, 5, 5, 6, 7, 20])
+    low, q1, median, q3, high = plot.curves.first.points.first(5).map(&:first)
+    assert_equal [2.0, 4.5, 5.0, 6.5, 7.0], [low, q1, median, q3, high]
+    outliers = plot.curves.first.points.drop(5).map(&:first)
+    assert_equal [20.0], outliers, "1.5 interquartile ranges beyond the box"
+    assert_equal :box, plot.curves.first.marker
+    named = RCAS.boxplot("before" => [1, 2, 3, 4], "after" => [2, 3, 4, 5])
+    assert_equal %w[after before], named.ylabels.values.sort
+    assert_equal 2, named.curves.size
+    listed = RCAS.boxplot([[1, 2, 3], [4, 5, 6]])
+    assert_equal %w[1 2], listed.ylabels.values.sort
+    assert_includes named.to_s, "before ┤"
+    assert_raises(ArgumentError) { RCAS.boxplot(3) }
+  end
+
+  def test_barchart
+    plot = RCAS.barchart(RCAS.frequencies([:a, :b, :a, :c, :a, :b]))
+    assert_equal [[1.0, 3.0], [2.0, 2.0], [3.0, 1.0]], plot.curves.first.points
+    assert_equal %w[a b c], plot.xlabels.map(&:last)
+    assert_includes plot.to_s.lines[-1], "a"
+    same = RCAS.barchart(%w[a b c], [3, 2, 1])
+    assert_equal plot.curves.first.points, same.curves.first.points
+    assert_equal 0.0, plot.ylo
+    assert_raises(ArgumentError) { RCAS.barchart(%w[a b], [1]) }
+    assert_raises(ArgumentError) { RCAS.barchart({}) }
+  end
+
+  def test_scatter_with_a_fitted_line
+    plot = RCAS.scatter([1, 2, 3, 4], [2, 4, 7, 8], fit: true)
+    assert_equal 2, plot.curves.size
+    assert_equal :dot, plot.curves.first.marker
+    assert_equal "21*x/10", plot.curves.last.label, "exact data gives an exact line"
+    assert_equal RCAS.linreg([1, 2, 3, 4], [2, 4, 7, 8]).to_s, plot.curves.last.label
+    assert_includes plot.to_s, "21*x/10"
+    assert_equal 1, RCAS.scatter([1, 2, 3, 4], [2, 4, 7, 8]).curves.size
+  end
+
+  def test_statistical_plots_as_svg
+    svg = RCAS.histogram(DATA, bins: 4).to_svg
+    assert_equal 4, svg.scan("<rect").size - 2, "one rectangle per bin, besides the background and the frame"
+    boxes = RCAS.boxplot("a" => [1, 2, 3, 4, 99]).to_svg
+    assert_includes boxes, "<circle", "the outlier is drawn"
+    assert_includes RCAS.barchart({ "x" => 2, "y" => 5 }).to_svg, "<rect"
+  end
 end
