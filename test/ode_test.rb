@@ -15,12 +15,14 @@ class OdeTest < Minitest::Test
     solutions.each do |sol|
       assert_equal Y, sol.lhs
       y = sol.rhs
-      residual = f.subs(d(2) => y.diff(:x, 2), d(1) => y.diff(:x), Y => y).expand
+      pattern = { Y => y }
+      (1..4).each { |k| pattern[d(k)] = y.diff(:x, k) }
+      residual = f.subs(pattern).expand
       if RCAS::Scalar.zero?(residual)
         pass
       else
         [0.3, 1.1].each do |p|
-          assert_in_delta 0.0, residual.evalf(x: p, C1: 0.7, C2: -1.3), 1e-9, "#{sol} does not solve #{equation}"
+          assert_in_delta 0.0, residual.evalf(x: p, C1: 0.7, C2: -1.3, C3: 0.4, C4: 2.1), 1e-9, "#{sol} does not solve #{equation}"
         end
       end
     end
@@ -65,8 +67,71 @@ class OdeTest < Minitest::Test
     assert_solves eq, dsolve(eq)
   end
 
+  def test_symbolic_coefficients
+    k = RCAS::Var.new(:k)
+    eq = d(2) - k**2 * Y
+    assert_equal ["y = C1*exp(-(k*x)) + C2*exp(k*x)"], dsolve(eq).map(&:to_s)
+    a = RCAS::Var.new(:a)
+    assert_equal ["y = C1 + C2*exp(-(a*x))"], dsolve(d(2) + a * d).map(&:to_s)
+  end
+
+  def test_higher_order
+    eq = d(3) - d
+    assert_equal ["y = C1 + C2*exp(-x) + C3*exp(x)"], dsolve(eq).map(&:to_s)
+    assert_solves eq, dsolve(eq)
+    eq = d(4) - 2 * d(2) + Y
+    assert_equal ["y = exp(-x)*(C1 + C2*x) + exp(x)*(C3 + C4*x)"], dsolve(eq).map(&:to_s)
+    assert_solves eq, dsolve(eq)
+    eq = d(4) + Y # roots (+-1 +- i)/sqrt(2)
+    sols = dsolve(eq)
+    assert_equal ["y = exp(-(2**(1/2)*x)/2)*(C1*cos(2**(1/2)*x/2) + C2*sin(2**(1/2)*x/2)) + " \
+                  "exp(2**(1/2)*x/2)*(C3*cos(2**(1/2)*x/2) + C4*sin(2**(1/2)*x/2))"], sols.map(&:to_s)
+    assert_solves eq, sols
+    eq = d(3) + d(2) + d + Y
+    assert_solves eq, dsolve(eq)
+  end
+
+  def test_undetermined_coefficients
+    cases = {
+      RCAS::Equation.new(d(2) + Y, X) => "y = x + C1*cos(x) + C2*sin(x)",
+      RCAS::Equation.new(d(2) - Y, RCAS.exp(X)) => "y = C1*exp(-x) + C2*exp(x) + x*exp(x)/2", # resonance
+      RCAS::Equation.new(d(2) + Y, X * RCAS.exp(X)) => "y = exp(x)*(-1/2 + x/2) + C1*cos(x) + C2*sin(x)",
+      RCAS::Equation.new(d(2) + 4 * Y, RCAS.cos(2 * X)) => "y = C1*cos(2*x) + C2*sin(2*x) + x*sin(2*x)/4", # resonance
+      RCAS::Equation.new(d(2) + 3 * d + 2 * Y, 1) => "y = 1/2 + C1*exp(-2*x) + C2*exp(-x)",
+      RCAS::Equation.new(d(2), X) => "y = C1 + C2*x + x**3/6",
+      RCAS::Equation.new(d(2) - Y, RCAS.exp(X + 1)) => "y = C1*exp(-x) + C2*exp(x) + x*exp(1 + x)/2",
+      RCAS::Equation.new(d(2) + Y, RCAS.exp(X) * RCAS.sin(X) + X**2) =>
+        "y = -2 + exp(x)*(-2*cos(x)/5 + sin(x)/5) + C1*cos(x) + C2*sin(x) + x**2",
+      RCAS::Equation.new(d(3) - Y, X) => "y = -x + C3*exp(x) + exp(-x/2)*(C1*cos(3**(1/2)*x/2) + C2*sin(3**(1/2)*x/2))"
+    }
+    cases.each do |eq, expected|
+      sols = dsolve(eq)
+      assert_equal [expected], sols.map(&:to_s)
+      assert_solves eq, sols
+    end
+    a = RCAS::Var.new(:a)
+    eq = RCAS::Equation.new(d(2) + Y, a * RCAS.sin(3 * X))
+    assert_equal ["y = C1*cos(x) + C2*sin(x) - a*sin(3*x)/8"], dsolve(eq).map(&:to_s)
+  end
+
+  def test_variation_of_parameters
+    eq = RCAS::Equation.new(d(2) - 2 * d + Y, RCAS.exp(X) / X)
+    sols = dsolve(eq)
+    assert_equal ["y = -(x*exp(x)) + exp(x)*(C1 + C2*x) + x*exp(x)*log(x)"], sols.map(&:to_s)
+    assert_solves eq, sols
+    eq = RCAS::Equation.new(d(2) + Y, 1 / RCAS.cos(X))
+    sols = dsolve(eq)
+    assert_equal ["y = C1*cos(x) + C2*sin(x) + cos(x)*log(cos(x)) + x*sin(x)"], sols.map(&:to_s)
+    assert_solves eq, sols
+    # Integrals rcas cannot do stay formal instead of being dropped.
+    sols = dsolve(RCAS::Equation.new(d(2) + Y, 1 / X))
+    assert_includes sols.first.to_s, "integral("
+  end
+
   def test_unsupported_cases_raise
-    assert_raises(NotImplementedError) { dsolve(d(2) + Y - X) }
+    assert_raises(NotImplementedError) { dsolve(d(2) + Y * d) }
+    assert_raises(NotImplementedError) { dsolve(d(2) + X * Y) }
+    assert_raises(NotImplementedError) { dsolve(RCAS::Equation.new(d(3) + Y, 1 / X)) }
     assert_raises(NotImplementedError) { dsolve(d - RCAS.sin(X * Y)) }
     assert_raises(ArgumentError) { dsolve(Y - X) }
     assert_equal "D(y, x, 2)", d(2).to_s

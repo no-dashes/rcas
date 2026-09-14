@@ -13,7 +13,8 @@ module RCAS
 
       module AutoSymbol
         def method_missing(name, *args, &block)
-          return super unless args.empty? && block.nil? && name.match?(IDENTIFIER)
+          return super unless block.nil? && name.match?(IDENTIFIER)
+          return RCAS.unknown_function(name, args) || super unless args.empty? # u(n + 1): an unknown function
           __rcas_workspace__.binding.local_variable_set(name, name)
           name
         end
@@ -76,6 +77,22 @@ module RCAS
       def ruby?(code)
         RubyVM::AbstractSyntaxTree.parse(code)
         true
+      rescue SyntaxError
+        false
+      end
+
+      # Does +code+ call, with arguments, a bare name the workspace does not
+      # define (foo(1), x(squared))? Such calls would become unknown functions.
+      def undefined_calls?(code)
+        receiver = @binding.receiver
+        stack = [RubyVM::AbstractSyntaxTree.parse(code)]
+        until stack.empty?
+          node = stack.pop
+          next unless node.is_a?(RubyVM::AbstractSyntaxTree::Node)
+          return true if node.type == :FCALL && !receiver.respond_to?(node.children.first, true) && !@binding.local_variable_defined?(node.children.first)
+          stack.concat(node.children)
+        end
+        false
       rescue SyntaxError
         false
       end

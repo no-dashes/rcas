@@ -26,12 +26,15 @@ module RCAS
   #   dsolve(eq(D(y, x), 2*x*y), y, x)              # separable
   #   dsolve(eq(D(y, x) + 2*y, exp(x)), y, x)       # first-order linear
   #   dsolve(D(y, x, 2) - 3*D(y, x) + 2*y, y, x)    # constant coefficients
+  #   dsolve(eq(D(y, x, 2) + y, x*exp(x)), y, x)    # non-homogeneous, any order
   #
   # Returns Equation(s) y = ... with constants C1, C2 (or an implicit
   # equation when the separable case cannot be solved for y).
   #
-  # Source: the three textbook methods as in [BD12, ch. 2-3] (keys:
-  # MANUAL.md, Sources).
+  # Source: the textbook methods of [BD12]: separation of variables and
+  # the integrating factor (ch. 2), characteristic roots, undetermined
+  # coefficients and variation of parameters (ch. 3-4) (keys: MANUAL.md,
+  # Sources).
   module ODE
     module_function
 
@@ -43,8 +46,7 @@ module RCAS
       raise ArgumentError, "#{equation} contains no derivative of #{yv}" if order.nil?
       case order
       when 1 then first_order(f, yv, xv)
-      when 2 then second_order(f, yv, xv)
-      else raise NotImplementedError, "order #{order} equations are not supported"
+      else constant_coefficients(f, yv, xv, order)
       end
     end
 
@@ -97,47 +99,237 @@ module RCAS
       [Equation.new(y, ((integral + c1) / mu).simplify)]
     end
 
-    # ---- second order, constant coefficients, homogeneous ------------------
+    # ---- linear, constant coefficients, any order ----------------------------
+    #
+    #   a_n y^(n) + ... + a_1 y' + a_0 y = g(x)
+    #
+    # Homogeneous part from the roots of the characteristic polynomial (real
+    # roots and conjugate pairs, with multiplicity); particular solution by
+    # undetermined coefficients when g is a sum of terms
+    # polynomial * exp(a x) * (cos(b x) | sin(b x)), otherwise by variation
+    # of parameters for second-order equations.
+    def constant_coefficients(f, y, x, n)
+      ds = (0..n).map { |k| Var.new(:"_d#{k}") }
+      pattern = { y => ds[0] }
+      (1..n).each { |k| pattern[Derivative.new(y, x, k)] = ds[k] }
+      g = f.subs(pattern)
+      raise NotImplementedError, "only linear equations with constant coefficients are supported" unless Solve.linear_in?(g, ds)
 
-    def second_order(f, y, x)
-      d1 = Var.new(:_d1)
-      d2 = Var.new(:_d2)
-      yy = Var.new(:_y)
-      g = f.subs(Derivative.new(y, x, 2) => d2, Derivative.new(y, x) => d1, y => yy)
-      unknowns = [d2, d1, yy]
-      raise NotImplementedError, "only linear equations with constant coefficients are supported" unless Solve.linear_in?(g, unknowns)
-
-      a = Solve.polynomial_coefficients(g, d2)[1] || Num.new(0)
-      b = Solve.polynomial_coefficients(g, d1)[1] || Num.new(0)
-      c = Solve.polynomial_coefficients(g, yy)[1] || Num.new(0)
-      raise ArgumentError, "no second derivative in the equation" if Scalar.zero?(a)
-      forcing = g.subs(d2 => 0, d1 => 0, yy => 0).simplify
-      [a, b, c].each do |k|
+      coeffs = ds.map { |d| Solve.polynomial_coefficients(g, d)[1] || Num.new(0) }
+      raise ArgumentError, "no derivative of order #{n} in the equation" if Scalar.zero?(coeffs[n])
+      coeffs.each do |k|
         raise NotImplementedError, "coefficient #{k} is not constant" if Solve.depends?(k, x) || Solve.depends?(k, y)
       end
-      raise NotImplementedError, "non-homogeneous equations are not supported (forcing term #{forcing})" unless Scalar.zero?(forcing)
+      forcing = Simplify.negate(g.subs(ds.to_h { |d| [d, Num.new(0)] })).simplify
 
-      c1 = Var.new(:C1)
-      c2 = Var.new(:C2)
-      numeric = [a, b, c].all? { |k| k.is_a?(Num) && !k.value.is_a?(Complex) }
-      solution =
-        if numeric
-          disc = (b**2 - 4 * a * c).simplify
-          if Scalar.zero?(disc)
-            (c1 + c2 * x) * Fn.new(:exp, [-b / (2 * a) * x])
-          elsif Scalar.negative?(disc)
-            alpha = (-b / (2 * a)).simplify
-            beta = (RCAS.sqrt(-disc) / (2 * a)).simplify
-            Fn.new(:exp, [alpha * x]) * (c1 * Fn.new(:cos, [beta * x]) + c2 * Fn.new(:sin, [beta * x]))
-          else
-            r1, r2 = Solve.quadratic(a, b, c)
-            c1 * Fn.new(:exp, [r1 * x]) + c2 * Fn.new(:exp, [r2 * x])
-          end
+      groups = root_groups(Solve.polynomial_roots(coeffs))
+      homogeneous = homogeneous_solution(groups, x)
+      particular =
+        if Scalar.zero?(forcing)
+          Num.new(0)
         else
-          r1, r2 = Solve.quadratic(a, b, c)
-          c1 * Fn.new(:exp, [r1 * x]) + c2 * Fn.new(:exp, [r2 * x])
+          undetermined_coefficients(coeffs, forcing, x) ||
+            (n == 2 && variation_of_parameters(coeffs, forcing, groups, x)) ||
+            raise(NotImplementedError, "no method for the forcing term #{forcing}")
         end
-      [Equation.new(y, solution.simplify)]
+      [Equation.new(y, (homogeneous + particular).simplify)]
+    end
+
+    # Roots with multiplicity => [[re, im, multiplicity], ...]; im is nil when
+    # the root cannot be split into real and imaginary part (symbolic
+    # coefficients, RootOf); conjugate pairs are merged (im > 0) and the
+    # groups ordered by their real part.
+    def root_groups(roots)
+      tally = []
+      roots.map(&:simplify).each do |r|
+        entry = tally.find { |root, _| root == r }
+        entry ? entry[1] += 1 : tally << [r, 1]
+      end
+      groups = tally.map do |r, m|
+        re, im = real_imaginary(r)
+        re.nil? || Scalar.zero?(im) ? [r, nil, m] : [re, im, m]
+      end
+      merged = []
+      until groups.empty?
+        re, im, m = groups.shift
+        if im
+          j = groups.index { |re2, im2, m2| im2 && m2 == m && Scalar.zero?(re - re2) && Scalar.zero?(im + im2) }
+          groups.delete_at(j) if j
+          im = Simplify.negate(im).simplify if evalf_or_nil(im).to_f.negative?
+        end
+        merged << [re, im, m]
+      end
+      # Numbering order: the zero root (C1 + C2*x) first, then by real part, symbolic roots last.
+      merged.sort_by do |re, im, _|
+        value = evalf_or_nil(re)
+        [value ? 0 : 1, Scalar.zero?(re) ? -Float::INFINITY : value.to_f, im ? 1 : 0, im ? evalf_or_nil(im).to_f : 0.0, re.to_s]
+      end
+    end
+
+    def evalf_or_nil(e)
+      v = e.evalf
+      v.is_a?(Numeric) && !v.is_a?(Complex) ? v : nil
+    rescue StandardError
+      nil
+    end
+
+    # -1 + 2*i => [-1, 2]; nil if some non-numeric factor may be complex.
+    def real_imaginary(r)
+      constant, table = Expand.table(r)
+      re = {}
+      im = {}
+      table.each do |factors, coeff|
+        return nil if factors.any? { |base, e| Simplify.imaginary_unit?(base) || (e.is_a?(Expression) && !e.variables.empty?) }
+        re[factors] = coeff.is_a?(Complex) ? coeff.real : coeff
+        im[factors] = coeff.is_a?(Complex) ? coeff.imaginary : 0
+      end
+      c_re = constant.is_a?(Complex) ? constant.real : constant
+      c_im = constant.is_a?(Complex) ? constant.imaginary : 0
+      [Simplify.rebuild_sum(c_re, re).simplify, Simplify.rebuild_sum(c_im, im).simplify]
+    end
+
+    # Sum over the root groups of C_i * x**j * exp(re x) [* cos/sin(im x)],
+    # arranged the textbook way: exp(x)*(C1 + C2*x), exp(-x)*(C1*cos(2*x) + C2*sin(2*x)).
+    def homogeneous_solution(groups, x)
+      counter = 0
+      constant = -> { counter += 1; Var.new(:"C#{counter}") }
+      polynomial = ->(m) { (0...m).map { |j| j.zero? ? constant.call : constant.call * x**j }.reduce(:+) }
+      groups.map do |re, im, m|
+        exponential = Scalar.zero?(re) ? nil : Fn.new(:exp, [re * x])
+        body = im ? polynomial.call(m) * Fn.new(:cos, [im * x]) + polynomial.call(m) * Fn.new(:sin, [im * x]) : polynomial.call(m)
+        exponential ? body * exponential : body
+      end.reduce(:+)
+    end
+
+    # The fundamental system as a flat list of functions.
+    def fundamental_system(groups, x)
+      groups.flat_map do |re, im, m|
+        exponential = Scalar.zero?(re) ? Num.new(1) : Fn.new(:exp, [re * x])
+        (0...m).flat_map do |j|
+          base = x**j * exponential
+          im ? [base * Fn.new(:cos, [im * x]), base * Fn.new(:sin, [im * x])] : [base]
+        end
+      end
+    end
+
+    def apply_operator(coeffs, u, x)
+      coeffs.each_with_index.map { |a, k| a * u.diff(x, k) }.reduce(:+)
+    end
+
+    # Undetermined coefficients [BD12, §3.5, §4.3]: the forcing term is sorted
+    # into classes (a, b) with a term x**k * exp(a x) * cos/sin(b x); the ansatz
+    # for a class is x**m * (A_0 + ... + A_d x**d) * exp(a x) * (cos, sin)
+    # where m is the multiplicity of a + i b as a characteristic root.
+    def undetermined_coefficients(coeffs, forcing, x)
+      classes = forcing_classes(forcing, x) or return nil
+      r = Var.new(:_r)
+      characteristic = coeffs.each_with_index.map { |a, k| a * r**k }.reduce(:+)
+      unknowns = []
+      new_unknown = -> { unknowns << Var.new(:"_A#{unknowns.size}"); unknowns.last }
+      ansatz = classes.map do |(a, b), degree|
+        m = root_multiplicity(characteristic, r, Scalar.zero?(b) ? a : a + I * b)
+        polynomial = -> { (0..degree).map { |k| new_unknown.call * x**(k + m) }.reduce(:+) }
+        exponential = Scalar.zero?(a) ? Num.new(1) : Fn.new(:exp, [a * x])
+        if Scalar.zero?(b)
+          polynomial.call * exponential
+        else
+          (polynomial.call * Fn.new(:cos, [b * x]) + polynomial.call * Fn.new(:sin, [b * x])) * exponential
+        end
+      end.reduce(:+)
+      residual = (apply_operator(coeffs, ansatz, x) - forcing).expand
+      equations = collect_by_function(residual, unknowns, x)
+      solution = Solve.linear_system(equations, unknowns).first or return nil
+      unknowns.each { |u| solution[u] ||= Num.new(0) }
+      ansatz.subs(solution).simplify
+    end
+
+    # { [a, b] => degree } for a forcing term in the class of the method; nil otherwise.
+    def forcing_classes(forcing, x)
+      constant, terms = Simplify.termize(forcing, simplify: true)
+      classes = {}
+      add = lambda do |a, b, degree|
+        key = classes.keys.find { |a2, b2| Scalar.zero?(a - a2) && (Scalar.zero?(b - b2) || Scalar.zero?(b + b2)) }
+        key ||= [a, b]
+        classes[key] = [classes[key] || 0, degree].max
+      end
+      add.call(Num.new(0), Num.new(0), 0) unless constant.zero?
+      terms.each_key do |factors|
+        a = Num.new(0)
+        b = Num.new(0)
+        degree = 0
+        factors.each do |base, e|
+          if base == x
+            return nil unless e.is_a?(Integer) && e >= 0
+            degree += e
+          elsif base == Simplify.exp_base
+            _, slope = linear_coefficients(Expression.lift(e), x)
+            return nil unless slope
+            a = (a + slope).simplify
+          elsif base.is_a?(Fn) && %i[cos sin].include?(base.name) && e == 1 && Solve.depends?(base, x)
+            offset, slope = linear_coefficients(base.args.first, x)
+            return nil unless slope && Scalar.zero?(offset) && Scalar.zero?(b)
+            b = slope
+          elsif Solve.depends?(base, x) || (e.is_a?(Expression) && Solve.depends?(e, x))
+            return nil
+          end
+        end
+        add.call(a, b, degree)
+      end
+      classes
+    end
+
+    # u = c0 + c1 x => [c0, c1]; [nil, nil] unless u is linear in x.
+    def linear_coefficients(u, x)
+      cs = Solve.polynomial_coefficients(u, x)
+      return [nil, nil] if cs.nil? || cs.size > 2
+      [cs[0], cs[1] || Num.new(0)]
+    end
+
+    def root_multiplicity(characteristic, r, s)
+      m = 0
+      p = characteristic
+      while Scalar.zero?(p.subs(r => s).expand)
+        m += 1
+        p = p.diff(r)
+      end
+      m
+    end
+
+    # Group the terms of a residual linear in the unknowns by the function
+    # they multiply (x**k exp(a x) cos(b x), ...). exp(c0 + c1 x) is split so
+    # that exp(1 + x) and exp(x) land in the same group.
+    def collect_by_function(residual, unknowns, x)
+      constant, table = Expand.table(residual)
+      groups = { Num.new(1) => [Num.new(constant)] }
+      table.each do |factors, coeff|
+        coefficient = Num.new(coeff)
+        function = {}
+        factors.each do |base, e|
+          if unknowns.include?(base)
+            coefficient *= base
+          elsif base == Simplify.exp_base
+            offset, slope = linear_coefficients(Expression.lift(e), x)
+            coefficient *= Fn.new(:exp, [offset]) if offset && !Scalar.zero?(offset)
+            function[base] = slope ? (slope * x).expand : e
+          elsif Solve.depends?(base, x) || (e.is_a?(Expression) && Solve.depends?(e, x))
+            function[base] = e
+          else
+            coefficient *= Simplify.power_node(base, e) # a parameter
+          end
+        end
+        key = Simplify.rebuild_product(1, function).simplify
+        (groups[key] ||= []) << coefficient
+      end
+      groups.values.map { |parts| parts.reduce(:+) }
+    end
+
+    # Variation of parameters [BD12, §3.6] for a y'' + b y' + c y = g:
+    #   y_p = -y1 * int(y2 g / (a W)) + y2 * int(y1 g / (a W)),  W = y1 y2' - y1' y2
+    def variation_of_parameters(coeffs, forcing, groups, x)
+      y1, y2 = fundamental_system(groups, x)
+      wronskian = Trigonometry.trigsimp((y1 * y2.diff(x) - y1.diff(x) * y2).expand)
+      scaled = (forcing / (coeffs[2] * wronskian)).simplify
+      (-y1 * Integrate.integrate((y2 * scaled).simplify, x) + y2 * Integrate.integrate((y1 * scaled).simplify, x)).simplify
     end
   end
 end

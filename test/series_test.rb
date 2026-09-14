@@ -92,7 +92,7 @@ class SeriesTest < Minitest::Test
     assert_equal Rational(1, 4), RCAS.sum(1 / (:k * (:k + 1) * (:k + 2)), :k, 1, OO)
     assert_equal "-1/(-1 + x)", RCAS.sum(:x**:k, :k, 0, OO).to_s, "symbolic ratio: convergence assumed"
     assert_raises(ArgumentError) { RCAS.sum(2**:k, :k, 0, OO) }
-    assert_kind_of RCAS::Sum, RCAS.sum(1 / :k, :k, 1, :n)
+    assert_equal "harmonic(n)", RCAS.sum(1 / :k, :k, 1, :n).to_s
     assert_equal "sum(1/k, k, 1, oo)", RCAS.sum(1 / :k, :k, 1, OO).to_s
   end
 

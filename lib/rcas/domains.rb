@@ -202,7 +202,11 @@ module RCAS
       case expr.name
       when :sin, :cos, :tan, :exp then arg <= RR ? RR : CC
       when :abs then arg <= ZZ ? NN : arg
-      when :sign then ZZ
+      when :sign, :floor, :ceil, :round then ZZ
+      when :re, :im, :arg then RR
+      when :conj then arg
+      when :fibonacci then arg <= NN ? NN : ZZ
+      when :bernoulli, :harmonic then QQ
       when :log then arg <= NN ? RR : CC
       else CC
       end

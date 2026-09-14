@@ -35,6 +35,7 @@ module RCAS
       when Integral then "integral(#{expr.children.map { |c| print(c) }.join(', ')})"
       when Limit then "limit(#{print(expr.expr)}, #{print(expr.var)}, #{print(expr.point)})"
       when Sum then "sum(#{expr.children.map { |c| print(c) }.join(', ')})"
+      when Product then "product(#{expr.children.map { |c| print(c) }.join(', ')})"
       when Derivative then "D(#{print(expr.expr)}, #{print(expr.var)}#{expr.order == 1 ? '' : ", #{expr.order}"})"
       else raise ArgumentError, "don't know how to print #{expr.class}"
       end

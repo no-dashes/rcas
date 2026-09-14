@@ -8,6 +8,18 @@ module RCAS
   module Combinatorics
     module_function
 
+    # Fibonacci numbers by fast doubling; F(-n) = (-1)**(n + 1) F(n).
+    def fibonacci(n)
+      return (n.even? ? -1 : 1) * fibonacci(-n) if n.negative?
+      a, b = 0, 1 # F(k), F(k + 1)
+      n.bit_length.downto(1) do |i|
+        c = a * (2 * b - a) # F(2k)
+        d = a * a + b * b   # F(2k + 1)
+        a, b = n[i - 1] == 1 ? [d, c + d] : [c, d]
+      end
+      a
+    end
+
     def factorial_value(n)
       case n
       when Integer then n >= 0 ? Num.new((1..n).reduce(1, :*)) : nil

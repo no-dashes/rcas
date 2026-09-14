@@ -226,10 +226,20 @@ module RCAS
             quadratic(g.coeff(2), g.coeff(1), g.coeff(0))
           elsif g.terms.size == 2 && g.coeff(0) != 0
             binomial_roots(g)
+          elsif g.degree == 4 && g.terms.keys.all? { |e| e[0].even? }
+            biquadratic_roots(g)
           else
             (0...g.degree).map { |i| RootOf.new(g.primitive_part, i) }
           end
         roots * m
+      end
+    end
+
+    # a x^4 + b x^2 + c = 0: x = +-sqrt(r) for the two roots r of a r^2 + b r + c
+    def biquadratic_roots(g)
+      quadratic(g.coeff(4), g.coeff(2), g.coeff(0)).flat_map do |r|
+        root = RCAS.sqrt(r)
+        [Simplify.negate(root).simplify, root]
       end
     end
 
@@ -397,11 +407,47 @@ module RCAS
 
       if fs.all? { |f| linear_in?(f, unknowns) }
         linear_system(fs, unknowns)
+      elsif (solutions = polynomial_system(fs, unknowns))
+        solutions
       elsif fs.size == 2 && unknowns.size == 2
         polynomial_pair(fs, unknowns)
       else
-        raise NotImplementedError, "only linear systems and pairs of polynomial equations are supported"
+        raise NotImplementedError, "only linear systems and polynomial systems with rational coefficients are supported"
       end
+    end
+
+    # Polynomial systems over QQ by a lex Gröbner basis [CLO15, ch. 2 §8, ch. 3 §1]:
+    # the basis is triangular, so the last unknown has a univariate polynomial;
+    # its roots are substituted into the rest. nil when a coefficient is not
+    # rational (parameters), so that the resultant route can try.
+    def polynomial_system(fs, unknowns)
+      ring = QQ[*unknowns.map(&:name)]
+      polys = fs.map do |f|
+        ring.call(f)
+      rescue DomainError
+        return nil
+      end
+      basis = Groebner.basis(polys, :lex)
+      return [] if basis.size == 1 && basis.first.constant?
+      unless Groebner.zero_dimensional?(basis, :lex)
+        raise NotImplementedError, "the system has infinitely many solutions; its Gröbner basis is #{basis.map(&:to_s).join(', ')}"
+      end
+      triangular(basis.map(&:to_expr), unknowns, {}).map { |sol| unknowns.to_h { |u| [u, sol[u]] } }
+    end
+
+    def triangular(basis, unknowns, known)
+      return [known] if unknowns.empty?
+      x = unknowns.last
+      rest = unknowns[0...-1].map(&:name)
+      substituted = basis.map { |g| g.subs(known).simplify }.reject { |g| Scalar.zero?(g) }
+      univariate = substituted.select { |g| (g.variables & rest).empty? }
+      return [] if univariate.any? { |g| g.variables.empty? } # a non-zero constant: no solution on this branch
+      raise NotImplementedError, "no univariate polynomial in #{x} after substituting #{known}" if univariate.empty?
+      pivot = univariate.min_by { |g| polynomial_coefficients(g, x)&.size || Float::INFINITY }
+      coeffs = polynomial_coefficients(pivot, x) or raise NotImplementedError, "#{pivot} is not a polynomial in #{x}"
+      roots = dedupe(polynomial_roots(coeffs).map(&:simplify))
+      roots = roots.select { |r| univariate.all? { |g| Scalar.zero?(g.subs(x => r).simplify) } }
+      roots.flat_map { |r| triangular(basis, unknowns[0...-1], known.merge(x => r)) }
     end
 
     def linear_in?(f, unknowns)

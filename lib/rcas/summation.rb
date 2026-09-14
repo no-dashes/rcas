@@ -63,7 +63,9 @@ module RCAS
         return known
       end
       direct = direct_sum(f, k, from, to)
-      direct || Sum.new(f, k, from, to)
+      return direct if direct
+      return Fn.new(:harmonic, [to]) if from == Num.new(1) && !Limits.infinite?(to) && Scalar.one?((f * k).simplify) # sum 1/k = H_n
+      Sum.new(f, k, from, to)
     end
 
     # Ratio of consecutive terms as a rational function of k (binomials and

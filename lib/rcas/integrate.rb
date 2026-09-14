@@ -29,6 +29,8 @@ module RCAS
   # 3. a Risch-Norman heuristic: an ansatz that is a Laurent polynomial in x
   #    and the transcendental/algebraic atoms of the integrand, plus log
   #    terms, whose undetermined coefficients are found by linear algebra
+  # 4. rationalizing substitutions (integrate_substitutions.rb): square roots
+  #    of quadratics, roots of linear forms, exponentials, sin/cos
   #
   # Sources (keys: MANUAL.md, Sources): Hermite reduction [Her72] in Mack's
   # linear form [Mac75], [Bro05, §2.2]; Rothstein-Trager resultant [RT76],
@@ -53,7 +55,7 @@ module RCAS
         term = Simplify.rebuild_product(coeff, factors)
         parts << (attempt(term, x, 0) || Integral.new(term, x))
       end
-      parts.reduce(Num.new(0)) { |a, b| a + b }.simplify
+      Substitutions.unwind(parts.reduce(Num.new(0)) { |a, b| a + b }).simplify
     end
 
     # Definite integral from a to b: F(b) - F(a), with limits at infinite or
@@ -108,7 +110,9 @@ module RCAS
       end
 
       result = table(f, x) || rational(f, x) || substitution(f, x, depth) ||
-               by_parts(f, x, depth) || heurisch(f, x) || shift(f, x, depth)
+               by_parts(f, x, depth) || Substitutions.radical(f, x, depth) || heurisch(f, x) ||
+               Substitutions.root_of_linear(f, x, depth) || Substitutions.exponential(f, x, depth) ||
+               Substitutions.trigonometric(f, x, depth) || shift(f, x, depth)
       result&.simplify
     end
 
@@ -169,6 +173,13 @@ module RCAS
           when :atan then (u * base - Fn.new(:log, [1 + u**2]) / 2) / a
           when :sinh then Fn.new(:cosh, [u]) / a
           when :cosh then Fn.new(:sinh, [u]) / a
+          end
+        elsif exp == -1
+          case base.name
+          when :cos  then Fn.new(:log, [(1 + Fn.new(:sin, [u])) / base]) / a
+          when :sin  then Fn.new(:log, [(1 - Fn.new(:cos, [u])) / base]) / a
+          when :cosh then Fn.new(:atan, [Fn.new(:sinh, [u])]) / a
+          when :sinh then Fn.new(:log, [(Fn.new(:cosh, [u]) - 1) / base]) / a
           end
         elsif exp == -2
           case base.name

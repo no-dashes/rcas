@@ -21,7 +21,7 @@ module RCAS
     OPERATORS = { :+ => Add, :- => Sub, :* => Mul, :/ => Div, :** => Pow }.freeze
     LITERALS = %i[LIT INTEGER FLOAT RATIONAL IMAGINARY SYM].freeze
     # Calls kept as formal nodes instead of being evaluated; see Expression#evaluate.
-    FORMAL = %i[integrate diff sum limit].freeze
+    FORMAL = %i[integrate diff sum product limit].freeze
 
     module_function
 
@@ -147,9 +147,9 @@ module RCAS
         when :diff
           var, n = args
           Derivative.new(f, Expression.lift(var), n.is_a?(Num) ? n.value : (n || 1))
-        when :sum
-          var, from, to = Functions.range_arguments(*args.values_at(0, 1, 2), opts, "sum", discrete: true)
-          Sum.new(f, Expression.lift(var), Expression.lift(from), Expression.lift(to))
+        when :sum, :product
+          var, from, to = Functions.range_arguments(*args.values_at(0, 1, 2), opts, name.to_s, discrete: true)
+          (name == :sum ? Sum : Product).new(f, Expression.lift(var), Expression.lift(from), Expression.lift(to))
         when :limit
           opts = opts.dup
           opts.delete(:dir)

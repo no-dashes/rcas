@@ -109,6 +109,7 @@ module RCAS
       when Fn       then function(expr)
       when Integral then integral(expr)
       when Sum then "\\sum_{#{print(expr.var)}=#{print(expr.from)}}^{#{print(expr.to)}} #{wrap(expr.term, MULTIPLICATIVE, :right)}"
+      when Product then "\\prod_{#{print(expr.var)}=#{print(expr.from)}}^{#{print(expr.to)}} #{wrap(expr.term, MULTIPLICATIVE, :right)}"
       when Limit then "\\lim_{#{print(expr.var)} \\to #{print(expr.point)}} #{wrap(expr.expr, MULTIPLICATIVE, :right)}"
       else
         return constant(expr) if defined?(Const) && expr.is_a?(Const)

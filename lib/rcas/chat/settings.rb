@@ -56,8 +56,8 @@ module RCAS
           "scale" => Render.scale,
           "theme" => Render.theme.to_s,
           "wrap" => Render.wrap,
-          "model" => assistant.model,
-          "fallbacks" => assistant.fallbacks
+          "model" => (assistant.model if assistant.available?),
+          "fallbacks" => (assistant.fallbacks if assistant.available?)
         }.compact
       end
     end

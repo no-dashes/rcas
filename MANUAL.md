@@ -1,5 +1,6 @@
 <p align="center">
   <img src="assets/rcas-logo.jpeg" alt="rcas - Ruby Computer Algebra System" width="360"><br>
+  <em>Reinventing the wheel instead of building a CAS</em>
 </p>
 
 # rcas manual
@@ -30,6 +31,7 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
     - [Substitution and evaluation](#substitution-and-evaluation)
     - [Equality](#equality)
   - [1.2 Numbers and constants](#12-numbers-and-constants)
+    - [Complex parts and rounding](#complex-parts-and-rounding)
     - [Integers and primes](#integers-and-primes)
   - [1.3 Calculus](#13-calculus)
     - [Derivatives](#derivatives)
@@ -38,6 +40,7 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
     - [Series](#series)
     - [Limits](#limits)
     - [Sums](#sums)
+    - [Products](#products)
     - [hold and evaluate](#hold-and-evaluate)
     - [Factorials, binomials, gamma](#factorials-binomials-gamma)
     - [Trigonometric and logarithmic rewriting](#trigonometric-and-logarithmic-rewriting)
@@ -46,11 +49,14 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
   - [1.5 Domains and assumptions](#15-domains-and-assumptions)
   - [1.6 Polynomial rings](#16-polynomial-rings)
     - [gcd and division of expressions](#gcd-and-division-of-expressions)
+    - [Gröbner bases](#grbner-bases)
     - [Degree and coefficients](#degree-and-coefficients)
+    - [Interpolation](#interpolation)
     - [Algebraic numbers](#algebraic-numbers)
     - [Finite fields](#finite-fields)
   - [1.7 Linear algebra](#17-linear-algebra)
-  - [1.8 Differential equations](#18-differential-equations)
+  - [1.8 Differential equations and recurrences](#18-differential-equations-and-recurrences)
+    - [Recurrences](#recurrences)
   - [1.9 Performance notes](#19-performance-notes)
 - [2. Reference](#2-reference)
 - [3. Files](#3-files)
@@ -76,10 +82,11 @@ object:
 
 - A bare identifier that is not yet defined (`x`, `foo_bar`) evaluates to
   the symbol of the same name and is assigned to a local variable, so after
-  `e = x + 1` the variable `x` holds `:x`. Only zero-argument, block-less
-  lowercase names are intercepted; `foo(1)` still raises `NoMethodError`,
-  and `respond_to?` is untouched so Ruby's implicit conversions are
-  unaffected.
+  `e = x + 1` the variable `x` holds `:x`. An undefined name applied to
+  expressions or numbers, `u(n + 1)` or `f(x)`, is an unknown function
+  (the notation `rsolve` uses); with a block or other kinds of arguments
+  the usual `NoMethodError` is raised, and `respond_to?` is untouched so
+  Ruby's implicit conversions are unaffected.
 - The functions of the reference section, the constants `PI E I oo`, the
   number sets `NN ZZ QQ RR CC` and `GF` are in scope, and `hold { ... }`
   can read the source of blocks typed at the prompt.
@@ -100,8 +107,7 @@ indeterminate (a prime, say). `p(expr)` therefore raises `NoMethodError` in
 `bin/rcas` and `bin/rcas-chat`; use `puts expr`, `print`, or
 `Kernel.p(expr)`. Plain `irb` with `require "rcas"` is unaffected.
 - Results print as text. `show(obj)` typesets a value (Appendix A);
-  `bin/rcas-chat` (Appendix B) shows pictures inline and answers questions
-  in plain language.
+  `bin/rcas-chat` (Appendix B) shows pictures inline.
 
 Without the launcher, `require "rcas"` and use `:x`, `RCAS::ZZ` or
 `include RCAS::Sets`, and `RCAS.sin(:x)` / `RCAS.assume(x: RCAS::ZZ)`.
@@ -255,7 +261,13 @@ rcas> (sqrt(2) * x).evalf(x: 3)
 => 4.242640687119286
 rcas> (PI**2 / 6).to_f
 => 1.6449340668482262
+rcas> subs(x**2 + 1, x: 3)
+=> 3**2 + 1
+rcas> evalf(pi)
+=> 3.141592653589793
 ```
+
+`subs`, `evalf` and `diff` exist as functions as well as methods.
 
 #### Equality
 
@@ -328,6 +340,32 @@ rcas> zeta(2)
 => pi**2/6
 ```
 
+#### Complex parts and rounding
+
+`re`, `im`, `conj` and `arg` split an expression by its complex
+coefficients after expansion. A variable counts as real only once it is
+assumed so (`assume(x: RR)`); until then `re(x)` stays `re(x)`, as in
+Maple and Mathematica. `arg` is exact for the angles the `atan` table
+knows and a float otherwise. `floor`, `ceil`, `round` and `mod` fold on
+numbers and stay symbolic on expressions.
+
+```
+rcas> [re(3 + 2*I), im((1 + I)**2), conj(2 - 3*I)]
+=> [3, 2, 2 + 3*i]
+rcas> [arg(-1), arg(I), arg(1 + I), arg(-1 - I)]
+=> [pi, pi/2, pi/4, -3*pi/4]
+rcas> re(x + I*y)
+=> -im(y) + re(x)
+rcas> assume(x: RR, y: RR)
+=> true
+rcas> [re(x + I*y), im((x + I*y)**2), conj(x + I*y)]
+=> [x, 2*x*y, x - i*y]
+rcas> forget
+=> true
+rcas> [floor(7/2r), ceil(7/2r), round(5/2r), floor(-7/2r), mod(-7, 3), floor(x)]
+=> [3, 4, 3, -4, 2, floor(x)]
+```
+
 #### Integers and primes
 
 `factor` on an integer or rational gives its prime factorization, an
@@ -355,6 +393,13 @@ rcas> [invmod(3, 7), chrem([2, 3], [3, 5]), 3.pow(100, 7), 12.gcd(18)]
 `chrem(residues, moduli)` solves the simultaneous congruences (the moduli
 need not be coprime; an inconsistent system raises). Modular powers, gcd
 and lcm of integers are Ruby's own `pow(e, m)`, `gcd` and `lcm`.
+`bernoulli`, `fibonacci` and `harmonic` give exact values of the classical
+sequences and stay symbolic on a symbolic argument.
+
+```
+rcas> [bernoulli(12), fibonacci(100), harmonic(4)]
+=> [-691/2730, 354224848179261915075, 25/12]
+```
 
 ### 1.3 Calculus
 
@@ -369,6 +414,8 @@ rcas> exp(x**2).diff(x)
 => 2*x*exp(x**2)
 rcas> (x**3).diff(x, 2)
 => 6*x
+rcas> diff(x**3, x, 2)
+=> 6*x
 rcas> atan(x).diff(x)
 => 1/(1 + x**2)
 ```
@@ -378,7 +425,7 @@ rcas> atan(x).diff(x)
 `integrate(f, x)` (or `f.integrate(x)`) returns an antiderivative without
 the constant. Whatever cannot be integrated stays as an `integral(...)`
 node, so partial results remain usable and `diff` undoes `integrate`.
-Three layers are tried in order for every term:
+Four layers are tried in order for every term:
 
 1. **Rules.** Linearity and constant factors, a table for `u**n`, `1/u`,
    `c**u` and `exp sin cos tan log atan sinh cosh` of a linear argument,
@@ -398,6 +445,23 @@ Three layers are tried in order for every term:
    reduced away, and the undetermined coefficients are found as an exact
    linear system over QQ. A final linear substitution (`v = x + 1`)
    rescues integrands like `x*exp(x)/(x + 1)**2`.
+4. **Rationalizing substitutions.** An integrand that is a rational function
+   of `x` and `sqrt(a*x**2 + b*x + c)` is split into a rational part and
+   `P(x)/sqrt(Q)` pieces, which reduce to `S(x)*sqrt(Q)` plus the two basic
+   forms `log(sqrt(Q) + ...)` and `asin(...)`; linear denominators go through
+   `x - alpha = 1/t`. Roots of a linear form (`sqrt(x)/(1 + x)`), rational
+   functions of `exp(k*x)` (also `sinh`, `cosh`) and of `sin(x)`, `cos(x)`
+   (`tan(x/2)`, the Weierstrass substitution) become rational functions of
+   the new variable and are handed to layer 2. Even powers of `sin` or `cos`
+   over an odd power of the other are rewritten with `sin**2 + cos**2 = 1`
+   first, so `sin(x)**2/cos(x)` comes out as `log((1 + sin(x))/cos(x)) -
+   sin(x)` rather than in `tan(x/2)`.
+
+Antiderivatives with square roots and logarithms are formal: differentiating
+them gives back the integrand wherever both are real, and at a singularity of
+the integrand the constant may jump (as in every CAS). Irreducible quadratic
+denominators under a root (`1/((x**2 + 1)*sqrt(x**2 + 2))`) and radicands of
+degree three or more are left as `integral(...)`.
 
 The test suite checks every antiderivative by differentiating it and
 comparing numerically with the integrand at a few points.
@@ -410,7 +474,7 @@ rcas> integrate(x * log(x), x)
 rcas> integrate(1 / (x**2 + 1), x)
 => atan(x)
 rcas> integrate(1 / (x**3 + 1), x)
-=> log(1 + x)/3 - log(1 - x + x**2)/6 + 3**(1/2)*atan((-1 + 2*x)/3**(1/2))/3
+=> log(1 + x)/3 - log(1 - x + x**2)/6 + 3**(1/2)*atan(3**(1/2)*(-1 + 2*x)/3)/3
 rcas> integrate((x**3 + 1) / (x**2 * (x + 1)**2), x)
 => -1/x + 3*log(1 + x) - 2*log(x)
 rcas> integrate(exp(x) * sin(x), x)
@@ -423,6 +487,20 @@ rcas> integrate(exp(sqrt(x)) / sqrt(x), x)
 => 2*exp(x**(1/2))
 rcas> integrate(exp(-x**2) + x, x)
 => integral(exp(-x**2), x) + x**2/2
+rcas> integrate(sqrt(x**2 + 1), x)
+=> log((1 + x**2)**(1/2) + x)/2 + x*(1 + x**2)**(1/2)/2
+rcas> integrate(sqrt(1 - x**2), x)
+=> asin(x)/2 + x*(1 - x**2)**(1/2)/2
+rcas> integrate(1/(x*sqrt(x**2 - 1)), x)
+=> atan((-1 + x**2)**(1/2))
+rcas> integrate(sqrt(x)/(1 + x), x)
+=> -2*atan(x**(1/2)) + 2*x**(1/2)
+rcas> integrate(1/(1 + exp(x)), x)
+=> -log(1 + exp(x)) + x
+rcas> integrate(1/cos(x), x)
+=> log((1 + sin(x))/cos(x))
+rcas> integrate(1/(2 + cos(x)), x)
+=> 2*3**(1/2)*atan(3**(1/2)*tan(x/2)/3)/3
 ```
 
 #### Definite integrals
@@ -441,6 +519,8 @@ rcas> integrate(1 / (1 + x**2), x: -oo..oo)
 => pi
 rcas> integrate(log(x), x: 0..1)
 => -1
+rcas> integrate(sqrt(1 - x**2), x: -1..1)
+=> pi/2
 rcas> integrate(exp(-x**2), x: 0..1)
 => integral(exp(-x**2), x, 0, 1)
 ```
@@ -527,7 +607,33 @@ rcas> sum(1/n**3, n: 1..)
 rcas> sum(1/n**2, n: 1..10)
 => 1968329/1270080
 rcas> sum(1/k, k: 1..n)
-=> sum(1/k, k, 1, n)
+=> harmonic(n)
+```
+
+#### Products
+
+`product(f, k, a, b)` or `product(f, k: a..b)`. Constants give powers,
+`a**u(k)` gives `a**sum(u)`, and a polynomial in `k` whose factors are
+linear over QQ gives factorials (integer shifts) or `gamma` values
+(rational shifts), since the product of `k + r` from `a` to `b` is
+`gamma(b + r + 1)/gamma(a + r)`. Anything else with integer bounds is
+multiplied out; otherwise the product stays formal.
+
+```
+rcas> product(k, k: 1..n)
+=> n!
+rcas> product(2*k, k: 1..n)
+=> 2**n*n!
+rcas> product(2*k - 1, k: 1..n)
+=> 2**n*gamma(1/2 + n)/pi**(1/2)
+rcas> product(a**k, k: 1..n)
+=> a**(n/2 + n**2/2)
+rcas> product((k + 1)/k, k: 1..n)
+=> 1 + n
+rcas> product(k, k: 1..5)
+=> 120
+rcas> product(factorial(k), k: 1..n)
+=> product(k!, k, 1, n)
 ```
 
 #### hold and evaluate
@@ -695,8 +801,11 @@ rcas> solve(cos(x), x)
 
 Systems take an array of equations and an array of unknowns and return an
 array of hashes. Linear systems are solved for the pivot unknowns in terms
-of the free ones; two polynomial equations in two unknowns go through a
-resultant.
+of the free ones. Polynomial systems with rational coefficients go through
+a lex Gröbner basis (see 1.6): it is triangular, so the last unknown has a
+univariate polynomial whose roots are substituted back one unknown at a
+time. A system with infinitely many solutions raises an error that shows
+the basis; two equations with parameters go through a resultant.
 
 ```
 rcas> solve([eq(x + y, 3), eq(x - y, 1)], [x, y])
@@ -707,15 +816,22 @@ rcas> solve([x + y - 1, x + y - 2], [x, y])
 => []
 rcas> solve([x**2 + y**2 - 25, x + y - 7], [x, y])
 => [{x=>4, y=>3}, {x=>3, y=>4}]
+rcas> solve([x**2 - y, y**2 - x], [x, y])
+=> [{x=>1, y=>1}, {x=>0, y=>0}, {x=>-1/2 + i*3**(1/2)/2, y=>-1/2 - i*3**(1/2)/2}, {x=>-1/2 - i*3**(1/2)/2, y=>-1/2 + i*3**(1/2)/2}]
+rcas> solve([x**2 - 1, y - x, z**2 - x], [x, y, z])
+=> [{x=>1, y=>1, z=>1}, {x=>1, y=>1, z=>-1}, {x=>-1, y=>-1, z=>-i}, {x=>-1, y=>-1, z=>i}]
 ```
 
 Roots of irreducible polynomials of degree three or more are exact
-`RootOf` objects; `evalf` gives the number, and arithmetic with them is
-exact (see algebraic numbers below).
+`RootOf` objects, except for binomials `a*x**n + b` and biquadratics
+`a*x**4 + b*x**2 + c`, which come out in radicals; `evalf` gives the
+number, and arithmetic with `RootOf` is exact (see algebraic numbers below).
 
 ```
 rcas> solve(x**3 - x - 1, x)
 => [RootOf(-1 - x + x**3, 0), RootOf(-1 - x + x**3, 1), RootOf(-1 - x + x**3, 2)]
+rcas> solve(x**4 - 4*x**2 + 1, x)
+=> [-(2 - 3**(1/2))**(1/2), (2 - 3**(1/2))**(1/2), -(2 + 3**(1/2))**(1/2), (2 + 3**(1/2))**(1/2)]
 ```
 
 Equation objects support sidewise arithmetic, `subs`, `swap`, `holds?`,
@@ -922,6 +1038,32 @@ rcas> divmod(a*x**2 + x - a, x - 1, x)
 => [1 + a + a*x, 1]
 ```
 
+#### Gröbner bases
+
+`groebner(polys, vars)` returns the reduced Gröbner basis of the ideal the
+polynomials generate, over `QQ[vars]` (or `Frac(QQ[params])[vars]` when
+other symbols occur in the coefficients). The default monomial order is
+`:lex` with the variables compared in the order given; `order: :grlex`
+and `:grevlex` are the graded orders. `reduce(f, basis, vars)` is the
+normal form of `f` modulo the basis, zero exactly when `f` lies in the
+ideal. A lex basis is triangular, which is how `solve` handles polynomial
+systems (1.4).
+
+```
+rcas> g = groebner([x**2 + y**2 - 1, x - y], [x, y])
+=> [x - y, -1/2 + y**2]
+rcas> reduce(x**3, g, [x, y])
+=> y/2
+rcas> reduce(x**2 - y**2, g, [x, y])
+=> 0
+rcas> groebner([x + y + z, x*y + y*z + z*x, x*y*z - 1], [x, y, z])
+=> [x + y + z, y**2 + y*z + z**2, -1 + z**3]
+rcas> groebner([x**2 - y, y**2 - x], [x, y], order: :grevlex)
+=> [-y + x**2, -x + y**2]
+rcas> groebner([x**2 - a, x - y], [x, y])
+=> [x - y, -a + y**2]
+```
+
 #### Degree and coefficients
 
 `degree`, `ldegree`, `lcoeff`, `tcoeff`, `coeff`, `coeffs` and `collect`
@@ -962,6 +1104,36 @@ An expression that is not a polynomial in the indeterminate (`sin(x)`,
 `degree(x*sin(y), x)` is fine because `sin(y)` is a constant with respect
 to `x`. `coeff(f, x, k)` needs an integer `k`; rational exponents are not
 polynomial terms.
+
+`resultant(f, g, x)` and `discriminant(f, x)` are computed from the
+Sylvester matrix; every other symbol is a parameter.
+
+```
+rcas> resultant(x**2 - 1, x + 3, x)
+=> 8
+rcas> resultant(x**2 + y**2 - 1, x - y, x)
+=> -1 + 2*y**2
+rcas> discriminant(x**2 + b*x + c, x)
+=> -4*c + b**2
+rcas> discriminant(x**3 + a*x + b, x)
+=> -27*b**2 - 4*a**3
+```
+
+#### Interpolation
+
+`interpolate(points, x)` returns the polynomial of least degree through the
+points, given as pairs or as a hash, by Newton's divided differences. The
+arithmetic is exact, so nodes and values may be rationals, algebraic
+numbers or parameters.
+
+```
+rcas> interpolate([[0, 1], [1, 3], [2, 7]], x)
+=> 1 + x + x**2
+rcas> interpolate([[1, 1], [2, 4], [3, 9], [4, 16]], x)
+=> x**2
+rcas> interpolate({0 => a, 1 => b}, x)
+=> a - a*x + b*x
+```
 
 #### Algebraic numbers
 
@@ -1097,6 +1269,17 @@ rcas> V.basis
 => [(1, 0, 0), (0, 1, 0), (0, 0, 1)]
 ```
 
+`vector(1, 2, 3)` (or `vector([1, 2, 3])`) and `matrix([[1, 2], [3, 4]])`
+build elements with the domain inferred from the entries; pass it first
+to choose: `vector(QQ, 1, 2, 3)`.
+
+```
+rcas> vector([1, 2, 3]).space
+=> ZZ**3
+rcas> vector(QQ, 1, 2, 3).space
+=> QQ**3
+```
+
 `v * w` is the dot product. Result spaces follow the scalars: dividing an
 integer vector by 2 lands in `QQ**3`. Entries outside the domain are
 rejected, and an undeclared symbolic entry tells you what to declare.
@@ -1208,12 +1391,12 @@ rcas> forget
 => true
 ```
 
-### 1.8 Differential equations
+### 1.8 Differential equations and recurrences
 
 `D(y, x, n)` is the n-th derivative of an unknown function `y`. `dsolve`
-handles separable and linear first-order equations and homogeneous
-second-order equations with constant coefficients, returning equations
-`y = ...` with constants `C1`, `C2`.
+handles separable and linear first-order equations and linear equations
+of any order with constant coefficients, returning equations `y = ...`
+with constants `C1`, `C2`, ...
 
 ```
 rcas> dsolve(eq(D(y, x), 2*x*y), y, x)
@@ -1228,6 +1411,50 @@ rcas> dsolve(D(y, x, 2) + y, y, x)
 => [y = C1*cos(x) + C2*sin(x)]
 rcas> dsolve(D(y, x, 2) + 2*D(y, x) + 5*y, y, x)
 => [y = exp(-x)*(C1*cos(2*x) + C2*sin(2*x))]
+rcas> dsolve(D(y, x, 4) - 2*D(y, x, 2) + y, y, x)
+=> [y = exp(-x)*(C1 + C2*x) + exp(x)*(C3 + C4*x)]
+```
+
+A forcing term that is a sum of polynomials times exponentials times
+sines or cosines is handled by undetermined coefficients, resonance
+included; a second-order equation with any other forcing term goes
+through variation of parameters, and an integral rcas cannot do stays in
+the answer as `integral(...)`.
+
+```
+rcas> dsolve(eq(D(y, x, 2) + y, x*exp(x)), y, x)
+=> [y = exp(x)*(-1/2 + x/2) + C1*cos(x) + C2*sin(x)]
+rcas> dsolve(eq(D(y, x, 2) + 4*y, cos(2*x)), y, x)
+=> [y = C1*cos(2*x) + C2*sin(2*x) + x*sin(2*x)/4]
+rcas> dsolve(eq(D(y, x, 2) - 2*D(y, x) + y, exp(x)/x), y, x)
+=> [y = -(x*exp(x)) + exp(x)*(C1 + C2*x) + x*exp(x)*log(x)]
+rcas> dsolve(eq(D(y, x, 2) + y, 1/cos(x)), y, x)
+=> [y = C1*cos(x) + C2*sin(x) + cos(x)*log(cos(x)) + x*sin(x)]
+```
+
+#### Recurrences
+
+`rsolve(equation, u, n)` solves linear recurrences with constant
+coefficients. The unknown sequence is written as a function of the index,
+`u(n + 1)`: in `bin/rcas` an undefined name applied to an expression is
+exactly that. Characteristic roots give the homogeneous part (a repeated
+root brings factors `n`, `n**2`, ...), forcing terms of the form
+polynomial times `b**n` go through undetermined coefficients, and `init:`
+fixes the constants from initial values.
+
+```
+rcas> rsolve(eq(u(n + 2), u(n + 1) + u(n)), u, n)
+=> u(n) = C2*(1/2 + 5**(1/2)/2)**n + C1*(1/2 - 5**(1/2)/2)**n
+rcas> rsolve(eq(u(n + 2), u(n + 1) + u(n)), u, n, init: {0 => 0, 1 => 1})
+=> u(n) = 5**(1/2)*(1/2 + 5**(1/2)/2)**n/5 - 5**(1/2)*(1/2 - 5**(1/2)/2)**n/5
+rcas> rsolve(eq(u(n + 1), 2*u(n) + 1), u, n, init: {0 => 0})
+=> u(n) = -1 + 2**n
+rcas> rsolve(eq(u(n + 2), 4*u(n + 1) - 4*u(n)), u, n, init: {0 => 1, 1 => 4})
+=> u(n) = 2**n*(1 + n)
+rcas> rsolve(eq(u(n + 1), u(n) + n), u, n, init: {0 => 0})
+=> u(n) = -n/2 + n**2/2
+rcas> rsolve(eq(u(n + 1), 3*u(n) + 2**n), u, n)
+=> u(n) = -2**n + 3**n*C1
 ```
 
 ### 1.9 Performance notes
@@ -1265,11 +1492,15 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | rewriting | `simplify expand cancel rationalize trigsimp expand_trig expand_log logcombine minpoly` |
 | rational functions | `numer denom apart gcd lcm quo rem divmod` |
 | integers | `factor ifactor isprime nextprime prevprime divisors totient invmod chrem` |
-| polynomial structure | `degree ldegree lcoeff tcoeff coeff coeffs collect` |
+| polynomial structure | `degree ldegree lcoeff tcoeff coeff coeffs collect resultant discriminant interpolate` |
 | constants | `PI E I oo` (bare `pi`, `π`, `oo`, `∞`) |
-| calculus | `integrate diff series taylor limit sum` |
-| algebra | `solve eq factor` |
-| differential equations | `D dsolve` |
+| evaluation | `subs evalf` |
+| calculus | `integrate diff series taylor limit sum product` |
+| algebra | `solve eq factor groebner reduce` |
+| differential equations, recurrences | `D dsolve rsolve` |
+| complex numbers | `re im conj arg` |
+| rounding | `floor ceil round mod` |
+| sequences | `bernoulli fibonacci harmonic` |
 | domains | `NN ZZ QQ RR CC GF assume forget assumptions` |
 | linear algebra | `vector matrix` |
 | holding | `hold evaluate` |
@@ -1280,8 +1511,9 @@ series taylor limit solve eq variables degree ldegree lcoeff tcoeff coeff
 coeffs domain in in? to_poly to_sexp hold-related evaluate`.
 
 Not implemented: the complete Risch algorithm and special functions
-(`erf`, `Ei`), non-homogeneous second-order differential equations, limits
-of bounded oscillation (`sin(x)/x` at infinity), inequalities beyond
+(`erf`, `Ei`), differential equations with variable coefficients beyond
+first order and systems of differential equations, limits of bounded
+oscillation (`sin(x)/x` at infinity), inequalities beyond
 polynomial, rational and absolute-value ones, number fields with more than
 two generators, and Zeilberger's algorithm for definite hypergeometric sums.
 
@@ -1295,9 +1527,15 @@ lib/rcas/simplify.rb        canonical sums/products, exact number folding
 lib/rcas/expand.rb          distribution with like-term merging
 lib/rcas/differentiate.rb   derivative rules
 lib/rcas/integrate.rb       rules, rational functions, Risch-Norman heuristic
+lib/rcas/integrate_substitutions.rb  rationalizing substitutions (roots, exp, sin/cos)
 lib/rcas/series.rb          Puiseux series, limits
 lib/rcas/summation.rb       Faulhaber, Gosper, zeta
+lib/rcas/product.rb         symbolic products; Product node
+lib/rcas/recurrence.rb      rsolve: linear recurrences with constant coefficients
+lib/rcas/complex_parts.rb   re, im, conj, arg
 lib/rcas/solve.rb           equations, solve, systems
+lib/rcas/groebner.rb        Gröbner bases: Buchberger, normal forms, monomial orders
+lib/rcas/interpolate.rb     Newton interpolation
 lib/rcas/ode.rb             D, dsolve
 lib/rcas/constants.rb       pi, e, i and exact values
 lib/rcas/domains.rb         NN ZZ QQ RR CC, assumptions, PolynomialRing, FractionField
@@ -1343,10 +1581,15 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | partial fractions (coprime splitting by extended Euclid, p-adic expansion) | rational_function.rb | [Bro05, §2.1] |
 | rational integration: Hermite reduction (Mack's linear version), Lazard-Rioboo-Trager logarithmic part, Rothstein-Trager resultant | integrate.rb | [Her72]; [Mac75]; [Bro05, §2.2, §2.4, §2.5]; [RT76]; [LR90]; [GCL92, ch. 11] |
 | Risch-Norman heuristic (parallel Risch) | integrate.rb | [NM77]; [GS89] |
+| rationalizing substitutions: sqrt of a quadratic (reduction to S*sqrt(Q) + lambda*int 1/sqrt(Q), x - alpha = 1/t), roots of linear forms, exponentials, tan(x/2) | integrate_substitutions.rb | [Zor15, §5.7]; [Har16, ch. V-VI] |
 | Puiseux series with log terms, limits by the leading term | series.rb | power series arithmetic as in [Knu98, §4.7]; the limit strategy is the textbook one, not Gruntz's MRV algorithm [Gru96] |
 | Faulhaber sums by Newton interpolation, Bernoulli numbers, zeta(2m) | summation.rb | [GKP94, §6.5]; Euler-Maclaurin tail [GKP94, §9.5] |
 | Gosper's algorithm with the degree bound for the polynomial ansatz | summation.rb | [Gos78]; [PWZ96, ch. 5] |
-| polynomial systems by resultants | solve.rb | [GCL92, ch. 9]; [CLO15, §3.6] |
+| products: factorial and gamma ratios for linear factors, exp of sums | product.rb | [GKP94, §5.5] |
+| recurrences: characteristic roots, undetermined coefficients, initial values | recurrence.rb | [GKP94, §7.3] |
+| polynomial systems: lex Gröbner basis and triangular back-substitution; resultants for two equations with parameters | solve.rb | [CLO15, ch. 2 §8, ch. 3 §1]; [GCL92, ch. 9-10] |
+| Newton interpolation by divided differences | interpolate.rb | [Knu98, §4.6.4]; [vzGG13, ch. 5] |
+| Gröbner bases: Buchberger's algorithm with the product criterion, normal forms, reduced bases, the dimension test | groebner.rb | [Buc65]; [CLO15, ch. 2 §§3, 7, 9-10; ch. 5 §3]; [GCL92, ch. 10] |
 | numeric polynomial roots: Durand-Kerner (Weierstrass) iteration | solve.rb | [Ker66] |
 | minimal polynomial via resultants, arithmetic in QQ(alpha) | algebraic.rb | [Loo83]; [Coh93, §4.2] |
 | factoring over QQ(alpha) by norms (Trager) | algebraic.rb | [Tra76]; [Coh93, Algorithm 3.6.4] |
@@ -1356,7 +1599,7 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | integer factorization: trial division, Pollard-Brent rho | number_theory.rb | [Pol75]; [Bre80]; [Knu98, §4.5.4]; [Coh93, §8.5] |
 | primality: Miller-Rabin, deterministic bases below 3.3e24 | number_theory.rb | [Mil76]; [Rab80b]; [SW17]; [Knu98, §4.5.4, Algorithm P] |
 | Chinese remainder theorem, modular inverse, totient, divisors | number_theory.rb | [Coh93, §1.3]; [Knu98, §4.3.2]; [HW08, §5.5, §16.3] |
-| differential equations: separable, linear first order, constant coefficients | ode.rb | [BD12, ch. 2-3] |
+| differential equations: separable, integrating factor, characteristic roots, undetermined coefficients, variation of parameters | ode.rb | [BD12, ch. 2-4] |
 | inequalities by sign charts over exact real roots | inequalities.rb | textbook; roots from solve.rb |
 
 - [BD12] W. E. Boyce, R. C. DiPrima, *Elementary Differential Equations and
@@ -1365,6 +1608,10 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   *BIT* 20 (1980), 176-184.
 - [Bro05] M. Bronstein, *Symbolic Integration I: Transcendental Functions*,
   2nd ed., Springer 2005.
+- [Buc65] B. Buchberger, *Ein Algorithmus zum Auffinden der Basiselemente des
+  Restklassenringes nach einem nulldimensionalen Polynomideal*, Dissertation,
+  Universität Innsbruck 1965; English translation in *J. Symbolic Comput.*
+  41 (2006), 475-511.
 - [CLO15] D. Cox, J. Little, D. O'Shea, *Ideals, Varieties, and
   Algorithms*, 4th ed., Springer 2015.
 - [Coh93] H. Cohen, *A Course in Computational Algebraic Number Theory*,
@@ -1382,6 +1629,9 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 - [GS89] K. O. Geddes, L. Y. Stefanus, On the Risch-Norman integration
   method and its implementation in Maple, *Proc. ISSAC '89*, ACM 1989,
   212-217.
+- [Har16] G. H. Hardy, *The Integration of Functions of a Single Variable*,
+  2nd ed., Cambridge Tracts in Mathematics 2, Cambridge University Press
+  1916.
 - [Her72] C. Hermite, Sur l'intégration des fractions rationnelles, *Ann.
   Sci. École Norm. Sup.* (2) 1 (1872), 215-218.
 - [Hor08] P. Horn, *Faktorisierung in Schief-Polynomringen*, Dissertation,
@@ -1429,6 +1679,9 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   SYMSAC '76*, ACM 1976, 26-35.
 - [Zas69] H. Zassenhaus, On Hensel factorization I, *J. Number Theory* 1
   (1969), 291-311.
+- [Zor15] V. A. Zorich, *Mathematical Analysis I*, 2nd ed., Universitext,
+  Springer 2015, §5.7 (primitives of rational functions of x and a root,
+  of exp, and of sin and cos).
 
 ## 5. License
 
@@ -1513,32 +1766,34 @@ is rendered once. Settings, each also available as an environment variable:
 
 ## Appendix B. rcas-chat
 
-`bin/rcas-chat` is a second front end, in the style of Claude Code. You
-type Ruby and get the result as text plus, in iTerm2, the typeset picture.
-You type a question in plain language and Claude answers it by running rcas
-code in your session, showing every call and its result as it goes. The
-Ruby side works without any credentials; questions need the `anthropic` gem
-and an API key.
+`bin/rcas-chat` is a second front end: a terminal session with a prompt,
+history, saved sessions and typeset output. You type Ruby and get the
+result as text plus, in iTerm2, the typeset picture.
 
 ```
 $ bin/rcas-chat
 ╭─────────────────────────────────────────────────────────────╮
-│ ✻ rcas 0.1.0 - symbols are indeterminates; type Ruby or ...  │
-│   model    claude-opus-5                                    │
+│ ✻ rcas 0.1.0 - symbols are indeterminates; type Ruby        │
 │   output   both via katex                                   │
 │   session  20260912-143012-a1b2                             │
+│                                                             │
+│   try      e = (x + 1) * (1 - x)                            │
+│            e.expand                                         │
+│            ZZ[x].(x**6 - 1).factor                          │
 ╰─────────────────────────────────────────────────────────────╯
 ──────────────────────────────────────────────────────────────
 ❯ e = (x + 1) * (1 - x)
 => (x + 1)*(1 - x)
    [picture]
 ──────────────────────────────────────────────────────────────
-❯ factor x**6 - 1 over the integers
-⏺ rcas_eval(ZZ[x].(x**6 - 1).factor)
-  ⎿  => (-1 + x)*(1 + x)*(1 + x + x**2)*(1 - x + x**2)
+❯ ZZ[x].(x**6 - 1).factor
+=> (-1 + x)*(1 + x)*(1 + x + x**2)*(1 - x + x**2)
    [picture]
-⏺ Four irreducible factors over ZZ; over QQ the factorization is the same.
 ```
+
+Optionally, with the `anthropic` gem installed and an API key set, the
+same prompt also takes questions in plain language (see "Claude" below).
+Without them nothing in the program refers to it.
 
 ### Input
 
@@ -1562,6 +1817,20 @@ while Claude thinks and while one of its calls runs; a result that took
 longer than a second or two is followed by its time.
 
 ### Claude
+
+This section applies only when the `anthropic` gem is installed and
+`ANTHROPIC_API_KEY` (or a profile from `ant auth login`) is present; the
+banner then shows a `model` line, `/help` lists the commands below, and a
+line that is not Ruby is sent as a question. Claude answers by running
+rcas code in your session, showing every call and its result:
+
+```
+❯ factor x**6 - 1 over the integers
+⏺ rcas_eval(ZZ[x].(x**6 - 1).factor)
+  ⎿  => (-1 + x)*(1 + x)*(1 + x + x**2)*(1 - x + x**2)
+   [picture]
+⏺ Four irreducible factors over ZZ; over QQ the factorization is the same.
+```
 
 Questions are answered by `claude-opus-5` (change it with `/model`,
 `--model` or `RCAS_MODEL`). Claude has one tool, `rcas_eval`, which
@@ -1642,10 +1911,10 @@ Claude's calls, when the session is resumed.
 /scale N                          zoom factor for pictures
 /theme dark|light                 colour of the pictures
 /latex EXPR   /show EXPR   /png EXPR FILE
-/ask TEXT                         ask Claude (also: ? TEXT)
+/ask TEXT                         ask Claude (also: ? TEXT)        [with Claude configured]
 /vars                             the session's variables
 /assumptions   /forget [x ...]    variable domains
-/model [ID]   /fallbacks [on|off]   /cost   /compact
+/model [ID]   /fallbacks [on|off]   /cost   /compact   [with Claude configured]
 /sessions   /resume [NAME|ID|N]   /rename NAME   /reset   /save [FILE]
 /clear   /exit                    (Ctrl-D also leaves)
 !CMD                              run a shell command

@@ -15,7 +15,8 @@ module RCAS
 
     module AutoSymbol
       def method_missing(name, *args, &block)
-        return super unless args.empty? && block.nil? && name.match?(IDENTIFIER)
+        return super unless block.nil? && name.match?(IDENTIFIER)
+        return RCAS.unknown_function(name, args) || super unless args.empty?
 
         binding_for_session&.local_variable_set(name, name)
         name

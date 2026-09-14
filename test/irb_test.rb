@@ -29,7 +29,8 @@ class IrbTest < Minitest::Test
     assert_includes out, "pp + 1"
     assert_includes out, ":p"
     assert_includes out, "42", "Kernel.p still prints"
-    assert out.any? { |l| l.include?("undefined method `p'") }, "p(42) is not a printer here"
+    assert out.none? { |l| l.include?("undefined method") }, out.join("\n")
+    assert_includes out, "p(42)", "p(42) is the unknown function p applied to 42, not a printer"
   end
 
   def test_unicode_names_and_constants
@@ -47,8 +48,10 @@ class IrbTest < Minitest::Test
     assert_includes out, "2"
   end
 
-  def test_real_missing_methods_still_raise
-    out = run_session("foo(1)")
-    assert out.grep(/undefined method `foo'/).any?, out.join("\n")
+  def test_unknown_functions_and_real_missing_methods
+    out = run_session("foo(1)", "u(n + 1) + u(n)", 'foo("a")')
+    assert_includes out, "foo(1)", "an undefined name applied to a number is an unknown function"
+    assert_includes out, "u(n + 1) + u(n)"
+    assert out.grep(/undefined method `foo'/).any?, "other argument kinds still raise: #{out.join("\n")}"
   end
 end

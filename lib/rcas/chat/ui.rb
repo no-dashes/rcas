@@ -37,17 +37,22 @@ module RCAS
 
       # ---- banner -------------------------------------------------------------
 
+      # Without Claude configured, nothing here hints that it exists.
       def banner(model:, backend:, assistant:, session: nil)
+        tagline = assistant ? "type Ruby or ask a question" : "type Ruby"
         lines = [
-          "#{Style.paint('✻', :magenta, :bold)} #{Style.bold("rcas #{RCAS::VERSION}")} #{Style.dim('- symbols are indeterminates; type Ruby or ask a question')}",
-          "",
-          "  #{Style.dim('model')}    #{assistant ? model : "disabled #{Style.dim("(set ANTHROPIC_API_KEY to enable Claude, #{model})")}"}",
-          "  #{Style.dim('output')}   #{@mode}#{tex? ? Style.dim(" via #{backend}") : ''}",
-          "  #{Style.dim('help')}     /help   #{Style.dim('quit')} /exit or Ctrl-D"
+          "#{Style.paint('✻', :magenta, :bold)} #{Style.bold("rcas #{RCAS::VERSION}")} #{Style.dim("- symbols are indeterminates; #{tagline}")}",
+          ""
         ]
+        lines << "  #{Style.dim('model')}    #{model}" if assistant
+        lines << "  #{Style.dim('output')}   #{@mode}#{tex? ? Style.dim(" via #{backend}") : ''}"
+        lines << "  #{Style.dim('help')}     /help   #{Style.dim('quit')} /exit or Ctrl-D"
         lines << "  #{Style.dim('session')}  #{session}" if session
         lines << ""
-        lines << "  #{Style.dim('try')}      (x + 1) * (1 - x)     e.expand     factor x**6 - 1 over the integers"
+        examples = ["e = (x + 1) * (1 - x)", "e.expand", "ZZ[x].(x**6 - 1).factor"]
+        examples << "factor x**6 - 1 over the integers" if assistant
+        lines << "  #{Style.dim('try')}      #{examples.first}"
+        examples.drop(1).each { |ex| lines << "           #{ex}" }
         box(lines)
       end
 

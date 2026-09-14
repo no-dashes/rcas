@@ -13,7 +13,8 @@ class ManualTest < Minitest::Test
     include RCAS::Constants
 
     def method_missing(name, *args, &block)
-      return super unless args.empty? && block.nil? && name.match?(/\A[a-z_][a-z0-9_]*\z/)
+      return super unless block.nil? && name.match?(/\A[a-z_][a-z0-9_]*\z/)
+      return RCAS.unknown_function(name, args) || super unless args.empty?
       name
     end
 

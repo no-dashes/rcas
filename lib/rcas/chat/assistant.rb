@@ -104,8 +104,13 @@ module RCAS
       # Credentials are resolved by the SDK (ANTHROPIC_API_KEY, or a profile
       # from `ant auth login`); we only know for sure once a request is made.
       def available?
-        return false unless self.class.gem_available?
         return true if @runner_factory || @client
+        self.class.configured?
+      end
+
+      # Gem installed and credentials present: only then does the chat mention Claude at all.
+      def self.configured?
+        return false unless gem_available?
         !ENV["ANTHROPIC_API_KEY"].to_s.empty? || !ENV["ANTHROPIC_AUTH_TOKEN"].to_s.empty? ||
           File.directory?(File.join(Dir.home, ".config", "anthropic"))
       end

@@ -75,8 +75,11 @@ class ChatWorkspaceTest < Minitest::Test
     assert_equal "hi\n", out
   end
 
-  def test_missing_methods_with_arguments_still_raise
-    assert_raises(NoMethodError) { @ws.eval("foo(1)") }
+  def test_unknown_functions_and_missing_methods
+    assert_equal "foo(1)", @ws.eval("foo(1)").first.to_s, "an undefined name applied to an expression is an unknown function"
+    assert_raises(NoMethodError) { @ws.eval('foo("a")') }
+    assert @ws.undefined_calls?("what is x squared")
+    refute @ws.undefined_calls?("sin(x).diff(x)")
   end
 
   def test_ruby_detection
@@ -141,7 +144,7 @@ class ChatReplTest < Minitest::Test
     assert_includes out, "=> 1 - x**2"
     assert_includes out, "\n-2 x\n"
     assert_match(/^  e\s+\(x \+ 1\)\*\(1 - x\)$/, out)
-    assert_includes out, "NoMethodError"
+    assert_includes out, "=> foo(1)"
     assert_includes out, "unknown command /unknown"
     assert_includes out, "hello"
     assert_includes out, "\\frac{1}{2 \\sqrt{x}}"
@@ -159,10 +162,11 @@ class ChatReplTest < Minitest::Test
     assert_includes out, "=> [ -2    1]\n   [3/2 -1/2]"
   end
 
-  def test_questions_without_claude_are_explained
+  def test_prose_without_claude_is_just_ruby
     _, out = repl("factor x**6 - 1 over the integers\n")
-    assert_includes out, "not Ruby"
-    assert_includes out, "ANTHROPIC_API_KEY"
+    assert_includes out, "SyntaxError", "the sentence is treated as the Ruby it is"
+    refute_includes out, "ANTHROPIC_API_KEY"
+    refute_includes out, "Claude"
   end
 
   def test_questions_go_to_claude_through_the_tool
@@ -231,6 +235,47 @@ class ChatReplTest < Minitest::Test
     assert_includes a.context, "variables: x"
     assert_includes a.context, "e = x + 1"
     assert_includes a.context, "x in ZZ"
+  end
+end
+
+# Without the gem and a key the chat must not mention Claude anywhere.
+class ChatWithoutClaudeTest < Minitest::Test
+  def setup
+    RCAS::Chat::Style.enabled = false
+    RCAS::Render.inline = false
+  end
+
+  def teardown
+    RCAS::Chat::Style.enabled = nil
+    RCAS::Render.inline = nil
+  end
+
+  def run_repl(input, available:)
+    out = StringIO.new
+    factory = ->(ws, ui, model) { RCAS::Chat::Assistant.new(ws, ui, model: model).tap { |a| a.define_singleton_method(:available?) { available } } }
+    RCAS::Chat::REPL.new(input: StringIO.new(input), output: out, assistant_factory: factory, persist: false, mode: :text).run
+    out.string
+  end
+
+  def test_offline_shows_a_plain_cas
+    out = run_repl("/help\n/model\n/settings\nwhat is )\n? hello\n", available: false)
+    ["Claude", "ANTHROPIC", "/ask", "ask a question", "question for", "/fallbacks", "/cost", "/compact", "over the integers"].each do |word|
+      refute_includes out, word, "offline output mentions #{word.inspect}"
+    end
+    refute_match(/model\s{2,}\S/, out, "no model line in banner or settings")
+    assert_includes out, "unknown command /model"
+    assert_includes out, "SyntaxError", "a non-Ruby line is an ordinary syntax error"
+    assert_includes out, "e = (x + 1) * (1 - x)", "the banner suggests Ruby instead of a question"
+    assert_includes out, "ZZ[x].(x**6 - 1).factor"
+    assert_includes run_repl("/ask hello\n", available: false), "unknown command /ask"
+  end
+
+  def test_online_shows_the_assistant
+    out = run_repl("/help\n", available: true)
+    assert_includes out, "/ask TEXT"
+    assert_includes out, "question for Claude"
+    assert_match(/model\s{2,}claude/, out)
+    assert_includes out, "over the integers"
   end
 end
 
@@ -395,7 +440,7 @@ class ChatUsageTest < Minitest::Test
   def test_no_hint_for_domain_errors_or_plain_ruby
     assert_nil RCAS::Chat::Usage.hint(error_from("ZZ[x].(x - 1) / (2*x - 2)"))
     assert_nil RCAS::Chat::Usage.hint(error_from("[1, 2].first(1, 2)"))
-    assert_nil RCAS::Chat::Usage.hint(error_from("foo(1)"))
+    assert_nil RCAS::Chat::Usage.hint(error_from(%q{foo("a")}))
   end
 
   def test_repl_prints_the_hint

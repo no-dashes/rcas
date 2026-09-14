@@ -20,6 +20,7 @@ module RCAS
       end
     end
 
+    # sqrt(8) is 2*sqrt(2); sqrt(-4) is 2*i; sqrt(x) stays sqrt(x)
     def sqrt(arg)
       root = Expression.lift(arg)**Rational(1, 2)
       root.variables.empty? ? root.simplify : root
@@ -36,8 +37,10 @@ module RCAS
       r.variables.empty? ? r.simplify : r
     end
 
+    # cbrt(8) is 2; cbrt(2) stays 2**(1/3)
     def cbrt(x) = root(x, 3)
 
+    # binomial(5, 2) is 10; binomial(n, 2) stays symbolic (expand it with expand)
     def binomial(n, k) = Functions.fold(Fn.new(:binomial, [n, k]))
 
     # GF(7), GF(8), GF(9, :b), GF(3, 4): finite fields
@@ -61,6 +64,12 @@ module RCAS
       dir = opts.delete(:dir) || dir
       x, a, = Functions.point_arguments(x, a, nil, opts, "limit")
       Limits.limit(f, x, a, dir)
+    end
+
+    # product(k, k, 1, n) or product(k, k: 1..n): n!; closed forms through factorials and gamma
+    def product(f, k = nil, from = nil, to = nil, **range)
+      k, from, to = Functions.range_arguments(k, from, to, range, "product", discrete: true)
+      Products.product(f, k, from, to)
     end
 
     # sum(k**2, k, 1, n) or sum(k**2, k: 1..n); an endless range means infinity
@@ -104,7 +113,15 @@ module RCAS
       return NumberTheory.factor(value) if value.is_a?(Integer) || value.is_a?(Rational)
       obj.is_a?(Polynomial) ? obj.factor(extension: extension) : Expression.lift(obj).factor(extension: extension)
     end
+    # minpoly(sqrt(2) + 1, x): the minimal polynomial of an algebraic number
     def minpoly(expr, var = :x) = Expression.lift(expr).minpoly(var)
+
+    # diff(f, x) or diff(f, x, 2): derivatives
+    def diff(f, x, n = 1) = Expression.lift(f).diff(x, n)
+    # subs(f, x => 2), subs(f, x: 2) or subs(f, x**2, z): substitution
+    def subs(f, pattern, replacement = nil) = Expression.lift(f).subs(pattern, replacement)
+    # evalf(pi), evalf(sqrt(2)*x, x: 3): the numeric value as a Float
+    def evalf(f, **bindings) = Expression.lift(f).evalf(**bindings)
 
     # integrate(x**2 * exp(x), x); definite: integrate(x**2, x, 0, 1) or integrate(x**2, x: 0..1)
     def integrate(expr, var = nil, from = nil, to = nil, **range)
@@ -129,6 +146,20 @@ module RCAS
     def expand(f) = Expression.lift(f).expand
     def cancel(f) = Expression.lift(f).cancel
     def rationalize(f) = Expression.lift(f).rationalize
+
+    # resultant(f, g, x), discriminant(f, x): via the Sylvester matrix; other symbols are parameters
+    def resultant(f, g, x = nil)
+      _, (pf, pg) = Groebner.lift([f, g], x && [x])
+      pf.resultant(pg, x && Expression.lift(x).name).to_expr
+    end
+
+    def discriminant(f, x = nil)
+      pf = Groebner.lift([f], x && [x]).last.first
+      pf.discriminant(x && Expression.lift(x).name).to_expr
+    end
+
+    # interpolate([[0, 1], [1, 3], [2, 7]], x): the polynomial through the points (Newton)
+    def interpolate(points, x) = Interpolate.newton(points, x)
 
     # numer(f), denom(f): numerator and denominator of the normal form
     def numer(f) = RationalFunction.numer(f)
@@ -172,6 +203,31 @@ module RCAS
     def eq(lhs, rhs) = Equation.new(lhs, rhs)
     def solve(target, vars = nil) = Solve.solve(target, vars)
 
+    # groebner([x**2 + y**2 - 1, x - y], [x, y]): reduced Gröbner basis; order: :lex (default), :grlex, :grevlex
+    def groebner(polys, vars = nil, order: :lex) = Groebner.groebner(polys, vars, order: order)
+    # reduce(f, basis, [x, y]): normal form of f modulo the basis; 0 exactly when f lies in the ideal
+    def reduce(f, basis, vars = nil, order: :lex) = Groebner.normal_form(f, basis, vars, order: order)
+
+    # rsolve(eq(u(n + 2), u(n + 1) + u(n)), u, n, init: {0 => 0, 1 => 1}): linear recurrences with constant coefficients
+    def rsolve(equation, u, n, init: {}) = Recurrence.rsolve(equation, u, n, init: init)
+
+    # re(z), im(z), conj(z), arg(z): real part, imaginary part, conjugate, argument (variables count as real once assumed so)
+    def re(z) = ComplexParts.re(z)
+    def im(z) = ComplexParts.im(z)
+    def conj(z) = ComplexParts.conj(z)
+    def arg(z) = ComplexParts.arg(z)
+
+    # floor(7/2r), ceil(x), round(x): rounding; mod(a, m): a modulo m. Symbolic arguments stay unevaluated.
+    def floor(x) = Functions.fold(Fn.new(:floor, [x]))
+    def ceil(x) = Functions.fold(Fn.new(:ceil, [x]))
+    def round(x) = Functions.fold(Fn.new(:round, [x]))
+    def mod(a, m) = Functions.fold(Fn.new(:mod, [a, m]))
+
+    # bernoulli(n), fibonacci(n), harmonic(n): exact values of the classical sequences
+    def bernoulli(n) = Functions.fold(Fn.new(:bernoulli, [n]))
+    def fibonacci(n) = Functions.fold(Fn.new(:fibonacci, [n]))
+    def harmonic(n) = Functions.fold(Fn.new(:harmonic, [n]))
+
     # D(y, x) is the derivative of the unknown function y; dsolve solves ODEs.
     def D(expr, var, order = 1) = Derivative.new(expr, var, order)
     def dsolve(equation, y, x) = ODE.dsolve(equation, y, x)
@@ -181,9 +237,11 @@ module RCAS
     def forget(*names) = RCAS.forget(*names)
     def assumptions = RCAS.assumptions
 
-    # vector(QQ, 1, 2, 3) or vector(1, 2, 3) with the domain inferred.
+    # vector(QQ, 1, 2, 3), vector(1, 2, 3) or vector([1, 2, 3]) with the domain inferred.
     def vector(*args)
-      domain = args.first.is_a?(Domain) ? args.shift : Functions.infer_domain(args)
+      domain = args.first.is_a?(Domain) ? args.shift : nil
+      args = args.first if args.size == 1 && args.first.is_a?(Array)
+      domain ||= Functions.infer_domain(args)
       domain.vector(*args)
     end
 
@@ -210,6 +268,11 @@ module RCAS
       if fn.name == :binomial && fn.args.size == 2
         n, k = fn.args
         return Combinatorics.binomial_value(n, k) || fn
+      end
+      if fn.name == :mod && fn.args.size == 2
+        a, m = fn.args
+        return fn unless a.is_a?(Num) && m.is_a?(Num) && a.value.real? && m.value.real? && !m.value.zero?
+        return Num.new(Simplify.normalize_number(a.value % m.value))
       end
       return fn unless fn.args.size == 1
       arg = fn.args.first
@@ -245,6 +308,16 @@ module RCAS
       in [:cosh, Num => n] if n.zero? then Num.new(1)
       in [:exp, Num => n] if n.zero? then Num.new(1)
       in [:log, Num => n] if n.one?  then Num.new(0)
+      in [:floor, Num => n] if n.value.real? then Num.new(n.value.floor)
+      in [:ceil, Num => n] if n.value.real? then Num.new(n.value.ceil)
+      in [:round, Num => n] if n.value.real? then Num.new(n.value.round)
+      in [:re, Num => n] then Num.new(Simplify.normalize_number(n.value.real))
+      in [:im, Num => n] then Num.new(Simplify.normalize_number(n.value.imaginary))
+      in [:conj, Num => n] then Num.new(Simplify.normalize_number(n.value.conj))
+      in [:arg, Num => n] then ComplexParts.arg(n)
+      in [:bernoulli, Num => n] if n.value.is_a?(Integer) && n.value >= 0 then Num.new(Simplify.normalize_number(Summation.bernoulli(n.value)))
+      in [:fibonacci, Num => n] if n.value.is_a?(Integer) then Num.new(Combinatorics.fibonacci(n.value))
+      in [:harmonic, Num => n] if n.value.is_a?(Integer) && n.value >= 0 then Num.new(Simplify.normalize_number((1..n.value).sum(0r) { |k| Rational(1, k) }))
       in [:exp, Fn => inner] if inner.name == :log then inner.args.first
       in [:log, Fn => inner] if inner.name == :exp then inner.args.first
       else fn
@@ -262,11 +335,20 @@ module RCAS
       when :exp
         r = Trig.imaginary_pi_multiple(arg) or return nil
         Trig.exp_i_pi(r)
-      when :asin then Trig.asin_exact(arg)
+      when :asin, :atan
+        return nil unless arg.is_a?(Num) || arg.is_a?(Pow) || arg.is_a?(Mul) || arg.is_a?(Div)
+        if arg.is_a?(Num) && arg.value.real? && arg.value.negative? # asin(-1/2) = -asin(1/2)
+          v = exact_value(name, Num.new(-arg.value)) or return nil
+          return Neg.new(v).simplify
+        end
+        name == :asin ? Trig.asin_exact(arg) : Trig.atan_exact(arg)
       when :acos
+        if arg.is_a?(Num) && arg.value.real? && arg.value.negative? # acos(-v) = pi - acos(v)
+          v = exact_value(:acos, Num.new(-arg.value)) or return nil
+          return (PI - v).simplify
+        end
         v = Trig.asin_exact(arg) or return nil
         (PI / 2 - v).simplify
-      when :atan then Trig.atan_exact(arg)
       when :abs
         return Num.new(arg.value.abs) if arg.is_a?(Num)
         d = arg.domain
@@ -304,6 +386,14 @@ module RCAS
   end
 
   extend Functions
+
+  # u(n + 1), f(x) in a session: an undefined name applied to expressions is
+  # an unknown function (the notation rsolve uses); nil for other arguments,
+  # so the caller can raise NoMethodError as usual.
+  def self.unknown_function(name, args)
+    return nil unless args.all? { |a| a.is_a?(Expression) || a.is_a?(Numeric) || a.is_a?(Symbol) }
+    Fn.new(name, args.map { |a| Expression.lift(a) })
+  end
 
   # Kernel's one- and two-letter printers (p, pp, and j, jj from the JSON
   # library) would otherwise capture the short names most wanted as

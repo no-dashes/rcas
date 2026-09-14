@@ -9,6 +9,10 @@ class LatexTest < Minitest::Test
     RCAS.forget
   end
 
+  def teardown
+    RCAS.forget
+  end
+
   def x = :x
   def y = :y
 

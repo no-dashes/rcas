@@ -1,5 +1,6 @@
 <p align="center">
   <img src="assets/rcas-logo.jpeg" alt="rcas - Ruby Computer Algebra System" width="480"><br>
+  <em>Reinventing the wheel instead of building a CAS</em>
 </p>
 
 # rcas
@@ -43,16 +44,17 @@ Optional, only for the typeset output and the chat front end:
   plus `npm install` in the project directory (fetches KaTeX, see
   `package.json`) and a local Google Chrome / Chromium, or a TeX
   installation with `latex` and `dvipng`. Pictures display inline in iTerm2.
-- Questions in plain language in `bin/rcas-chat`: the `anthropic` gem and
-  credentials in `ANTHROPIC_API_KEY` (or a profile from `ant auth login`).
-  Without them the Ruby side of the chat still works.
+- Optional and off unless you set it up: with the `anthropic` gem and
+  credentials in `ANTHROPIC_API_KEY` (or a profile from `ant auth login`),
+  `bin/rcas-chat` also answers questions in plain language. Without them
+  the chat is a plain CAS front end and shows nothing about it.
 
 ## Running it
 
 ```
 $ git clone <this repository> rcas && cd rcas
 $ bin/rcas          # irb with rcas loaded: bare names are variables
-$ bin/rcas-chat     # terminal front end with typeset output and Claude
+$ bin/rcas-chat     # terminal front end with typeset output
 ```
 
 Inside `bin/rcas`, an undefined bare name such as `x` (or `α`, `β₁`: any
@@ -107,9 +109,7 @@ reset` deletes the file. The file is plain JSON:
   "output": "latex",
   "backend": "katex",
   "scale": 1.5,
-  "theme": "dark",
-  "model": "claude-opus-5",
-  "fallbacks": true
+  "theme": "dark"
 }
 ```
 
@@ -119,8 +119,8 @@ reset` deletes the file. The file is plain JSON:
 | typesetting backend `katex` or `latex` (default: whichever is installed, KaTeX first) | `RCAS_TEX_BACKEND` | `--backend=katex\|latex` | `/backend katex\|latex` |
 | picture zoom, colour theme | `RCAS_TEX_SCALE`, `RCAS_TEX_THEME=light\|dark` | | `/scale N`, `/theme dark\|light` |
 | line width for wrapping long results (default: terminal width) | `RCAS_TEX_WRAP`, `COLUMNS` | | |
-| Claude model (default `claude-opus-5`), server-side fallback on refusal | `RCAS_MODEL`, `RCAS_FALLBACKS=0` | `--model ID` | `/model ID`, `/fallbacks on\|off` |
-| credentials for questions | `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` | | |
+| plain-language questions (optional, see above): credentials | `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` | | |
+| their model (default `claude-opus-5`) and server-side fallback on refusal; settings keys `model`, `fallbacks` | `RCAS_MODEL`, `RCAS_FALLBACKS=0` | `--model ID` | `/model ID`, `/fallbacks on\|off` |
 | helper binaries for KaTeX rendering | `RCAS_NODE`, `RCAS_CHROME`, `RCAS_KATEX_DIR` | | |
 | colours off | `NO_COLOR` | `--no-color` | |
 | location of settings, history and sessions | `RCAS_HOME` (default `~/.rcas`) | | |

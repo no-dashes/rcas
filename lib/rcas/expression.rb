@@ -182,6 +182,7 @@ module RCAS
       when Integral then e.definite? ? Integrate.definite(e.integrand, e.var, e.from, e.to) : Integrate.integrate(e.integrand, e.var)
       when Derivative then e.expr.is_a?(Var) ? e : e.expr.diff(e.var, e.order)
       when Sum then Summation.sum(e.term, e.var, e.from, e.to)
+      when Product then Products.product(e.term, e.var, e.from, e.to)
       when Limit then Limits.limit(e.expr, e.var, e.point)
       else e
       end

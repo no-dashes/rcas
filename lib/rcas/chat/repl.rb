@@ -41,6 +41,9 @@ module RCAS
         "!CMD" => "run a shell command"
       }.freeze
 
+      # Listed and accepted only when Claude is configured.
+      ASSISTANT_COMMANDS = %w[/ask /model /fallbacks /cost /compact].freeze
+
       attr_reader :workspace, :ui, :assistant, :session
 
       # +assistant_factory+ builds the Assistant for a workspace and UI; tests
@@ -128,7 +131,7 @@ module RCAS
         case text
         when %r{\A/} then command(text)
         when /\A!/   then shell(text[1..])
-        when /\A\?\s*/ then ask(text.sub(/\A\?\s*/, ""))
+        when /\A\?\s*/ then @assistant.available? ? ask(text.sub(/\A\?\s*/, "")) : route(text)
         else route(text)
         end
       rescue Interrupt
@@ -138,12 +141,14 @@ module RCAS
         persist
       end
 
-      # Ruby when it parses and runs; otherwise a question for Claude.
+      # Ruby when it parses and runs; otherwise a question for Claude, or,
+      # without Claude, Ruby's own syntax error.
       def route(text)
-        unless @workspace.ruby?(text)
-          return ask(text) if @assistant.available?
-          return @ui.error("That is not Ruby, and Claude is not available (set ANTHROPIC_API_KEY to ask questions).")
-        end
+        return ask(text) if !@workspace.ruby?(text) && @assistant.available?
+        # "what is x squared" parses as what(is(x(squared))); since an unknown
+        # name applied to arguments is a symbolic function, route a sentence
+        # that calls undefined names to Claude before evaluating it.
+        return ask(text) if prose?(text) && @assistant.available? && @workspace.undefined_calls?(text)
         evaluate(text)
       rescue NameError, NoMethodError, TypeError, ArgumentError => e
         if prose?(text) && @assistant.available?
@@ -179,10 +184,7 @@ module RCAS
       end
 
       def ask(question, note: nil)
-        unless @assistant.available?
-          @ui.error("Claude is not available: set ANTHROPIC_API_KEY (or run `ant auth login`)#{Assistant.gem_available? ? '' : ' and gem install anthropic'}.")
-          return
-        end
+        return unless @assistant.available?
         reply = @assistant.ask(question, note: note)
         transcript << [:assistant, reply] if reply
       rescue Error => e
@@ -265,7 +267,7 @@ module RCAS
           return @ui.error("usage: /png EXPR FILE.png") if file.nil?
           Render.png(@workspace.eval(code).first, File.expand_path(file))
           @ui.info("wrote #{file}")
-        when "/ask" then ask(arg)
+        when "/ask" then @assistant.available? ? ask(arg) : @ui.error("unknown command /ask; try /help")
         when "/vars"
           locals = @workspace.locals
           return @ui.info("no variables yet") if locals.empty?
@@ -277,16 +279,7 @@ module RCAS
         when "/forget"
           RCAS.forget(*arg.split.map(&:to_sym))
           @ui.info("forgot #{arg.empty? ? 'all assumptions' : arg}")
-        when "/model"
-          @assistant.model = arg unless arg.empty?
-          @ui.info("model: #{@assistant.model}")
-        when "/fallbacks"
-          @assistant.fallbacks = (arg == "on") unless arg.empty?
-          @ui.info("fallbacks: #{@assistant.fallbacks ? "on (#{Assistant::FALLBACK_MODEL} on refusal)" : 'off'}")
-        when "/cost" then @ui.puts(@assistant.cost.lines.map { |l| "  #{l}" }.join)
-        when "/compact"
-          @assistant.reset
-          @ui.info("conversation cleared; variables kept")
+        when "/model", "/fallbacks", "/cost", "/compact" then assistant_command(name, arg)
         when "/sessions" then sessions
         when "/resume" then resume_command(arg)
         when "/rename", "/title"
@@ -311,10 +304,28 @@ module RCAS
       end
 
       def help
-        width = COMMANDS.keys.map(&:size).max
-        COMMANDS.each { |k, v| @ui.puts "  #{Style.cyan(k.ljust(width))}  #{v}" }
+        commands = COMMANDS.reject { |k, _| !@assistant.available? && ASSISTANT_COMMANDS.include?(k.split.first) }
+        width = commands.keys.map(&:size).max
+        commands.each { |k, v| @ui.puts "  #{Style.cyan(k.ljust(width))}  #{v}" }
         @ui.puts
-        @ui.info("Anything else is Ruby (x + 1, e.expand, ZZ[x].(x**2 - 1).factor) or, if it is not Ruby, a question for Claude.")
+        tail = @assistant.available? ? " or, if it is not Ruby, a question for Claude" : ""
+        @ui.info("Anything else is Ruby (x + 1, e.expand, ZZ[x].(x**2 - 1).factor)#{tail}.")
+      end
+
+      def assistant_command(name, arg)
+        return @ui.error("unknown command #{name}; try /help") unless @assistant.available?
+        case name
+        when "/model"
+          @assistant.model = arg unless arg.empty?
+          @ui.info("model: #{@assistant.model}")
+        when "/fallbacks"
+          @assistant.fallbacks = (arg == "on") unless arg.empty?
+          @ui.info("fallbacks: #{@assistant.fallbacks ? "on (#{Assistant::FALLBACK_MODEL} on refusal)" : 'off'}")
+        when "/cost" then @ui.puts(@assistant.cost.lines.map { |l| "  #{l}" }.join)
+        when "/compact"
+          @assistant.reset
+          @ui.info("conversation cleared; variables kept")
+        end
       end
 
       def output(arg)
@@ -473,15 +484,15 @@ module RCAS
           end
         when "--no-color" then Style.enabled = false
         when "-h", "--help"
+          claude = Assistant.configured?
           output.puts <<~USAGE
             usage: rcas-chat [options]
               -c, --continue          continue the most recent session
               -r, --resume [NAME|ID]  resume a session by name or id (pick from a list without an argument)
-              --model ID              Claude model (default #{Assistant::DEFAULT_MODEL}, or RCAS_MODEL)
-              --output=MODE           text | tex | both | latex   (--tex, --no-tex for both / text)
+            #{claude ? "  --model ID              Claude model (default #{Assistant::DEFAULT_MODEL}, or RCAS_MODEL)\n" : ''}  --output=MODE           text | tex | both | latex   (--tex, --no-tex for both / text)
               --backend=katex|latex   typesetting backend (or RCAS_TEX_BACKEND)
               --no-color
-            Ruby is evaluated; anything else is a question for Claude (needs ANTHROPIC_API_KEY).
+            #{claude ? 'Ruby is evaluated; anything else is a question for Claude.' : 'Ruby is evaluated and the results are typeset.'}
           USAGE
           return 0
         else

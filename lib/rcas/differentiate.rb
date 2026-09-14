@@ -16,7 +16,7 @@ module RCAS
       when Mul then Add.new(Mul.new(diff(expr.left, var), expr.right), Mul.new(expr.left, diff(expr.right, var)))
       when Div then quotient(expr, var)
       when Pow then power(expr, var)
-      when Fn  then chain(expr, var)
+      when Fn  then %i[re im conj].include?(expr.name) ? Fn.new(expr.name, [diff(expr.args.first, var)]) : chain(expr, var)
       when Integral
         if expr.definite?
           [expr.from, expr.to].any? { |c| c.variables.include?(var.name) } ? raise(NotImplementedError, "derivative of a definite integral with variable bounds") : Num.new(0)

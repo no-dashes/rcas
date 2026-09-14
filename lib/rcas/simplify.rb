@@ -218,6 +218,14 @@ module RCAS
         coeff = coeff.imaginary
       end
 
+      # 2**(-1/2) => 2**(1/2)/2, 2**(3/2) => 2*2**(1/2): a positive integer base keeps a
+      # fractional exponent in (0, 1); the integer part moves into the coefficient.
+      factors = factors.to_h do |base, exp|
+        next [base, exp] unless base.is_a?(Num) && base.value.is_a?(Integer) && base.value.positive? && exp.is_a?(Rational) && exp.floor != 0
+        m = exp.floor
+        coeff = normalize_number(coeff * Rational(base.value)**m)
+        [base, exp - m]
+      end
       numerator, denominator = [], []
       factors.sort_by { |base, _| factor_key(base) }.each do |base, exp|
         next if exp.is_a?(Numeric) && exp.zero?
