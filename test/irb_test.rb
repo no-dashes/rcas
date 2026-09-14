@@ -9,8 +9,8 @@ class IrbTest < Minitest::Test
 
   # Returns the result lines irb printed. Without a tty irb echoes each
   # input line followed by its inspected value, with no "=> " prefix.
-  def run_session(*lines)
-    out, _err, status = Open3.capture3(BIN, stdin_data: lines.join("\n") + "\n")
+  def run_session(*lines, env: {})
+    out, _err, status = Open3.capture3(env, BIN, stdin_data: lines.join("\n") + "\n")
     assert status.success?, out
     out.lines.map(&:chomp)
   end
@@ -40,6 +40,21 @@ class IrbTest < Minitest::Test
     assert_includes out, "pi**2/6"
     assert_includes out, "α + pi"
     assert_includes out, "oo"
+  end
+
+  def test_results_are_kept_in_the_table
+    out = run_session("x**2 - 1", "factor(_r[1])", "_r[-1].expand", "_r")
+    assert_includes out, "(-1 + x)*(1 + x)", "_r[1] is the first result"
+    assert_includes out, "-1 + x**2", "_r[-1] is the last one"
+    assert_includes out, "[1] x**2 - 1", "the table prints itself, one result per line"
+    assert_includes out, "[3] -1 + x**2"
+  end
+
+  def test_the_numbers_replace_the_arrow_on_request
+    out = run_session("x + 1", "_r[1] * 2", env: { "RCAS_NUMBERED" => "1" })
+    assert_includes out, "[1] x + 1"
+    assert_includes out, "[2] (x + 1)*2"
+    assert out.none? { |l| l.start_with?("=>") }, out.join("\n")
   end
 
   def test_functions_are_available_bare

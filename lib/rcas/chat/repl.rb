@@ -21,6 +21,7 @@ module RCAS
         "/theme [dark|light]" => "colour of typeset output for your terminal background",
         "/plotstyle [text|image]" => "how plots are shown: braille art or a picture",
         "/unicode [on|off]" => "print ℤ, π and ∞ instead of ZZ, pi and oo",
+        "/numbered [on|off]" => "number the results ([3] instead of =>); _r[3] reaches them either way",
         "/latex EXPR" => "print the LaTeX source of a Ruby expression",
         "/show EXPR" => "typeset a Ruby expression regardless of the output mode",
         "/png EXPR FILE" => "write the typeset expression to a PNG file",
@@ -262,6 +263,7 @@ module RCAS
           @ui.info("theme #{arg}")
         when "/plotstyle" then plotstyle(arg)
         when "/unicode" then unicode(arg)
+        when "/numbered" then numbered(arg)
         when "/latex" then @ui.puts(LaTeX.of(@workspace.eval(arg).first))
         when "/show"
           value, = @workspace.eval(arg)
@@ -377,6 +379,12 @@ module RCAS
         return @ui.error("usage: /unicode on|off") unless arg.empty? || %w[on off].include?(arg)
         RCAS.unicode = (arg == "on") unless arg.empty?
         @ui.info("unicode #{RCAS.unicode? ? 'on' : 'off'}")
+      end
+
+      def numbered(arg)
+        return @ui.error("usage: /numbered on|off") unless arg.empty? || %w[on off].include?(arg)
+        RCAS.numbered = (arg == "on") unless arg.empty?
+        @ui.info("numbered #{RCAS.numbered? ? 'on' : 'off'} (results are kept in _r either way)")
       end
 
       def output(arg)

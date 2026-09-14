@@ -143,6 +143,34 @@ betroffen.
   die Handbuchabschnitte, die ihn behandeln. `bin/rcas-chat` hat dasselbe
   unter `/help factor`.
 
+**Jedes Ergebnis wird aufgehoben.** `_r[-1]` ist das vorige Ergebnis,
+`_r[-2]` das davor, `_r[3]` das dritte der Sitzung und `_r` die ganze
+Tabelle. Das `_` von irb (der letzte Wert) funktioniert weiterhin.
+
+```
+rcas> (x + 1)*(x - 1)
+=> (x + 1)*(x - 1)
+rcas> expand(_r[-1])
+=> -1 + x**2
+rcas> _r[-1] - _r[-2]
+=> -1 + x**2 - (x + 1)*(x - 1)
+```
+
+`_r.clear` vergisst sie und beginnt die Nummerierung von vorn.
+`RCAS.numbered = true` in `bin/rcas` (oder `RCAS_NUMBERED=1`, oder
+`/numbered on` in `bin/rcas-chat`) druckt statt des Pfeils die Nummer des
+Ergebnisses; in einer langen Sitzung kann man sich so leichter darauf
+beziehen:
+
+```
+❯ /numbered on
+  numbered on (results are kept in _r either way)
+❯ (x + 1)*(x - 1)
+[1] (x + 1)*(x - 1)
+❯ expand(_r[1])
+[2] -1 + x**2
+```
+
 Ohne den Starter: `require "rcas"` und dann `:x`, `RCAS::ZZ` oder
 `include RCAS::Sets`, sowie `RCAS.sin(:x)` / `RCAS.assume(x: RCAS::ZZ)`.
 Blöcke für `hold` funktionieren in Dateien und in irb; auch mit `eval`
@@ -2292,6 +2320,7 @@ Funktionen der obersten Ebene (bloß in `bin/rcas`, sonst `RCAS.name`):
 | lineare Algebra | `vector matrix gram_schmidt least_squares project orthogonal?` |
 | Festhalten | `hold evaluate` |
 | Hilfe | `doc` (`/help NAME` in rcas-chat) |
+| Sitzung | `_r` (die nummerierten Ergebnisse), `_` (irbs letzter Wert) |
 
 Methoden auf Ausdrücken: `simplify expand factor cancel rationalize collect
 numer denom apart gcd lcm quo rem divmod subs call evalf to_f diff integrate
@@ -2336,6 +2365,7 @@ lib/rcas/linear_algebra.rb  orthogonality, projections and least squares
 lib/rcas/laplace.rb         the Laplace transform and its inverse
 lib/rcas/plot.rb            function plotting: braille art, SVG, PNG
 lib/rcas/docs.rb            doc(name): signatures and comments read from the source
+lib/rcas/results.rb         _r: the numbered results of a session
 lib/rcas/background.rb      the mathematics behind each name, its sources and Wikipedia links
 lib/rcas/solve.rb           equations, solve, systems
 lib/rcas/groebner.rb        Gröbner bases: Buchberger, normal forms, monomial orders
@@ -2817,6 +2847,7 @@ Aufrufe eingeschlossen.
 /theme dark|light                 colour of the pictures
 /plotstyle [text|image]           how plots are shown
 /unicode [on|off]                 print ℤ, π and ∞ instead of ZZ, pi and oo
+/numbered [on|off]                number the results ([3] instead of =>)
 /latex EXPR   /show EXPR   /png EXPR FILE
 /ask TEXT                         ask Claude (also: ? TEXT)        [with Claude configured]
 /vars                             the session's variables

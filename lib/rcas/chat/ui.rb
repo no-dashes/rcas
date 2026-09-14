@@ -98,12 +98,15 @@ module RCAS
       end
 
       def result(value)
+        Results.record(value) # `_r[3]` reaches the third result of the session
         return if value.is_a?(Plot) && plot_picture(value)
         show_text = @mode != :tex || !typesettable?(value) || !Render.inline?(@out)
         if show_text
           lines = text_of(value).lines.map(&:chomp)
-          puts "#{Style.dim('=>')} #{Style.green(lines.first.to_s)}"
-          lines.drop(1).each { |l| puts "   #{Style.green(l)}" }
+          mark = Results.mark
+          indent = " " * (mark ? mark.length + 1 : 0)
+          puts "#{mark ? "#{Style.dim(mark)} " : ''}#{Style.green(lines.first.to_s)}"
+          lines.drop(1).each { |l| puts "#{indent}#{Style.green(l)}" }
         end
         case @mode
         when :tex, :both then typeset(value)

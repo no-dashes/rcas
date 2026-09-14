@@ -13,7 +13,7 @@ module RCAS
     # session. `/settings save` writes the current values back.
     module Settings
       FILE = File.join(HOME, "settings.json")
-      KEYS = %w[output backend scale theme wrap plotstyle unicode model fallbacks].freeze
+      KEYS = %w[output backend scale theme wrap plotstyle unicode numbered model fallbacks].freeze
 
       module_function
 
@@ -47,6 +47,7 @@ module RCAS
         Render.wrap = settings["wrap"].to_i if settings["wrap"] && !ENV["RCAS_TEX_WRAP"]
         Plot.style = settings["plotstyle"] if settings["plotstyle"] && !ENV["RCAS_PLOT_STYLE"]
         RCAS.unicode = settings["unicode"] if settings.key?("unicode") && !ENV["RCAS_UNICODE"]
+        RCAS.numbered = settings["numbered"] if settings.key?("numbered") && !ENV["RCAS_NUMBERED"]
         settings
       end
 
@@ -60,6 +61,7 @@ module RCAS
           "wrap" => Render.wrap,
           "plotstyle" => Plot.style.to_s,
           "unicode" => RCAS.unicode?,
+          "numbered" => RCAS.numbered?,
           "model" => (assistant.model if assistant.available?),
           "fallbacks" => (assistant.fallbacks if assistant.available?)
         }.compact

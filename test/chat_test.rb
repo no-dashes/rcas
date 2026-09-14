@@ -322,6 +322,57 @@ class ChatUnicodeTest < Minitest::Test
 end
 
 # /help NAME explains one function, set or class from the source.
+# /numbered prefixes results with their number; _r keeps them either way.
+class ChatNumberedTest < Minitest::Test
+  def setup
+    RCAS::Chat::Style.enabled = false
+    RCAS::Render.inline = false
+    RCAS::Results.clear
+    RCAS.numbered = false
+  end
+
+  def teardown
+    RCAS::Chat::Style.enabled = nil
+    RCAS::Render.inline = nil
+    RCAS::Results.clear
+    RCAS.numbered = nil
+  end
+
+  def repl(input)
+    out = StringIO.new
+    offline = ->(ws, ui, model) { RCAS::Chat::Assistant.new(ws, ui, model: model).tap { |a| a.define_singleton_method(:available?) { false } } }
+    RCAS::Chat::REPL.new(input: StringIO.new(input), output: out, assistant_factory: offline, persist: false, mode: :text).run
+    out.string
+  end
+
+  def test_the_command_switches_the_prefix
+    out = repl(["/numbered", "x + 1", "/numbered on", "(x + 1)*(x - 1)", "expand(_r[2])", "/numbered maybe"].join("\n") + "\n")
+    assert_includes out, "numbered off (results are kept in _r either way)"
+    assert_includes out, "=> x + 1"
+    assert_includes out, "[2] (x + 1)*(x - 1)"
+    assert_includes out, "[3] -1 + x**2", "_r[2] reached the second result"
+    assert_includes out, "usage: /numbered on|off"
+    assert_includes repl("/help\n"), "/numbered"
+  end
+
+  def test_results_are_recorded_even_unnumbered
+    out = repl(["x**2", "_r[-1] + 1", "_r"].join("\n") + "\n")
+    assert_includes out, "=> x**2 + 1"
+    assert_includes out, "[1] x**2\n[2] x**2 + 1", "the table prints itself, one result per line"
+  end
+
+  def test_the_setting_is_stored
+    assert_includes RCAS::Chat::Settings::KEYS, "numbered"
+    ui = RCAS::Chat::UI.new(out: StringIO.new, mode: :text)
+    assistant = RCAS::Chat::Assistant.new(RCAS::Chat::Workspace.new, ui).tap { |a| a.define_singleton_method(:available?) { false } }
+    RCAS.numbered = true
+    assert_equal true, RCAS::Chat::Settings.current(ui, assistant)["numbered"]
+    RCAS.numbered = false
+    RCAS::Chat::Settings.apply("numbered" => true)
+    assert_predicate RCAS, :numbered?, "the file sets the prefix at startup"
+  end
+end
+
 class ChatHelpTest < Minitest::Test
   def setup
     RCAS::Chat::Style.enabled = false

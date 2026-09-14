@@ -58,12 +58,29 @@ module RCAS
       conf
     end
 
+    # Every echoed result is remembered in RCAS::Results, so that `_r[3]` can
+    # reach it later. With RCAS.numbered the prefix becomes the number of the
+    # result instead of irb's `=>`; irb formats and pages the value itself.
+    module NumberedResults
+      def output_value(*args)
+        RCAS::Results.record(@context.last_value)
+        super
+      end
+    end
+
+    def self.number_results(irb)
+      ::IRB::Irb.prepend(NumberedResults) unless ::IRB::Irb.include?(NumberedResults)
+      plain = irb.context.return_format
+      irb.context.define_singleton_method(:return_format) { RCAS::Results.return_format(plain) }
+    end
+
     def self.start(main = TOPLEVEL_BINDING.receiver)
       setup(main)
       ::IRB.setup(__FILE__)
       configure
       irb = ::IRB::Irb.new
       ::IRB.conf[:MAIN_CONTEXT] = irb.context
+      number_results(irb)
       irb.run(::IRB.conf)
     end
   end

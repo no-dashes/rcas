@@ -48,11 +48,14 @@ class ManualTest < Minitest::Test
 
   def test_manual_examples
     RCAS.forget
+    RCAS::Results.clear
     b = Workspace.new.session_binding
     failures = []
     transcripts.each do |input, expected|
       actual = begin
-        b.eval(input).inspect
+        value = b.eval(input)
+        RCAS::Results.record(value) # a real session numbers them, so `_r[-1]` works
+        value.inspect
       rescue Exception => e # rubocop:disable Lint/RescueException
         "#{e.class}: #{e.message}"
       end
@@ -60,6 +63,7 @@ class ManualTest < Minitest::Test
       failures << "rcas> #{input}\n  expected: #{expected}\n  actual:   #{actual}"
     end
     RCAS.forget
+    RCAS::Results.clear
     assert failures.empty?, "#{failures.size} manual examples differ:\n#{failures.join("\n")}"
   end
 end
