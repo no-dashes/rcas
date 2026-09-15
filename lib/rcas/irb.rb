@@ -58,20 +58,36 @@ module RCAS
       conf
     end
 
-    # Every echoed result is remembered in RCAS::Results, so that `_r[3]` can
-    # reach it later. With RCAS.numbered the prefix becomes the number of the
-    # result instead of irb's `=>`; irb formats and pages the value itself.
-    module NumberedResults
+    # Every echoed result is remembered in RCAS::Results, so that `Out[3]`
+    # can reach it later; irb formats and pages the value itself.
+    module RecordResult
       def output_value(*args)
         RCAS::Results.record(@context.last_value)
         super
       end
     end
 
-    def self.number_results(irb)
-      ::IRB::Irb.prepend(NumberedResults) unless ::IRB::Irb.include?(NumberedResults)
+    # And every input line, so that `In[3]` can give it back held. irb's own
+    # commands and empty input are not lines of the session and get no
+    # number.
+    module RecordInput
+      def evaluate(statement, *args, **options)
+        RCAS::Results.record_input(statement.code, workspace.binding) if statement.is_a?(::IRB::Statement::Expression)
+        super
+      end
+    end
+
+    # With RCAS.numbered the prompt carries the number of the line to come
+    # (`rcas[3]> `); the results keep irb's `=>`. The internals we lean on
+    # here (Statement::Expression, Context#evaluate, prompt_i,
+    # return_format) are those of the irb bundled with Ruby 3.3.
+    def self.record_session(irb)
+      ::IRB::Irb.prepend(RecordResult) unless ::IRB::Irb.include?(RecordResult)
+      ::IRB::Context.prepend(RecordInput) unless ::IRB::Context.include?(RecordInput)
       plain = irb.context.return_format
       irb.context.define_singleton_method(:return_format) { RCAS::Results.return_format(plain) }
+      prompt = irb.context.prompt_i
+      irb.context.define_singleton_method(:prompt_i) { RCAS::Results.prompt(prompt) }
     end
 
     def self.start(main = TOPLEVEL_BINDING.receiver)
@@ -80,7 +96,7 @@ module RCAS
       configure
       irb = ::IRB::Irb.new
       ::IRB.conf[:MAIN_CONTEXT] = irb.context
-      number_results(irb)
+      record_session(irb)
       irb.run(::IRB.conf)
     end
   end

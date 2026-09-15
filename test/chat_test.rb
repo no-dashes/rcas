@@ -328,7 +328,7 @@ class ChatNumberedTest < Minitest::Test
     RCAS::Chat::Style.enabled = false
     RCAS::Render.inline = false
     RCAS::Results.clear
-    RCAS.numbered = false
+    RCAS.numbered = nil # on by default
   end
 
   def teardown
@@ -345,20 +345,26 @@ class ChatNumberedTest < Minitest::Test
     out.string
   end
 
-  def test_the_command_switches_the_prefix
-    out = repl(["/numbered", "x + 1", "/numbered on", "(x + 1)*(x - 1)", "expand(_r[2])", "/numbered maybe"].join("\n") + "\n")
-    assert_includes out, "numbered off (results are kept in _r either way)"
-    assert_includes out, "=> x + 1"
-    assert_includes out, "[2] (x + 1)*(x - 1)"
-    assert_includes out, "[3] -1 + x**2", "_r[2] reached the second result"
+  def test_the_prompt_is_numbered_and_the_command_switches_it_off
+    ENV["RCAS_ECHO"] = "1" # without a terminal the prompt is echoed only then
+    out = repl(["(x + 1)*(x - 1)", "expand(Out[1])", "/numbered off", "sqrt(4)", "/numbered maybe"].join("\n") + "\n")
+    assert_includes out, "[1]\u276F (x + 1)*(x - 1)", "the prompt carries the number of the line to come"
+    assert_includes out, "[2]\u276F expand(Out[1])", "a command takes no number, a line does"
+    assert_includes out, "=> -1 + x**2", "Out[1] reached the first result; results keep the arrow"
+    assert_includes out, "numbered off (In and Out keep the session either way)"
+    assert_match(/^\u276F sqrt\(4\)$/, out, "/numbered off gives the plain prompt back")
     assert_includes out, "usage: /numbered on|off"
     assert_includes repl("/help\n"), "/numbered"
+  ensure
+    ENV.delete("RCAS_ECHO")
   end
 
-  def test_results_are_recorded_even_unnumbered
-    out = repl(["x**2", "_r[-1] + 1", "_r"].join("\n") + "\n")
+  def test_the_session_is_recorded_unnumbered_too
+    RCAS.numbered = false
+    out = repl(["x**2", "Out[-1] + 1", "In[1]", "Out"].join("\n") + "\n")
     assert_includes out, "=> x**2 + 1"
-    assert_includes out, "[1] x**2\n[2] x**2 + 1", "the table prints itself, one result per line"
+    assert_includes out, "=> x**2", "In[1] gives the first line back held"
+    assert_includes out, "[1] x**2\n[2] x**2 + 1", "the table prints itself, one line per line"
   end
 
   def test_the_setting_is_stored

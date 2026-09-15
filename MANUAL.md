@@ -134,32 +134,64 @@ indeterminate (a prime, say). `p(expr)` therefore raises `NoMethodError` in
   and the manual sections that cover it. `bin/rcas-chat` has the same under
   `/help factor`.
 
-**Every result is kept.** `_r[-1]` is the previous result, `_r[-2]` the one
-before it, `_r[3]` the third of the session, and `_r` the whole table. irb's
-own `_` (the last value) keeps working.
+**Every line is kept.** rcas numbers a session the way Mathematica does:
+`In[3]` is the third input of the session and `Out[3]` is its result. A
+negative number counts back, so `Out[-1]` is the previous result and
+`Out[-2]` the one before it; `In` and `Out` on their own print the whole
+table, one line per line. irb's own `_` (the last value) keeps working.
 
 ```
 rcas> (x + 1)*(x - 1)
 => (x + 1)*(x - 1)
-rcas> expand(_r[-1])
+rcas> expand(Out[-1])
 => -1 + x**2
-rcas> _r[-1] - _r[-2]
+rcas> Out[-1] - Out[-2]
 => -1 + x**2 - (x + 1)*(x - 1)
 ```
 
-`_r.clear` forgets them and starts the numbering over. `RCAS.numbered =
-true` in `bin/rcas` (or `RCAS_NUMBERED=1`, or `/numbered on` in
-`bin/rcas-chat`) prints the number of a result in place of the arrow, which
-makes a long session easier to refer back to:
+Both tables hand back what was there, **held**. `Out[n]` is the value as it
+was computed, never computed again, and `In[n]` is the line as it was
+typed, built into an expression with `hold` (1.3) instead of being run: it
+gives back the question, not the answer, and `doit` answers it.
 
 ```
-❯ /numbered on
-  numbered on (results are kept in _r either way)
-❯ (x + 1)*(x - 1)
-[1] (x + 1)*(x - 1)
-❯ expand(_r[1])
-[2] -1 + x**2
+rcas> integrate(sin(x), x)
+=> -cos(x)
+rcas> In[-1]
+=> integral(sin(x), x)
+rcas> In[-2].doit
+=> -cos(x)
 ```
+
+`In[n]` holds exactly as much as `hold { ... }` does: arithmetic, the
+functions rcas knows and `integrate`, `diff`, `sum`, `product`, `limit`
+stay unevaluated, while any other call is carried out: `In[n]` of a line
+that read `factor(Out[1])` is the factorization and not the word, and of an
+assignment is the value it assigned. A line that builds no expression at
+all — a sentence for Claude, one that does not even parse — comes back as
+the text that was typed. `Out.clear` (or `In.clear`) forgets the session
+and starts the numbering over.
+
+**The prompt carries the number** of the line to come, so a long session is
+easy to refer back to: `rcas[3]> ` in `bin/rcas`, `[3]❯ ` in
+`bin/rcas-chat`. Results keep their arrow.
+
+```
+[1]❯ (x + 1)*(x - 1)
+=> (x + 1)*(x - 1)
+[2]❯ expand(Out[1])
+=> -1 + x**2
+[3]❯ In
+[1] (x + 1)*(x - 1)
+[2] expand(Out[1])
+[3] In
+```
+
+`RCAS.numbered = false` in `bin/rcas` (or `RCAS_NUMBERED=0`, or `/numbered
+off` in `bin/rcas-chat`) gives the plain `rcas> ` prompt back. The
+transcripts in this manual are printed that way, so that every line is the
+Ruby you would type and nothing else; `In` and `Out` keep the session
+either way.
 
 Without the launcher, `require "rcas"` and use `:x`, `RCAS::ZZ` or
 `include RCAS::Sets`, and `RCAS.sin(:x)` / `RCAS.assume(x: RCAS::ZZ)`.
@@ -2292,7 +2324,7 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | linear algebra | `vector matrix gram_schmidt least_squares project orthogonal?` |
 | holding | `hold evaluate` |
 | help | `doc` (`/help NAME` in rcas-chat) |
-| session | `_r` (the numbered results), `_` (irb's last value) |
+| session | `In`, `Out` (the numbered lines), `_` (irb's last value) |
 
 Methods on expressions: `simplify expand factor cancel rationalize collect
 numer denom apart gcd lcm quo rem divmod subs call evalf to_f diff integrate
@@ -2334,7 +2366,7 @@ lib/rcas/linear_algebra.rb  orthogonality, projections and least squares
 lib/rcas/laplace.rb         the Laplace transform and its inverse
 lib/rcas/plot.rb            function plotting: braille art, SVG, PNG
 lib/rcas/docs.rb            doc(name): signatures and comments read from the source
-lib/rcas/results.rb         _r: the numbered results of a session
+lib/rcas/results.rb         In and Out: the numbered lines of a session
 lib/rcas/background.rb      the mathematics behind each name, its sources and Wikipedia links
 lib/rcas/solve.rb           equations, solve, systems
 lib/rcas/groebner.rb        Gröbner bases: Buchberger, normal forms, monomial orders
@@ -2799,7 +2831,7 @@ Claude's calls, when the session is resumed.
 /theme dark|light                 colour of the pictures
 /plotstyle [text|image]           how plots are shown
 /unicode [on|off]                 print ℤ, π and ∞ instead of ZZ, pi and oo
-/numbered [on|off]                number the results ([3] instead of =>)
+/numbered [on|off]                number the session's lines in the prompt (on)
 /latex EXPR   /show EXPR   /png EXPR FILE
 /ask TEXT                         ask Claude (also: ? TEXT)        [with Claude configured]
 /vars                             the session's variables

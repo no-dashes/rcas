@@ -40,6 +40,17 @@ module RCAS
       Builder.new(block.binding).build(ast.children.last)
     end
 
+    # The same for a line of source text instead of a block: the expression
+    # the line builds, held. +context+ is the binding its names are read in.
+    # nil for an empty line; raises SyntaxError on one that does not parse
+    # and ArgumentError on a node hold cannot keep. RCAS::Results uses it
+    # for In[n].
+    def source(text, context = nil)
+      body = RubyVM::AbstractSyntaxTree.parse(text).children.last
+      body = body.children.first if body&.type == :BEGIN # an empty line, or a comment
+      body.nil? ? nil : Builder.new(context || TOPLEVEL_BINDING).build(body)
+    end
+
     class Builder
       def initialize(binding)
         @binding = binding

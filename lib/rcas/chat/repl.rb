@@ -21,7 +21,7 @@ module RCAS
         "/theme [dark|light]" => "colour of typeset output for your terminal background",
         "/plotstyle [text|image]" => "how plots are shown: braille art or a picture",
         "/unicode [on|off]" => "print ℤ, π and ∞ instead of ZZ, pi and oo",
-        "/numbered [on|off]" => "number the results ([3] instead of =>); _r[3] reaches them either way",
+        "/numbered [on|off]" => "number the session's lines in the prompt (on); In[3] and Out[3] reach them either way",
         "/latex EXPR" => "print the LaTeX source of a Ruby expression",
         "/show EXPR" => "typeset a Ruby expression regardless of the output mode",
         "/png EXPR FILE" => "write the typeset expression to a PNG file",
@@ -90,7 +90,7 @@ module RCAS
       # One complete input, continuing over lines while the Ruby is unfinished.
       def read_input
         buffer = +""
-        prompt = PROMPT
+        prompt = Results.prompt(PROMPT) # "[3]❯ " when the lines are numbered
         loop do
           line = read_line(prompt)
           return nil if line.nil? && buffer.empty?
@@ -112,7 +112,7 @@ module RCAS
       def read_line(prompt)
         if interactive?
           rule = @ui.rule
-          @ui.puts rule if prompt == PROMPT
+          @ui.puts rule unless prompt == CONTINUE
           @ui.print "\n#{rule}\e[1A\r"
           @ui.flush
           line = Reline.readline(Style.paint(prompt, :bold), true)
@@ -164,6 +164,7 @@ module RCAS
       end
 
       def evaluate(code)
+        Results.record_input(code, @workspace.binding) # `In[3]` gives the line back held
         started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         value, = @ui.busy("computing") { @workspace.eval(code) }
         @ui.result(value)
@@ -384,7 +385,7 @@ module RCAS
       def numbered(arg)
         return @ui.error("usage: /numbered on|off") unless arg.empty? || %w[on off].include?(arg)
         RCAS.numbered = (arg == "on") unless arg.empty?
-        @ui.info("numbered #{RCAS.numbered? ? 'on' : 'off'} (results are kept in _r either way)")
+        @ui.info("numbered #{RCAS.numbered? ? 'on' : 'off'} (In and Out keep the session either way)")
       end
 
       def output(arg)

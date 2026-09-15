@@ -42,19 +42,26 @@ class IrbTest < Minitest::Test
     assert_includes out, "oo"
   end
 
-  def test_results_are_kept_in_the_table
-    out = run_session("x**2 - 1", "factor(_r[1])", "_r[-1].expand", "_r")
-    assert_includes out, "(-1 + x)*(1 + x)", "_r[1] is the first result"
-    assert_includes out, "-1 + x**2", "_r[-1] is the last one"
-    assert_includes out, "[1] x**2 - 1", "the table prints itself, one result per line"
+  def test_the_session_is_kept_in_the_tables
+    out = run_session("x**2 - 1", "factor(Out[1])", "Out[-1].expand", "integrate(sin(y), y)", "In[-1]", "Out", "In")
+    assert_includes out, "(-1 + x)*(1 + x)", "Out[1] is the result of the first line"
+    assert_includes out, "-1 + x**2", "Out[-1] is the previous one"
+    assert_includes out, "integral(sin(y), y)", "In[-1] is the previous line held, not its value"
+    assert_includes out, "[1] x**2 - 1", "the table prints itself, one line per line"
     assert_includes out, "[3] -1 + x**2"
+    assert_includes out, "[2] factor(Out[1])", "In prints the lines as they were typed"
   end
 
-  def test_the_numbers_replace_the_arrow_on_request
-    out = run_session("x + 1", "_r[1] * 2", env: { "RCAS_NUMBERED" => "1" })
-    assert_includes out, "[1] x + 1"
-    assert_includes out, "[2] (x + 1)*2"
-    assert out.none? { |l| l.start_with?("=>") }, out.join("\n")
+  # The number goes in the prompt, and irb prints no prompt without a tty,
+  # so what is left to see here is that the results keep their own format,
+  # numbered (the default) or not.
+  def test_the_numbers_leave_the_results_alone
+    %w[1 0].each do |numbered|
+      out = run_session("x + 1", "Out[1] * 2", env: { "RCAS_NUMBERED" => numbered })
+      assert_includes out, "x + 1"
+      assert_includes out, "(x + 1)*2"
+      assert out.none? { |l| l.start_with?("[1]") }, out.join("\n")
+    end
   end
 
   def test_functions_are_available_bare

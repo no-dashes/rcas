@@ -337,9 +337,6 @@ module RCAS
     def cdf(dist, x) = dist.cdf(x)
     def probability(dist, event) = dist.probability(event)
 
-    # _r is the table of results of this session: _r[3] the third, _r[-1] the last
-    def _r = Results.store
-
     # doc(:factor), doc("ZZ"), doc(:Matrix): what a name does, from the source
     def doc(name) = Docs.doc(name)
 

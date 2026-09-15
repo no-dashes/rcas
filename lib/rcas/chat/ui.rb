@@ -98,7 +98,7 @@ module RCAS
       end
 
       def result(value)
-        Results.record(value) # `_r[3]` reaches the third result of the session
+        Results.record(value) # `Out[3]` reaches the result of the session's third line
         return if value.is_a?(Plot) && plot_picture(value)
         show_text = @mode != :tex || !typesettable?(value) || !Render.inline?(@out)
         if show_text

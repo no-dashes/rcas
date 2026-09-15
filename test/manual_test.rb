@@ -53,8 +53,9 @@ class ManualTest < Minitest::Test
     failures = []
     transcripts.each do |input, expected|
       actual = begin
+        RCAS::Results.record_input(input, b) # a real session numbers the lines,
         value = b.eval(input)
-        RCAS::Results.record(value) # a real session numbers them, so `_r[-1]` works
+        RCAS::Results.record(value) # so that `In[-1]` and `Out[-1]` work
         value.inspect
       rescue Exception => e # rubocop:disable Lint/RescueException
         "#{e.class}: #{e.message}"
