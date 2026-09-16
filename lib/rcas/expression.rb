@@ -216,7 +216,9 @@ module RCAS
 
     # Numeric evaluation: every number becomes a Float so roots and function
     # values fold, then the bindings are applied.
-    def evalf(**bindings)
+    def evalf(digits = nil, **bindings)
+      digits ||= bindings.delete(:digits)
+      return Precision.evalf(self, digits, bindings) if digits
       value = Expression.floatify_tree(self).call(**bindings.transform_values { |v| Expression.floatify(v) })
       value = Numerics.resolve(value) if value.is_a?(Expression) && value.each_node.any? { |n| n.is_a?(Integral) }
       value.is_a?(Num) ? value.value : value

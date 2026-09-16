@@ -50,6 +50,7 @@ Namen, die unten benutzt werden.
     - [Integrale mit Namen](#integrale-mit-namen)
     - [Länge, Fläche und Volumen](#länge-fläche-und-volumen)
     - [Zahlen, wenn die Symbole nicht reichen](#zahlen-wenn-die-symbole-nicht-reichen)
+    - [So viele Stellen, wie man will](#so-viele-stellen-wie-man-will)
     - [Kurvendiskussion](#kurvendiskussion)
     - [Mehrere Veränderliche](#mehrere-veränderliche)
     - [Reihen](#reihen)
@@ -298,7 +299,8 @@ Matrizen und ihre Eigenwerte, partielle Ableitungen sowie Statistik mit
 Tests und Konfidenzintervallen. Die klassischen orthogonalen Polynome -
 Legendre, Tschebyschow, Hermite, Laguerre - stehen in `Poly`. Wo es keine
 geschlossene Form gibt, geben `nsolve` und `nintegrate` die Zahl, und sagen
-auch, dass es eine ist. Ein Integrand wie `sin(x)/x` bekommt den Namen
+auch, dass es eine ist, und `evalf(f, 50)` gibt fünfzig Stellen, wenn
+sechzehn nicht reichen. Ein Integrand wie `sin(x)/x` bekommt den Namen
 seiner Stammfunktion (`Si`), Bogenlängen und Rotationskörper haben eigene
 Funktionen, und die benannten Matrixzerlegungen - `lu`, `qr`, `cholesky`,
 `diagonalize`, `jordan` - sind alle exakt.
@@ -938,6 +940,52 @@ rcas> nintegrate(exp(-x**2), x: -oo..oo)
 rcas> integrate(exp(-x**4), x: 0..1).evalf
 => 0.8448385947571027
 ```
+
+#### So viele Stellen, wie man will
+
+`evalf(f, 50)` (oder `evalf(f, digits: 50)`) rechnet auf so viele
+signifikante Stellen, statt auf die sechzehn, die ein Float trägt. Der
+Baum wird in `BigDecimal` mit zehn Schutzstellen durchlaufen und einmal am
+Ende gerundet, die Stellen, die zurückkommen, stimmen also.
+
+```
+rcas> evalf(pi, 50)
+=> 3.1415926535897932384626433832795028841971693993751
+rcas> evalf(pi)
+=> 3.141592653589793
+rcas> evalf(sqrt(2), 40)
+=> 1.41421356237309504880168872420969807857
+rcas> evalf(exp(1), 30)
+=> 2.71828182845904523536028747135
+rcas> evalf(1/3r, 25)
+=> 0.3333333333333333333333333
+rcas> evalf(sin(1)**2 + cos(1)**2, 40)
+=> 1.0
+rcas> evalf(solve(x**5 - x - 1, x).first, 40)
+=> 1.167303978261418684256045899854842180721
+rcas> evalf(0.1 * pi, 50)
+=> 0.3141592653589793
+```
+
+Die letzten beiden Zeilen sind der eigentliche Grund für die Übung. Eine
+algebraische Zahl wird aus ihrem Wert in doppelter Genauigkeit mit dem
+Newton-Verfahren verfeinert, eine Nullstelle ohne Formel hat also trotzdem
+alle Stellen, die man braucht. Und ein `Float` im Ausdruck trägt nur seine
+eigenen sechzehn Stellen, das Ergebnis wird also mit sechzehn angegeben,
+gleich wie viele verlangt waren: sie auf fünfzig aufzufüllen hieße,
+vierunddreißig zu erfinden.
+
+Die Konstanten, `exp`, `log`, die trigonometrischen und hyperbolischen
+Funktionen samt Umkehrungen, Wurzeln, Potenzen, eine endliche `sum` und
+ein reelles `RootOf` sind alle da. Was es nur in doppelter Genauigkeit
+gibt - `erf`, `Si`, `Ci`, `Ei`, `li`, `zeta`, ein unausgewertetes Integral
+- wirft `Precision::Unsupported` und nennt sich beim Namen, statt sechzehn
+gute Stellen als fünfzig zu verkleiden. Das gewöhnliche `evalf` beantwortet
+sie nach wie vor.
+
+Das Ergebnis ist ein `RCAS::Decimal`: ein `Numeric`, das weiß, auf wie
+viele Stellen es gut ist, sie ausgibt und wie jede andere Zahl wieder in
+einen Ausdruck eingeht.
 
 #### Kurvendiskussion
 
@@ -3073,7 +3121,7 @@ Funktionen der obersten Ebene (bloß in `bin/rcas`, sonst `RCAS.name`):
 | Polynomstruktur | `degree ldegree lcoeff tcoeff coeff coeffs collect resultant discriminant interpolate` |
 | benannte Polynome | `Poly.chebyshev_t Poly.chebyshev_u Poly.legendre Poly.hermite Poly.hermite_prob Poly.laguerre Poly.gegenbauer Poly.jacobi Poly.bernoulli Poly.euler Poly.cyclotomic Poly.swinnerton_dyer Poly.abel Poly.fibonacci Poly.lucas Poly.bell` (ein Namensraum, keine bloßen Namen) |
 | Konstanten | `PI E I oo` (bloß `pi`, `π`, `oo`, `∞`) |
-| Auswerten | `subs evalf` |
+| Auswerten | `subs evalf` (`evalf(f, 50)` für fünfzig Stellen) |
 | Analysis | `integrate diff series taylor fps fourier limit sum product` |
 | abschnittsweise | `piecewise discontinuities kinks` |
 | hypergeometrische Summation | `sumrecursion sumcertificate hyper` |
@@ -3134,6 +3182,7 @@ lib/rcas/series.rb          Puiseux series, limits
 lib/rcas/piecewise.rb       functions defined case by case
 lib/rcas/fourier.rb         Fourier series
 lib/rcas/integral_functions.rb  Ei, Si, Ci, li
+lib/rcas/precision.rb       Decimal and evalf to a number of digits
 lib/rcas/decompositions.rb  LU, QR, Cholesky, Jordan
 lib/rcas/summation.rb       Faulhaber, Gosper, zeta
 lib/rcas/poly_recurrence.rb polynomial solutions of a linear recurrence
@@ -3216,6 +3265,7 @@ Literaturangaben stehen in der Sprache der Werke.
 | Abschnittsweise Funktionen: Zweigwahl, stetige Stammfunktion | piecewise.rb | [Spi08, ch. 13] |
 | Fourier-Reihen und halbseitige Entwicklungen | fourier.rb | [Spi08, ch. 13]; die Koeffizienten sind rcas' eigene Integrale |
 | Ei, Si, Ci, li: Reihen und Kettenbrüche | integral_functions.rb | [AS64, §5.1, §5.2]; [PTVF07, §6.3]; Lentz [Len76] |
+| evalf mit beliebiger Genauigkeit über BigDecimal, Nullstellen mit Newton | precision.rb | [AS64, §4.1, §4.3]; [PTVF07, §9.4] |
 | Bogenlänge, Rotationskörper | analysis.rb | [Spi08, ch. 13] |
 | LU, QR, Cholesky, Diagonalisierung | decompositions.rb | [Str16, ch. 2, 4, 6] |
 | Jordansche Normalform aus Ketten verallgemeinerter Eigenvektoren | decompositions.rb | [HK71, ch. 7] |

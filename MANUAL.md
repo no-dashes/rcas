@@ -45,6 +45,7 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
     - [Integrals that have names](#integrals-that-have-names)
     - [Length, area and volume](#length-area-and-volume)
     - [Numbers when the symbols run out](#numbers-when-the-symbols-run-out)
+    - [As many digits as you ask for](#as-many-digits-as-you-ask-for)
     - [Curve sketching](#curve-sketching)
     - [Several variables](#several-variables)
     - [Series](#series)
@@ -284,7 +285,8 @@ their eigenvalues, partial derivatives, and statistics with tests and
 confidence intervals. The classical orthogonal polynomials - Legendre,
 Chebyshev, Hermite, Laguerre - are in `Poly`. When a symbolic answer does
 not exist, `nsolve` and `nintegrate` give the number instead, and say that
-it is one. An integrand like `sin(x)/x` gets the name of its
+it is one, and `evalf(f, 50)` gives fifty digits when sixteen are not
+enough. An integrand like `sin(x)/x` gets the name of its
 antiderivative (`Si`), arc lengths and solids of revolution have their own
 functions, and the named matrix factorizations - `lu`, `qr`, `cholesky`,
 `diagonalize`, `jordan` - are all exact.
@@ -904,6 +906,50 @@ rcas> nintegrate(exp(-x**2), x: -oo..oo)
 rcas> integrate(exp(-x**4), x: 0..1).evalf
 => 0.8448385947571027
 ```
+
+#### As many digits as you ask for
+
+`evalf(f, 50)` (or `evalf(f, digits: 50)`) computes to that many
+significant digits instead of the sixteen a Float carries. The tree is
+walked in `BigDecimal` with ten guard digits and rounded once at the end,
+so the digits that come back are the digits that are right.
+
+```
+rcas> evalf(pi, 50)
+=> 3.1415926535897932384626433832795028841971693993751
+rcas> evalf(pi)
+=> 3.141592653589793
+rcas> evalf(sqrt(2), 40)
+=> 1.41421356237309504880168872420969807857
+rcas> evalf(exp(1), 30)
+=> 2.71828182845904523536028747135
+rcas> evalf(1/3r, 25)
+=> 0.3333333333333333333333333
+rcas> evalf(sin(1)**2 + cos(1)**2, 40)
+=> 1.0
+rcas> evalf(solve(x**5 - x - 1, x).first, 40)
+=> 1.167303978261418684256045899854842180721
+rcas> evalf(0.1 * pi, 50)
+=> 0.3141592653589793
+```
+
+The last two lines are the point of the exercise. An algebraic number is
+refined from its double-precision value by Newton's method, so a root that
+has no formula still has all the digits you want. And a `Float` in the
+expression carries only its own sixteen digits, so the answer is reported
+with sixteen however many were asked for: padding them out to fifty would
+be inventing thirty-four.
+
+The constants, `exp`, `log`, the trigonometric and hyperbolic functions
+and their inverses, roots, powers, a finite `sum` and a real `RootOf` are
+all there. Anything that exists only in double precision - `erf`, `Si`,
+`Ci`, `Ei`, `li`, `zeta`, an unevaluated integral - raises
+`Precision::Unsupported` and names itself, rather than dressing up sixteen
+good digits as fifty. Plain `evalf` still answers those.
+
+The result is an `RCAS::Decimal`: a `Numeric` that remembers how many
+digits it is good for, prints them, and goes back into an expression like
+any other number.
 
 #### Curve sketching
 
@@ -2990,7 +3036,7 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | polynomial structure | `degree ldegree lcoeff tcoeff coeff coeffs collect resultant discriminant interpolate` |
 | named polynomials | `Poly.chebyshev_t Poly.chebyshev_u Poly.legendre Poly.hermite Poly.hermite_prob Poly.laguerre Poly.gegenbauer Poly.jacobi Poly.bernoulli Poly.euler Poly.cyclotomic Poly.swinnerton_dyer Poly.abel Poly.fibonacci Poly.lucas Poly.bell` (a namespace, not bare names) |
 | constants | `PI E I oo` (bare `pi`, `π`, `oo`, `∞`) |
-| evaluation | `subs evalf` |
+| evaluation | `subs evalf` (`evalf(f, 50)` for fifty digits) |
 | calculus | `integrate diff series taylor fps fourier limit sum product` |
 | case by case | `piecewise discontinuities kinks` |
 | hypergeometric summation | `sumrecursion sumcertificate hyper` |
@@ -3050,6 +3096,7 @@ lib/rcas/series.rb          Puiseux series, limits
 lib/rcas/piecewise.rb       functions defined case by case
 lib/rcas/fourier.rb         Fourier series
 lib/rcas/integral_functions.rb  Ei, Si, Ci, li
+lib/rcas/precision.rb       Decimal and evalf to a number of digits
 lib/rcas/decompositions.rb  LU, QR, Cholesky, Jordan
 lib/rcas/summation.rb       Faulhaber, Gosper, zeta
 lib/rcas/poly_recurrence.rb polynomial solutions of a linear recurrence
@@ -3131,6 +3178,7 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | piecewise functions: branch selection, continuous antiderivative | piecewise.rb | [Spi08, ch. 13] |
 | Fourier series and half-range expansions | fourier.rb | [Spi08, ch. 13]; the coefficients are rcas's own integrals |
 | Ei, Si, Ci, li: series and continued fractions | integral_functions.rb | [AS64, §5.1, §5.2]; [PTVF07, §6.3]; Lentz [Len76] |
+| arbitrary-precision evalf over BigDecimal, roots by Newton | precision.rb | [AS64, §4.1, §4.3]; [PTVF07, §9.4] |
 | arc length, solids of revolution | analysis.rb | [Spi08, ch. 13] |
 | LU, QR, Cholesky, diagonalization | decompositions.rb | [Str16, ch. 2, 4, 6] |
 | Jordan normal form from chains of generalized eigenvectors | decompositions.rb | [HK71, ch. 7] |

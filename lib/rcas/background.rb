@@ -50,7 +50,10 @@ module RCAS
       ldegree: :degree, lcoeff: :degree, tcoeff: :degree, coeff: :degree, coeffs: :degree,
       collect: { maths: "Write an expression as a sum of coefficient times power of one indeterminate, the other symbols becoming coefficients.", method: "Group the term table by the exponent of that indeterminate." },
       subs: { maths: "Substitution: replace a subexpression by another everywhere it occurs. Structural, not mathematical, so x**2 is found but not x*x.", method: "A bottom-up rebuild that compares subtrees with ==." },
-      evalf: { maths: "A numeric value: every exact number becomes a float, so the result is an approximation and says so.", method: "The tree is floatified once, then evaluated; integer exponents stay exact so x**2 keeps its shape." },
+      evalf: {
+        maths: "A numeric value: every exact number becomes a decimal, so the result is an approximation and says so. With a number of digits it is an arbitrary-precision one, and then the digits are all true: a Float in the expression carries only its own sixteen, and the answer is reported with sixteen.",
+        method: "Without digits the tree is floatified once and evaluated; integer exponents stay exact, so x**2 keeps its shape. With digits it is walked in BigDecimal with ten guard digits and rounded once at the end, the elementary functions coming from BigMath [AS64, §4.1, §4.3] and a real RootOf from Newton's method [PTVF07, §9.4]. What exists only in double precision says so instead of padding sixteen good digits out to fifty."
+      },
       hold: {
         maths: "An unevaluated expression, MuPAD's hold: the notation itself, not its value. evaluate (also doit) computes it later.",
         method: "The block's source is read back from Ruby's abstract syntax tree, so integrate, diff, sum and limit inside it become formal nodes."
@@ -498,7 +501,7 @@ module RCAS
       degree: ["Degree of a polynomial"],
       collect: ["Polynomial"],
       subs: ["Expression (mathematics)"],
-      evalf: ["Floating-point arithmetic"],
+      evalf: ["Floating-point arithmetic", "Arbitrary-precision arithmetic", "Significant figures"],
       hold: ["Computer algebra"],
       diff: ["Derivative", "Differentiation rules"],
       integrate: ["Symbolic integration", "Risch algorithm", "Integration by parts"],

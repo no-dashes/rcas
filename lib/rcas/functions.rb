@@ -165,8 +165,9 @@ module RCAS
     def diff(f, x, n = 1) = Expression.lift(f).diff(x, n)
     # subs(f, x => 2), subs(f, x: 2) or subs(f, x**2, z): substitution
     def subs(f, pattern, replacement = nil) = Expression.lift(f).subs(pattern, replacement)
-    # evalf(pi), evalf(sqrt(2)*x, x: 3): the numeric value as a Float
-    def evalf(f, **bindings) = Expression.lift(f).evalf(**bindings)
+    # evalf(pi), evalf(sqrt(2)*x, x: 3): the numeric value as a Float;
+    # evalf(pi, 50) or evalf(pi, digits: 50) for as many digits as you like
+    def evalf(f, digits = nil, **bindings) = Expression.lift(f).evalf(digits, **bindings)
 
     # congruence(3*x - 4, x, 7) solves modulo 7; legendre(a, p), jacobi(a, n), order(a, m),
     # primitive_root(m), continued_fraction(x, n), convergents(x, n)
