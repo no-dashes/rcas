@@ -24,6 +24,7 @@ module RCAS
           expr.var == var ? expr.integrand : Integral.new(diff(expr.integrand, var), expr.var)
         end
       when Derivative then expr.var == var ? Derivative.new(expr.expr, expr.var, expr.order + 1) : Num.new(0)
+      when Piecewise then Piecewise.new(expr.branches.map { |cond, value| [cond, diff(value, var)] })
       else raise ArgumentError, "can't differentiate #{expr.class}"
       end
     end

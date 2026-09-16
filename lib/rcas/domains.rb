@@ -273,6 +273,7 @@ module RCAS
       when Div then join(join(domain(expr.left), domain(expr.right)), QQ)
       when Pow then power(expr)
       when Fn  then function(expr)
+      when Piecewise then expr.values.map { |v| domain(v) }.reduce { |a, b| join(a, b) }
       end
     end
 

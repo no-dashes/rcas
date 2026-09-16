@@ -51,7 +51,8 @@ module RCAS
     def integrate(expr, var)
       x = Expression.lift(var)
       raise ArgumentError, "integration variable must be a symbol" unless x.is_a?(Var)
-      f = Expression.lift(expr).simplify
+      f = Piecewises.hoist(Expression.lift(expr).simplify)
+      return Piecewises.integrate(f, x) if f.is_a?(Piecewise)
       constant, terms = Simplify.termize(f)
       parts = []
       parts << Num.new(constant) * x unless constant.zero?
@@ -69,6 +70,8 @@ module RCAS
       f = Expression.lift(expr)
       from = Expression.lift(from)
       to = Expression.lift(to)
+      f = Piecewises.hoist(f.simplify)
+      return Piecewises.definite(f, x, from, to) if f.is_a?(Piecewise)
       antiderivative = integrate(f, x)
       return Integral.new(f, x, from, to) unless complete?(antiderivative)
       upper = endpoint(antiderivative, x, to, :left)

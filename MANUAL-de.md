@@ -53,6 +53,7 @@ Namen, die unten benutzt werden.
     - [Reihen](#reihen)
     - [Formale Potenzreihen](#formale-potenzreihen)
     - [Grenzwerte](#grenzwerte)
+    - [Abschnittsweise definierte Funktionen](#abschnittsweise-definierte-funktionen)
     - [Summen](#summen)
     - [Bestimmte Summen: kreatives Teleskopieren](#bestimmte-summen-kreatives-teleskopieren)
     - [Produkte](#produkte)
@@ -257,7 +258,9 @@ und eine Ungleichung antwortet mit der Lösungsmenge (`[2, 3]` ist hier das
 abgeschlossene Intervall, kein Paar). Trigonometrische Gleichungen liefern
 die Lösungen einer Periode, mit `all: true` die ganze Schar. Dann die erste
 Analysis: Ableitungen, Kurvendiskussion, bestimmte Integrale, Summen und
-Wahrscheinlichkeit.
+Wahrscheinlichkeit. Eine Funktion darf mit `piecewise` abschnittsweise
+gegeben werden, und `discontinuities` und `kinks` nennen die Stellen, an
+denen ihre Stücke nicht zusammenpassen.
 
 ```
 rcas> factor(x**2 - 5*x + 6)
@@ -1026,6 +1029,65 @@ rcas> limit(x * sin(1/x), x, 0)
 => 0
 rcas> limit(sin(x), x, oo)
 => limit(sin(x), x, oo)
+```
+
+#### Abschnittsweise definierte Funktionen
+
+`piecewise(Bedingung => Wert, ...)` ist eine Funktion, die Zweig für Zweig
+gegeben ist. Die Bedingungen sind Ungleichungen (oder Gleichungen, oder
+`interval(...)`), die letzte darf `:else` sein, und die erste zutreffende
+Bedingung entscheidet. Solange die Unbestimmte keinen Wert hat, wird nichts
+ausgewählt, der Knoten wird also so ausgegeben, wie er geschrieben wurde;
+`call`, `diff`, `integrate`, `limit` und `solve` arbeiten zweigweise.
+
+```
+rcas> pwf = piecewise(x < 0 => -x, :else => x**2)
+=> piecewise(x < 0 => -x, :else => x**2)
+rcas> pwf.call(x: -3)
+=> 3
+rcas> diff(pwf, x)
+=> piecewise(x < 0 => -1, :else => 2*x)
+rcas> kinks(pwf)
+=> [0]
+rcas> integrate(pwf, x)
+=> piecewise(x < 0 => -x**2/2, :else => x**3/3)
+rcas> integrate(pwf, x: -2..3)
+=> 11
+rcas> solve(eq(pwf, 4), x)
+=> [-4, 2]
+```
+
+Interessant an einer solchen Funktion sind die Stellen, an denen die
+Stücke aufeinandertreffen. `discontinuities` nennt die Sprungstellen (die
+einseitigen Grenzwerte existieren, stimmen aber nicht überein, oder der
+Funktionswert ist nicht der Grenzwert), `kinks` die Knickstellen, an denen
+die Funktion stetig ist, die beiden Steigungen sich aber unterscheiden. Ein
+zweiseitiger Grenzwert an einer Sprungstelle bleibt wie immer unausgewertet.
+
+```
+rcas> jump = piecewise(x < 0 => 0, :else => 1)
+=> piecewise(x < 0 => 0, :else => 1)
+rcas> [limit(jump, x, 0, :left), limit(jump, x, 0, :right)]
+=> [0, 1]
+rcas> limit(jump, x, 0)
+=> limit(piecewise(x < 0 => 0, :else => 1), x, 0)
+rcas> discontinuities(jump)
+=> [0]
+```
+
+Die Stammfunktion verdient einen zweiten Blick. Jeder Zweig wird für sich
+integriert und dann um die Konstante verschoben, die ihn am gemeinsamen
+Endpunkt an den vorigen Zweig anschließt: ohne sie wäre jedes Stück zwar
+weiterhin eine Stammfunktion seines eigenen Stücks, die Funktion spränge
+aber bei `1`, und ein bestimmtes Integral darüber hinweg käme falsch heraus.
+
+```
+rcas> fee = piecewise(x < 1 => 1, :else => x)
+=> piecewise(x < 1 => 1, :else => x)
+rcas> integrate(fee, x)
+=> piecewise(x < 1 => x, :else => 1/2 + x**2/2)
+rcas> integrate(fee, x: 0..2)
+=> 5/2
 ```
 
 #### Summen
@@ -2789,6 +2851,7 @@ Funktionen der obersten Ebene (bloß in `bin/rcas`, sonst `RCAS.name`):
 | Konstanten | `PI E I oo` (bloß `pi`, `π`, `oo`, `∞`) |
 | Auswerten | `subs evalf` |
 | Analysis | `integrate diff series taylor fps limit sum product` |
+| abschnittsweise | `piecewise discontinuities kinks` |
 | hypergeometrische Summation | `sumrecursion sumcertificate hyper` |
 | q-Analoga | `qbracket qfactorial qbinomial qpochhammer qgosper qsum qsumrecursion qsumcertificate qsolve qhyper` |
 | Numerik | `nsolve nintegrate` |
@@ -2842,6 +2905,7 @@ lib/rcas/differentiate.rb   derivative rules
 lib/rcas/integrate.rb       rules, rational functions, Risch-Norman heuristic
 lib/rcas/integrate_substitutions.rb  rationalizing substitutions (roots, exp, sin/cos)
 lib/rcas/series.rb          Puiseux series, limits
+lib/rcas/piecewise.rb       functions defined case by case
 lib/rcas/summation.rb       Faulhaber, Gosper, zeta
 lib/rcas/poly_recurrence.rb polynomial solutions of a linear recurrence
 lib/rcas/petkovsek.rb       hypergeometric solutions of a recurrence
@@ -2920,6 +2984,7 @@ Literaturangaben stehen in der Sprache der Werke.
 | reelle quadratische Faktoren eines biquadratischen Nenners; Möbius-Substitution für die Wurzel aus einem Quotienten linearer Formen | integrate.rb, integrate_substitutions.rb | [Har16, ch. II-III]; [GCL92, ch. 11] |
 | Puiseux-Reihen mit Logarithmustermen, Grenzwerte über den führenden Term | series.rb | Potenzreihenarithmetik wie in [Knu98, §4.7]; die Grenzwertstrategie ist die des Lehrbuchs, nicht Gruntz' MRV-Algorithmus [Gru96] |
 | Einschnürungssatz für einen beschränkten mal einen Nullfaktor | series.rb | [Rud76, th. 3.19] |
+| Abschnittsweise Funktionen: Zweigwahl, stetige Stammfunktion | piecewise.rb | [Spi08, ch. 13] |
 | Faulhaber-Summen durch Newton-Interpolation, Bernoulli-Zahlen, zeta(2m) | summation.rb | [GKP94, §6.5]; Euler-Maclaurin-Rest [GKP94, §9.5] |
 | Gospers Algorithmus mit der Gradschranke für den Polynomansatz | summation.rb | [Gos78]; [PWZ96, ch. 5] |
 | Produkte: Fakultäts- und Gammaquotienten bei linearen Faktoren, exp von Summen | product.rb | [GKP94, §5.5] |

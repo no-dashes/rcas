@@ -48,6 +48,7 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
     - [Series](#series)
     - [Formal power series](#formal-power-series)
     - [Limits](#limits)
+    - [Functions defined case by case](#functions-defined-case-by-case)
     - [Sums](#sums)
     - [Definite sums: creative telescoping](#definite-sums-creative-telescoping)
     - [Products](#products)
@@ -243,7 +244,9 @@ Polynomials factor, quadratics and inequalities solve, and an inequality
 answers with the set of solutions (`[2, 3]` here is the closed interval,
 not a pair). Trigonometric equations give the solutions in one period, or
 the whole family with `all: true`. Then the first calculus: derivatives,
-curve sketching, definite integrals, sums, and probability.
+curve sketching, definite integrals, sums, and probability. A function may
+be given case by case with `piecewise`, and `discontinuities` and `kinks`
+name the points where its pieces do not fit together.
 
 ```
 rcas> factor(x**2 - 5*x + 6)
@@ -991,6 +994,64 @@ rcas> limit(x * sin(1/x), x, 0)
 => 0
 rcas> limit(sin(x), x, oo)
 => limit(sin(x), x, oo)
+```
+
+#### Functions defined case by case
+
+`piecewise(condition => value, ...)` is a function given branch by branch.
+The conditions are inequalities (or equations, or `interval(...)`), the
+last one may be `:else`, and the first condition that holds decides.
+Nothing is chosen while the indeterminate has no value, so the node prints
+back as it was written; `call`, `diff`, `integrate`, `limit` and `solve`
+all work branch by branch.
+
+```
+rcas> pwf = piecewise(x < 0 => -x, :else => x**2)
+=> piecewise(x < 0 => -x, :else => x**2)
+rcas> pwf.call(x: -3)
+=> 3
+rcas> diff(pwf, x)
+=> piecewise(x < 0 => -1, :else => 2*x)
+rcas> kinks(pwf)
+=> [0]
+rcas> integrate(pwf, x)
+=> piecewise(x < 0 => -x**2/2, :else => x**3/3)
+rcas> integrate(pwf, x: -2..3)
+=> 11
+rcas> solve(eq(pwf, 4), x)
+=> [-4, 2]
+```
+
+The interesting points of such a function are the ones where the pieces
+meet. `discontinuities` lists the jumps (the one-sided limits exist but
+disagree, or the value is not the limit) and `kinks` the corners, where
+the function is continuous but the two slopes differ. A two-sided limit
+at a jump stays unevaluated, as always.
+
+```
+rcas> jump = piecewise(x < 0 => 0, :else => 1)
+=> piecewise(x < 0 => 0, :else => 1)
+rcas> [limit(jump, x, 0, :left), limit(jump, x, 0, :right)]
+=> [0, 1]
+rcas> limit(jump, x, 0)
+=> limit(piecewise(x < 0 => 0, :else => 1), x, 0)
+rcas> discontinuities(jump)
+=> [0]
+```
+
+The antiderivative deserves a second look. Each branch is integrated on
+its own, and then shifted by the constant that makes it continue the
+branch before it at their common endpoint: without that, every piece
+would still be an antiderivative of its own piece, but the function would
+jump at `1` and a definite integral across it would come out wrong.
+
+```
+rcas> fee = piecewise(x < 1 => 1, :else => x)
+=> piecewise(x < 1 => 1, :else => x)
+rcas> integrate(fee, x)
+=> piecewise(x < 1 => x, :else => 1/2 + x**2/2)
+rcas> integrate(fee, x: 0..2)
+=> 5/2
 ```
 
 #### Sums
@@ -2713,6 +2774,7 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | constants | `PI E I oo` (bare `pi`, `π`, `oo`, `∞`) |
 | evaluation | `subs evalf` |
 | calculus | `integrate diff series taylor fps limit sum product` |
+| case by case | `piecewise discontinuities kinks` |
 | hypergeometric summation | `sumrecursion sumcertificate hyper` |
 | q-analogues | `qbracket qfactorial qbinomial qpochhammer qgosper qsum qsumrecursion qsumcertificate qsolve qhyper` |
 | numerics | `nsolve nintegrate` |
@@ -2765,6 +2827,7 @@ lib/rcas/differentiate.rb   derivative rules
 lib/rcas/integrate.rb       rules, rational functions, Risch-Norman heuristic
 lib/rcas/integrate_substitutions.rb  rationalizing substitutions (roots, exp, sin/cos)
 lib/rcas/series.rb          Puiseux series, limits
+lib/rcas/piecewise.rb       functions defined case by case
 lib/rcas/summation.rb       Faulhaber, Gosper, zeta
 lib/rcas/poly_recurrence.rb polynomial solutions of a linear recurrence
 lib/rcas/petkovsek.rb       hypergeometric solutions of a recurrence
@@ -2842,6 +2905,7 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | real quadratic factors of a biquadratic denominator; the Möbius substitution for a root of a ratio of linear forms | integrate.rb, integrate_substitutions.rb | [Har16, ch. II-III]; [GCL92, ch. 11] |
 | Puiseux series with log terms, limits by the leading term | series.rb | power series arithmetic as in [Knu98, §4.7]; the limit strategy is the textbook one, not Gruntz's MRV algorithm [Gru96] |
 | squeeze rule for a bounded factor times a null factor | series.rb | [Rud76, th. 3.19] |
+| piecewise functions: branch selection, continuous antiderivative | piecewise.rb | [Spi08, ch. 13] |
 | Faulhaber sums by Newton interpolation, Bernoulli numbers, zeta(2m) | summation.rb | [GKP94, §6.5]; Euler-Maclaurin tail [GKP94, §9.5] |
 | Gosper's algorithm with the degree bound for the polynomial ansatz | summation.rb | [Gos78]; [PWZ96, ch. 5] |
 | products: factorial and gamma ratios for linear factors, exp of sums | product.rb | [GKP94, §5.5] |

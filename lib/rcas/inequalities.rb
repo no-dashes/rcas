@@ -101,6 +101,20 @@ module RCAS
       i.empty? ? nil : i
     end
 
+    # The gaps between the intervals: everything the set leaves out.
+    def complement
+      pieces = []
+      low, open = Neg.new(OO).simplify, false
+      intervals.each do |i|
+        pieces << Interval.new(low, i.low, left_open: open, right_open: !i.left_open)
+        low, open = i.high, !i.right_open
+      end
+      pieces << Interval.new(low, OO, left_open: open)
+      RealSet.new(pieces.reject { |i| i.point? && Limits.infinite?(i.low) })
+    end
+
+    def -(other) = self & other.complement
+
     def ==(other) = other.is_a?(RealSet) && other.intervals == intervals
     alias eql? ==
     def hash = [RealSet, intervals].hash

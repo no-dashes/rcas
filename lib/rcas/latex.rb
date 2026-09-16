@@ -120,8 +120,15 @@ module RCAS
       else
         return constant(expr) if defined?(Const) && expr.is_a?(Const)
         return derivative(expr) if defined?(Derivative) && expr.is_a?(Derivative)
+        return piecewise(expr) if defined?(Piecewise) && expr.is_a?(Piecewise)
         raise ArgumentError, "don't know how to typeset #{expr.class}"
       end
+    end
+
+    # A function defined case by case as a cases environment.
+    def piecewise(pw)
+      rows = pw.branches.map { |cond, value| "#{print(value)} & #{Piecewises.condition_latex(cond, pw)}" }
+      "\\begin{cases} #{rows.join(' \\\\ ')} \\end{cases}"
     end
 
     # pi as \pi; other named constants like variables.

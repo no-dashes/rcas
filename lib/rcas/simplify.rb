@@ -22,6 +22,7 @@ module RCAS
       when Add, Sub, Neg then rebuild_sum(*termize(expr, simplify: true))
       when Mul, Div, Pow then rebuild_product(*factorize(expr, simplify: true))
       when Fn            then Functions.fold(expr.map_children { |c| simplify(c) })
+      when Piecewise     then Piecewises.simplify(expr)
       else expr
       end
     end

@@ -62,6 +62,18 @@ module RCAS
         maths: "The derivative: the limit of the difference quotient, computed by the rules rather than the limit.",
         method: "Sum, product, quotient and chain rules applied structurally; a power with the variable in both base and exponent goes through u**v = exp(v log u). An unknown function stays a Derivative node."
       },
+      piecewise: {
+        maths: "A function given case by case, f(x) = -x for x < 0 and x**2 otherwise. The pieces need not fit together: where they do not, the function jumps or has a corner, and that is exactly what makes these functions worth studying.",
+        method: "The conditions become real sets (inequalities.rb) and the first one that holds decides. Differentiating and integrating work branch by branch; the antiderivative of each piece is shifted by the constant that continues the previous piece at their common endpoint, so that it is continuous and definite integrals across a breakpoint are right."
+      },
+      discontinuities: {
+        maths: "The points where a function jumps: the one-sided limits exist but disagree, or they agree and the value is different.",
+        method: "The breakpoints of the piecewise definition are the only candidates; at each one the two one-sided limits and the value are compared."
+      },
+      kinks: {
+        maths: "The corners: points where the function is continuous but has no derivative, because the slopes on the two sides differ (|x| at 0).",
+        method: "Each branch is differentiated and the one-sided limits of the derivative are compared at the breakpoints that are not jumps."
+      },
       integrate: {
         maths: "An antiderivative F with F' = f, or a definite integral F(b) - F(a) with limits at infinite or singular ends. Not every elementary function has an elementary antiderivative, so a piece that has none stays an integral(...) node.",
         method: "Four layers: a table of standard forms with derivative-divides substitution, integration by parts and absolute values of a linear argument; rational functions exactly by Hermite reduction and the Lazard-Rioboo-Trager logarithmic part [Her72], [Mac75], [LR90], [Bro05], falling back on the real quadratic factors of a biquadratic denominator [Har16]; a Risch-Norman ansatz whose undetermined coefficients come from linear algebra [NM77]; and substitutions that rationalize roots, ratios of linear forms, exponentials and sin/cos [Zor15]."
@@ -437,6 +449,9 @@ module RCAS
       diff: ["Derivative", "Differentiation rules"],
       integrate: ["Symbolic integration", "Risch algorithm", "Integration by parts"],
       limit: ["Limit of a function", "Squeeze theorem"],
+      piecewise: ["Piecewise function", "Heaviside step function"],
+      discontinuities: ["Classification of discontinuities", "Continuous function"],
+      kinks: ["Differentiable function", "Semi-differentiability"],
       series: ["Taylor series", "Puiseux series"],
       fps: ["Formal power series", "Holonomic function", "Binomial series"],
       sum: ["Summation", "Faulhaber's formula", "Gosper's algorithm", "Hypergeometric identity"],

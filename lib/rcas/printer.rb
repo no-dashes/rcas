@@ -37,8 +37,26 @@ module RCAS
       when Sum then "sum(#{expr.children.map { |c| print(c) }.join(', ')})"
       when Product then "product(#{expr.children.map { |c| print(c) }.join(', ')})"
       when Derivative then "D(#{print(expr.expr)}, #{print(expr.var)}#{expr.order == 1 ? '' : ", #{expr.order}"})"
+      when Piecewise then "piecewise(#{expr.branches.map { |cond, value| "#{condition(cond)} => #{print(value)}" }.join(', ')})"
       else raise ArgumentError, "don't know how to print #{expr.class}"
       end
+    end
+
+    # The condition of a piecewise branch, written so that the whole node
+    # can be typed back in: `x < 0`, `x.eq(0)`, `interval(0, 1)`, `:else`.
+    def condition(cond)
+      case cond
+      when Inequality then "#{print(cond.lhs)} #{Inequality::OPS[cond.op]} #{print(cond.rhs)}"
+      when Equation then "#{print(cond.lhs)}.eq(#{print(cond.rhs)})"
+      when Interval then interval(cond)
+      when RealSet then cond.intervals.map { |i| interval(i) }.join(" | ")
+      else cond.inspect
+      end
+    end
+
+    def interval(i)
+      opens = [("left_open: true" if i.left_open), ("right_open: true" if i.right_open)].compact
+      "interval(#{print(i.low)}, #{print(i.high)}#{opens.empty? ? '' : ", #{opens.join(', ')}"})"
     end
 
     def precedence(expr)

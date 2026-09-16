@@ -145,6 +145,8 @@ module RCAS
       f = Expression.lift(f)
       x = Expression.lift(x)
       a = Expression.lift(a)
+      f = Piecewises.hoist(f)
+      return Piecewises.limit(f, x, a, dir) if f.is_a?(Piecewise)
       g, = localize(f, x, a)
       side = infinite?(a) ? :right : (dir || :both)
       if side == :both

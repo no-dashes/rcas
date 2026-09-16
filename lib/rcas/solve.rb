@@ -74,6 +74,7 @@ module RCAS
       end
       return Inequalities.solve(target, vars) if target.is_a?(Inequality) || (target.is_a?(Array) && target.any? { |t| t.is_a?(Inequality) })
       return system(target, vars) if target.is_a?(Array)
+      return piecewise(target, vars) if piecewise?(target)
       f = to_zero(target).simplify
       x = variable(f, vars)
       dedupe(univariate(f, x, 0, all: all))
@@ -88,6 +89,19 @@ module RCAS
     end
 
     def to_zero(target) = target.is_a?(Equation) ? Sub.new(target.lhs, target.rhs) : Expression.lift(target)
+
+    def piecewise?(target)
+      return true if target.is_a?(Expression) && target.each_node.any? { |n| n.is_a?(Piecewise) }
+      target.is_a?(Equation) && (target.lhs.each_node.any? { |n| n.is_a?(Piecewise) } || target.rhs.each_node.any? { |n| n.is_a?(Piecewise) })
+    end
+
+    # Every branch is solved on its own piece (piecewise.rb).
+    def piecewise(target, vars)
+      return Piecewises.solve(Piecewises.hoist(target), Num.new(0), vars) unless target.is_a?(Equation)
+      pw = Piecewises.hoist(Sub.new(target.lhs, target.rhs).simplify)
+      return Piecewises.solve(pw, Num.new(0), vars) if pw.is_a?(Piecewise)
+      Solve.solve(pw, vars)
+    end
 
     def variable(f, vars)
       return Expression.lift(vars) if vars

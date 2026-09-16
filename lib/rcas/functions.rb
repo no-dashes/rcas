@@ -306,6 +306,15 @@ module RCAS
     # interval(0, 1) is [0, 1]; interval(0, 1, right_open: true) is [0, 1)
     def interval(low, high, **open) = Interval.new(low, high, **open)
 
+    # A function defined case by case: piecewise(x < 0 => -x, :else => x**2)
+    def piecewise(*branches, **rest) = Piecewises.build(*branches, **rest)
+
+    # The points where f jumps: discontinuities(piecewise(x < 0 => 0, :else => 1))
+    def discontinuities(f, var = nil) = Piecewises.discontinuities(Expression.lift(f), var)
+
+    # The corners of f: points where it is continuous but the one-sided derivatives differ.
+    def kinks(f, var = nil) = Piecewises.kinks(Expression.lift(f), var)
+
     # eq(x**2, 4) builds an equation; solve(eq(x**2, 4), x) solves it.
     def eq(lhs, rhs) = Equation.new(lhs, rhs)
     def solve(target, vars = nil, all: false) = Solve.solve(target, vars, all: all)
