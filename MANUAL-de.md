@@ -995,7 +995,11 @@ einer Ordnung.
 Grenzwerte lesen den führenden Term der Reihe ab. `oo` und `-oo` sind
 zulässige Stellen; `dir: :right` oder `:left` gibt einseitige Grenzwerte,
 und ein zweiseitiger Grenzwert, dessen Seiten nicht übereinstimmen, bleibt
-unausgewertet.
+unausgewertet. Einen Faktor, der für eine Reihe zu schnell oszilliert,
+erledigt der Einschnürungssatz: `sin`, `cos`, `sign`, `atan`, `erf` und
+`tanh` sind als beschränkt bekannt, ein Produkt aus einem von ihnen und
+einem Faktor, der gegen null geht, geht also gegen null. Eine ungedämpfte
+Oszillation hat keinen Grenzwert und sagt das auch.
 
 ```
 rcas> limit(sin(x) / x, x, 0)
@@ -1015,7 +1019,13 @@ rcas> limit(sqrt(x**2 + x) - x, x, oo)
 rcas> [limit(1/x, x: 0, dir: :right), limit(1/x, x: 0, dir: :left), limit(1/x, x, 0)]
 => [oo, -oo, limit(1/x, x, 0)]
 rcas> limit(sin(x) / x, x, oo)
-=> limit(sin(x)/x, x, oo)
+=> 0
+rcas> limit(exp(-x) * cos(3*x), x, oo)
+=> 0
+rcas> limit(x * sin(1/x), x, 0)
+=> 0
+rcas> limit(sin(x), x, oo)
+=> limit(sin(x), x, oo)
 ```
 
 #### Summen
@@ -2811,8 +2821,7 @@ Nicht umgesetzt: der vollständige Risch-Algorithmus und spezielle Funktionen
 über `erf` hinaus (`Ei`, `Si`), Varianzanalyse und nichtparametrische Tests,
 dreidimensionale und parametrische Grafiken, Geometrie im Raum,
 Fourier-Transformationen, Gruppentheorie, Differentialgleichungen mit
-variablen Koeffizienten jenseits der ersten Ordnung, Grenzwerte beschränkter
-Schwingungen (`sin(x)/x` im Unendlichen), Ungleichungen jenseits
+variablen Koeffizienten jenseits der ersten Ordnung, Ungleichungen jenseits
 polynomialer, rationaler und Betragsungleichungen, Zahlkörper mit mehr als
 zwei Erzeugern, die zugeordneten Legendre-Funktionen und die
 mehrdimensionalen (partiellen) Bell-Polynome, hypergeometrische Lösungen *inhomogener* Rekursionen mit
@@ -2910,6 +2919,7 @@ Literaturangaben stehen in der Sprache der Werke.
 | rationalisierende Substitutionen: Wurzel aus einer quadratischen Form (Reduktion auf S*sqrt(Q) + lambda*int 1/sqrt(Q), x - alpha = 1/t), Wurzeln linearer Formen, Exponentialfunktionen, tan(x/2) | integrate_substitutions.rb | [Zor15, §5.7]; [Har16, ch. V-VI] |
 | reelle quadratische Faktoren eines biquadratischen Nenners; Möbius-Substitution für die Wurzel aus einem Quotienten linearer Formen | integrate.rb, integrate_substitutions.rb | [Har16, ch. II-III]; [GCL92, ch. 11] |
 | Puiseux-Reihen mit Logarithmustermen, Grenzwerte über den führenden Term | series.rb | Potenzreihenarithmetik wie in [Knu98, §4.7]; die Grenzwertstrategie ist die des Lehrbuchs, nicht Gruntz' MRV-Algorithmus [Gru96] |
+| Einschnürungssatz für einen beschränkten mal einen Nullfaktor | series.rb | [Rud76, th. 3.19] |
 | Faulhaber-Summen durch Newton-Interpolation, Bernoulli-Zahlen, zeta(2m) | summation.rb | [GKP94, §6.5]; Euler-Maclaurin-Rest [GKP94, §9.5] |
 | Gospers Algorithmus mit der Gradschranke für den Polynomansatz | summation.rb | [Gos78]; [PWZ96, ch. 5] |
 | Produkte: Fakultäts- und Gammaquotienten bei linearen Faktoren, exp von Summen | product.rb | [GKP94, §5.5] |

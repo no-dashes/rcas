@@ -29,8 +29,8 @@ module RCAS
   # Sources: series arithmetic (product, quotient, composition, powers) as
   # in [Knu98, §4.7]. Limits take the leading term of this expansion at the
   # point; that is the textbook strategy, not Gruntz's MRV algorithm
-  # [Gru96], which is why bounded oscillation is left unevaluated. Keys:
-  # MANUAL.md, Sources.
+  # [Gru96]. What has no series at the point is left to the squeeze rule
+  # and to the fallbacks in Limits. Keys: MANUAL.md, Sources.
   class Series
     LOG = Var.new(:_L)
 
@@ -194,7 +194,7 @@ module RCAS
           break unless s.zero?
         end
       rescue SeriesError
-        return termwise(g) || exponential_fallback(g)
+        return squeeze(g) || termwise(g) || exponential_fallback(g)
       end
       return Num.new(0) if s.zero?
 
@@ -211,6 +211,30 @@ module RCAS
       return Num.new(0) if e.positive?
       return c.simplify if e.zero?
       signed_infinity(c)
+    end
+
+    # Functions whose real values stay in a bounded interval.
+    BOUNDED = %i[sin cos sign atan erf erfc tanh].freeze
+
+    # The squeeze rule [Rud76, th. 3.19]: |sin(u)| <= 1, so a bounded factor
+    # times a factor that tends to zero tends to zero, however wildly the
+    # first one oscillates. x*sin(1/x) at 0 and exp(-x)*cos(3*x) at infinity
+    # need this - the oscillating factor has no series at the point, so the
+    # expansion above cannot see them. nil when the rule does not apply.
+    def squeeze(g)
+      coeff, factors = Simplify.factorize(g)
+      bounded, rest = factors.partition { |base, exp| bounded?(base, exp) }
+      return nil unless bounded.any? { |base, _| base.variables.include?(T.name) }
+      value = one_sided(Simplify.rebuild_product(coeff, rest.to_h), :right)
+      value.is_a?(Num) && value.value.zero? ? Num.new(0) : nil
+    rescue SeriesError, ZeroDivisionError
+      nil
+    end
+
+    # A non-negative integer power of a bounded function is bounded again.
+    def bounded?(base, exponent)
+      base.is_a?(Fn) && BOUNDED.include?(base.name) && base.args.size == 1 &&
+        exponent.is_a?(Integer) && !exponent.negative?
     end
 
     # exp(-1/t)*t and friends: look at log(g) instead, whose leading term

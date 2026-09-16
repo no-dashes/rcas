@@ -60,7 +60,20 @@ class SeriesTest < Minitest::Test
     assert_equal 0, RCAS.limit(:x**3 * exp(-:x), :x, OO)
     assert_equal "oo", RCAS.limit(exp(:x) / :x**5, :x, OO).to_s
     assert_equal 0, RCAS.limit(exp(1 / :x), :x, 0, :left)
-    assert_kind_of RCAS::Limit, RCAS.limit(sin(:x) / :x, :x, OO), "bounded oscillation is beyond the series method"
+    assert_equal 0, RCAS.limit(sin(:x) / :x, :x, OO)
+  end
+
+  def test_squeeze_rule
+    assert_equal 0, RCAS.limit(:x * sin(1 / :x), :x, 0)
+    assert_equal 0, RCAS.limit(:x**2 * sin(1 / :x**2), :x, 0)
+    assert_equal 0, RCAS.limit(exp(-:x) * cos(3 * :x), :x, OO)
+    assert_equal 0, RCAS.limit(sin(:x)**2 / :x, :x, OO)
+    assert_equal 0, RCAS.limit(exp(-:x) * (cos(:x) + sin(:x)), :x, OO)
+    assert_equal 0, RCAS.limit(RCAS.atan(1 / :x) * :x, :x, 0)
+    # An oscillation that is not damped stays honest.
+    assert_kind_of RCAS::Limit, RCAS.limit(sin(:x), :x, OO)
+    assert_kind_of RCAS::Limit, RCAS.limit(:x * cos(:x), :x, OO)
+    assert_kind_of RCAS::Limit, RCAS.limit(sin(1 / :x), :x, 0)
   end
 
   def test_polynomial_sums

@@ -960,7 +960,11 @@ still expands them to an order.
 
 Limits read the leading term of the series. `oo` and `-oo` are valid
 points; `dir: :right` or `:left` gives one-sided limits, and a two-sided
-limit whose sides disagree stays unevaluated.
+limit whose sides disagree stays unevaluated. A factor that oscillates too
+fast for a series is handled by the squeeze rule: `sin`, `cos`, `sign`,
+`atan`, `erf` and `tanh` are known to be bounded, so a product of one of
+them with a factor that tends to zero tends to zero. An oscillation that
+is not damped has no limit and says so.
 
 ```
 rcas> limit(sin(x) / x, x, 0)
@@ -980,7 +984,13 @@ rcas> limit(sqrt(x**2 + x) - x, x, oo)
 rcas> [limit(1/x, x: 0, dir: :right), limit(1/x, x: 0, dir: :left), limit(1/x, x, 0)]
 => [oo, -oo, limit(1/x, x, 0)]
 rcas> limit(sin(x) / x, x, oo)
-=> limit(sin(x)/x, x, oo)
+=> 0
+rcas> limit(exp(-x) * cos(3*x), x, oo)
+=> 0
+rcas> limit(x * sin(1/x), x, 0)
+=> 0
+rcas> limit(sin(x), x, oo)
+=> limit(sin(x), x, oo)
 ```
 
 #### Sums
@@ -2734,7 +2744,7 @@ Not implemented: the complete Risch algorithm and special functions beyond
 `erf` (`Ei`, `Si`), analysis of variance and non-parametric tests,
 three-dimensional and parametric plots, geometry in space, Fourier
 transforms, group theory, differential equations with variable
-coefficients beyond first order, limits of bounded oscillation (`sin(x)/x` at infinity), inequalities beyond
+coefficients beyond first order, inequalities beyond
 polynomial, rational and absolute-value ones, number fields with more than
 two generators, the associated Legendre functions and the multivariate
 (partial) Bell polynomials, hypergeometric solutions of *inhomogeneous* recurrences
@@ -2831,6 +2841,7 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | rationalizing substitutions: sqrt of a quadratic (reduction to S*sqrt(Q) + lambda*int 1/sqrt(Q), x - alpha = 1/t), roots of linear forms, exponentials, tan(x/2) | integrate_substitutions.rb | [Zor15, §5.7]; [Har16, ch. V-VI] |
 | real quadratic factors of a biquadratic denominator; the Möbius substitution for a root of a ratio of linear forms | integrate.rb, integrate_substitutions.rb | [Har16, ch. II-III]; [GCL92, ch. 11] |
 | Puiseux series with log terms, limits by the leading term | series.rb | power series arithmetic as in [Knu98, §4.7]; the limit strategy is the textbook one, not Gruntz's MRV algorithm [Gru96] |
+| squeeze rule for a bounded factor times a null factor | series.rb | [Rud76, th. 3.19] |
 | Faulhaber sums by Newton interpolation, Bernoulli numbers, zeta(2m) | summation.rb | [GKP94, §6.5]; Euler-Maclaurin tail [GKP94, §9.5] |
 | Gosper's algorithm with the degree bound for the polynomial ansatz | summation.rb | [Gos78]; [PWZ96, ch. 5] |
 | products: factorial and gamma ratios for linear factors, exp of sums | product.rb | [GKP94, §5.5] |

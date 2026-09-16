@@ -68,7 +68,7 @@ module RCAS
       },
       limit: {
         maths: "The value a function approaches, one-sided with dir:, and at infinity. A two-sided limit whose sides disagree stays unevaluated rather than being invented.",
-        method: "The point is moved to 0, the function expanded as a Puiseux series with log terms, and the leading term decides. An exponential fallback takes the limit of the logarithm. This is the textbook strategy, not Gruntz's MRV algorithm [Gru96], so bounded oscillation is left open."
+        method: "The point is moved to 0, the function expanded as a Puiseux series with log terms, and the leading term decides. An exponential fallback takes the limit of the logarithm, and the squeeze rule [Rud76] handles a bounded factor (sin, cos, sign, atan, erf, tanh) times one that tends to zero, which has no series at the point. This is the textbook strategy, not Gruntz's MRV algorithm [Gru96]."
       },
       series: {
         maths: "The Puiseux expansion around a point: a power series with rational exponents and log terms, truncated with an O term that states the order.",
@@ -436,7 +436,7 @@ module RCAS
       hold: ["Computer algebra"],
       diff: ["Derivative", "Differentiation rules"],
       integrate: ["Symbolic integration", "Risch algorithm", "Integration by parts"],
-      limit: ["Limit of a function"],
+      limit: ["Limit of a function", "Squeeze theorem"],
       series: ["Taylor series", "Puiseux series"],
       fps: ["Formal power series", "Holonomic function", "Binomial series"],
       sum: ["Summation", "Faulhaber's formula", "Gosper's algorithm", "Hypergeometric identity"],
