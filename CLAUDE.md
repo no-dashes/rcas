@@ -87,7 +87,7 @@ lib/rcas/complex_parts.rb   ComplexParts: re/im/conj/arg by expansion; variables
 lib/rcas/statistics.rb      Statistics: mean/median/mode/variance(sample: n-1)/quantile (HF96 type 7)/moments/covariance/correlation/linreg, exact and symbolic
 lib/rcas/distributions.rb   Distributions::{Normal Uniform Exponential Bernoulli Binomial Poisson Geometric DiscreteUniform StudentT ChiSquare FRatio}: pdf cdf quantile moments probability expectation sample; not Expressions (to_latex hook)
 lib/rcas/special.rb         Special.gamma_p/gamma_q/beta_i: incomplete gamma and beta, Floats only (series + Lentz continued fractions)
-lib/rcas/precision.rb       Decimal (a Numeric that carries its digit count) and Precision.evalf(expr, digits): the tree walked in BigDecimal/BigMath with GUARD=10 guard digits, RootOf refined by Newton, Unsupported for anything double-precision-only
+lib/rcas/precision.rb       Decimal (a Numeric that carries its digit count) and Precision.evalf(expr, digits): the tree walked in BigDecimal/BigMath with GUARD=10 guard digits. Also erf/Si/Ci/Ei/li by series (with adaptive guard digits for the cancellation, MAX_CANCELLATION), zeta by Euler-Maclaurin over Summation.bernoulli, euler_gamma by Brent-McMillan, quadrature by tanh-sinh (three maps: finite, exp_sinh, sinh_sinh) and refine for roots. nsolve/nintegrate take digits: and come here; Unsupported names whatever is left
 lib/rcas/background.rb      (titles verified against the Wikipedia API 2026-09-14; re-check with
                             ruby -Ilib -rrcas -rnet/http -rjson -e 'RCAS::Background::READING.values.flatten.uniq.each_slice(40) { |b| u = URI("https://en.wikipedia.org/w/api.php"); u.query = URI.encode_www_form(action: "query", format: "json", redirects: 1, titles: b.join("|")); puts JSON.parse(Net::HTTP.get(u))["query"]["pages"].values.select { |p| p.key?("missing") }.map { |p| p["title"] } }')
 lib/rcas/background.rb      Background::ENTRIES: { maths:, method: } per name (or a Symbol alias) and READING: Wikipedia article titles (ASCII, spaces not underscores; Docs expands the [Key00] citations from MANUAL's bibliography itself); test/docs_test.rb checks the names exist and the [Key00] sources are in MANUAL's bibliography
@@ -510,6 +510,12 @@ meaning; five things in it are load-bearing and easy to undo by accident.
   which decides the sign of a constant radical expression by `evalf`.
 - `Substitutions.root_of_ratio` sits *after* `root_of_linear`, so a root of a
   linear form keeps the simpler substitution.
+- Arbitrary precision has two traps worth remembering. The tanh-sinh
+  abscissa must be measured from the *near* end (1 - tanh(u) is
+  2/(1 + exp(2*u))); computing centre + span*tanh(u) cancels away exactly
+  the digits an endpoint singularity needs. And every exp is guarded by
+  EXP_LIMIT: the doubly exponential maps reach arguments like 10**160,
+  where BigMath grinds for ever instead of saying no.
 - `IntegralFunctions.antiderivative` sits right after `table`, before
   `piecewise`: exp(u)/u, sin(u)/u, cos(u)/u and 1/log(u) are named
   integrals (Ei, Si, Ci, li), and the later layers would only find longer

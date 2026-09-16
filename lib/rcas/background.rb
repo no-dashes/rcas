@@ -52,7 +52,7 @@ module RCAS
       subs: { maths: "Substitution: replace a subexpression by another everywhere it occurs. Structural, not mathematical, so x**2 is found but not x*x.", method: "A bottom-up rebuild that compares subtrees with ==." },
       evalf: {
         maths: "A numeric value: every exact number becomes a decimal, so the result is an approximation and says so. With a number of digits it is an arbitrary-precision one, and then the digits are all true: a Float in the expression carries only its own sixteen, and the answer is reported with sixteen.",
-        method: "Without digits the tree is floatified once and evaluated; integer exponents stay exact, so x**2 keeps its shape. With digits it is walked in BigDecimal with ten guard digits and rounded once at the end, the elementary functions coming from BigMath [AS64, §4.1, §4.3] and a real RootOf from Newton's method [PTVF07, §9.4]. What exists only in double precision says so instead of padding sixteen good digits out to fifty."
+        method: "Without digits the tree is floatified once and evaluated; integer exponents stay exact, so x**2 keeps its shape. With digits it is walked in BigDecimal with ten guard digits and rounded once at the end: the elementary functions from BigMath [AS64, §4.1, §4.3], erf, Si, Ci, Ei and li from their series, zeta by Euler-Maclaurin [AS64, §23.2], Euler's constant by Brent-McMillan [BM80], a real RootOf by Newton's method [PTVF07, §9.4] and a definite integral by the double-exponential rule [TM74]. What is left says so instead of padding sixteen good digits out to fifty."
       },
       steps: {
         maths: "The working, not only the answer: which rule applies, what its pieces are, and what they give. A student who is learning the mathematics needs the derivation; someone who only wants the number has diff, integrate and solve already.",
@@ -277,11 +277,11 @@ module RCAS
       proportion_interval: :confidence_interval,
       nsolve: {
         maths: "A root as a decimal, for an equation no formula solves: cos(x) = x has exactly one, and no expression in radicals, logarithms or roots gives it.",
-        method: "Bisection on a bracketing interval, taking a Newton step whenever it stays inside the bracket, so it converges quickly and cannot run away [PTVF07, §9.1-9.4]."
+        method: "Bisection on a bracketing interval, taking a Newton step whenever it stays inside the bracket, so it converges quickly and cannot run away [PTVF07, §9.1-9.4]. With digits: the double-precision root is refined by Newton's method in BigDecimal, which doubles the number of correct digits at every step."
       },
       nintegrate: {
         maths: "A definite integral as a decimal. Most elementary functions have no elementary antiderivative, so this is the usual way to a number; the result is an approximation and prints as one.",
-        method: "Adaptive Simpson quadrature, halving an interval until the two halves agree [PTVF07, §4.2]; an infinite range is mapped to a finite one by a substitution."
+        method: "Adaptive Simpson quadrature, halving an interval until the two halves agree [PTVF07, §4.2]; an infinite range is mapped to a finite one by a substitution. With digits: the double-exponential (tanh-sinh) rule [TM74], which converges doubly exponentially and smothers a singular endpoint; the point is measured from the near end so that nothing cancels there."
       },
       extrema: {
         maths: "The high and low points of a graph. They lie among the critical points, where the derivative vanishes, and the second derivative tells a maximum from a minimum; where it also vanishes the first derivative changes sign, or does not, as for x**3.",
@@ -610,7 +610,7 @@ module RCAS
       expand_log: ["Logarithm"],
       nextprime: ["Prime number"],
       nsolve: ["Root-finding algorithm", "Newton's method", "Bisection method"],
-      nintegrate: ["Numerical integration", "Simpson's rule"],
+      nintegrate: ["Numerical integration", "Simpson's rule", "Tanh-sinh quadrature"],
       extrema: ["Maximum and minimum", "Derivative test", "Critical point (mathematics)"],
       inflections: ["Inflection point"],
       asymptotes: ["Asymptote"],

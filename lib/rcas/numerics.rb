@@ -43,12 +43,13 @@ module RCAS
     # nsolve(f, x: a..b) brackets a sign change; nsolve(f, x, guess) starts
     # Newton's method there. Returns a Float, or raises when no root is found.
     def nsolve(f, var = nil, guess = nil, **range)
+      digits = range.delete(:digits)
       expr = Solve.to_zero(f)
       var, from, to = arguments(var, guess, range, expr)
       g = caller_for(expr, var)
       derivative = caller_for(Expression.lift(expr).diff(var), var)
-      return newton(g, derivative, from, var, expr) if to.nil?
-      bisect(g, derivative, from, to, var, expr)
+      root = to.nil? ? newton(g, derivative, from, var, expr) : bisect(g, derivative, from, to, var, expr)
+      digits ? Precision.refine(expr, var, root, digits) : root
     end
 
     def arguments(var, guess, range, expr)
@@ -126,8 +127,13 @@ module RCAS
 
     # nintegrate(f, x: a..b), with infinite ends mapped to a finite range.
     def nintegrate(f, var = nil, from = nil, to = nil, **range)
+      digits = range.delete(:digits)
       var, from, to = Functions.range_arguments(var, from, to, range, "nintegrate", discrete: false) if var.nil? || from
       var = Expression.lift(var)
+      if digits
+        value = Precision.quadrature(Expression.lift(f), var, Expression.lift(from), Expression.lift(to), digits)
+        return Decimal.new(value, digits)
+      end
       lo = bound(from)
       hi = bound(to)
       return -nintegrate(f, var, to, from) if lo > hi

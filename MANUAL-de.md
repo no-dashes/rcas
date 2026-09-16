@@ -981,11 +981,36 @@ vierunddreißig zu erfinden.
 
 Die Konstanten, `exp`, `log`, die trigonometrischen und hyperbolischen
 Funktionen samt Umkehrungen, Wurzeln, Potenzen, eine endliche `sum` und
-ein reelles `RootOf` sind alle da. Was es nur in doppelter Genauigkeit
-gibt - `erf`, `Si`, `Ci`, `Ei`, `li`, `zeta`, ein unausgewertetes Integral
-- wirft `Precision::Unsupported` und nennt sich beim Namen, statt sechzehn
-gute Stellen als fünfzig zu verkleiden. Das gewöhnliche `evalf` beantwortet
-sie nach wie vor.
+ein reelles `RootOf` sind alle da, und ebenso die, die `BigMath` nicht hat:
+`erf` und `erfc`, `Si`, `Ci`, `Ei` und `li` über ihre Reihen, `zeta` über
+Euler-Maclaurin und die eulersche Konstante selbst über den Algorithmus von
+Brent und McMillan. Auch `nsolve` und `nintegrate` nehmen `digits:` - eine
+Nullstelle wird mit dem Newton-Verfahren nachgezogen, ein Integral mit der
+doppeltexponentiellen Regel berechnet, die eine singuläre Grenze und einen
+unendlichen Bereich ungefragt verkraftet. Ein bestimmtes `integral(...)`,
+das symbolisch niemand lösen konnte, geht denselben Weg.
+
+```
+rcas> evalf(erf(1), 30)
+=> 0.842700792949714869341220635083
+rcas> evalf(zeta(3), 30)
+=> 1.20205690315959428539973816151
+rcas> nsolve(cos(x) - x, x: 0..1, digits: 40)
+=> 0.7390851332151606416553120876738734040134
+rcas> nintegrate(1/sqrt(x), x: 0..1, digits: 30)
+=> 2.0
+rcas> nintegrate(exp(-x**2), x: 0..oo, digits: 30)
+=> 0.886226925452758013649083741671
+rcas> evalf(integrate(exp(-x**4), x: 0..1), 30)
+=> 0.8448385947571024007640469307
+```
+
+Was übrig bleibt, wirft `Precision::Unsupported` und nennt sich beim Namen,
+statt sechzehn gute Stellen als fünfzig zu verkleiden: ein unbestimmtes
+Integral, ein komplexer Wert, `zeta` an einer gebrochenen Stelle, eine
+unbekannte Funktion und ein Argument, das so groß ist, dass die Reihe dazu
+mehr Stellen wegkürzen würde, als die Arbeitsgenauigkeit hergibt. Das
+gewöhnliche `evalf` beantwortet nach wie vor, was es kann.
 
 Das Ergebnis ist ein `RCAS::Decimal`: ein `Numeric`, das weiß, auf wie
 viele Stellen es gut ist, sie ausgibt und wie jede andere Zahl wieder in
@@ -3260,7 +3285,7 @@ Funktionen der obersten Ebene (bloß in `bin/rcas`, sonst `RCAS.name`):
 | abschnittsweise | `piecewise discontinuities kinks` |
 | hypergeometrische Summation | `sumrecursion sumcertificate hyper` |
 | q-Analoga | `qbracket qfactorial qbinomial qpochhammer qgosper qsum qsumrecursion qsumcertificate qsolve qhyper` |
-| Numerik | `nsolve nintegrate` |
+| Numerik | `nsolve nintegrate` (beide nehmen `digits:`) |
 | Kurvendiskussion | `critical_points extrema inflections asymptotes tangent normal real_domain` |
 | Länge, Fläche, Volumen | `arclength revolution_volume revolution_surface` |
 | mehrere Veränderliche | `gradient hessian jacobian divergence curl laplacian lagrange` |
@@ -3402,6 +3427,9 @@ Literaturangaben stehen in der Sprache der Werke.
 | Fourier-Reihen und halbseitige Entwicklungen | fourier.rb | [Spi08, ch. 13]; die Koeffizienten sind rcas' eigene Integrale |
 | Ei, Si, Ci, li: Reihen und Kettenbrüche | integral_functions.rb | [AS64, §5.1, §5.2]; [PTVF07, §6.3]; Lentz [Len76] |
 | evalf mit beliebiger Genauigkeit über BigDecimal, Nullstellen mit Newton | precision.rb | [AS64, §4.1, §4.3]; [PTVF07, §9.4] |
+| Die eulersche Konstante auf beliebige Genauigkeit | precision.rb | Brent-McMillan [BM80] |
+| Doppeltexponentielle (tanh-sinh) Quadratur | precision.rb | [TM74] |
+| erf, Si, Ci, Ei, li und zeta in BigDecimal | precision.rb | die Reihen aus [AS64, §5.1, §5.2, §7.1]; Euler-Maclaurin [AS64, §23.2] |
 | Rechenwege: die Regeln benannt, wie sie benutzt werden | steps.rb | [Spi08, ch. 10, 18, 19]; Euklid [Knu98, §4.5.2] |
 | Bogenlänge, Rotationskörper | analysis.rb | [Spi08, ch. 13] |
 | LU, QR, Cholesky, Diagonalisierung | decompositions.rb | [Str16, ch. 2, 4, 6] |
@@ -3452,6 +3480,8 @@ Literaturangaben stehen in der Sprache der Werke.
   Functions*, National Bureau of Standards 1964, ch. 7 (error function).
 - [BD12] W. E. Boyce, R. C. DiPrima, *Elementary Differential Equations and
   Boundary Value Problems*, 10th ed., Wiley 2012.
+- [BM80] R. P. Brent, E. M. McMillan, Some new algorithms for high-precision
+  computation of Euler's constant, *Math. Comp.* 34 (1980), 305-312.
 - [Bra86] B. Braden, The surveyor's area formula, *College Mathematics
   Journal* 17 (1986), 326-337.
 - [Bre80] R. P. Brent, An improved Monte Carlo factorization algorithm,
@@ -3559,6 +3589,8 @@ Literaturangaben stehen in der Sprache der Werke.
   bases, *Math. Comp.* 86 (2017), 985-1003.
 - [Sze75] G. Szegő, *Orthogonal Polynomials*, 4th ed., American Mathematical
   Society Colloquium Publications 23, AMS 1975.
+- [TM74] H. Takahasi, M. Mori, Double exponential formulas for numerical
+  integration, *Publ. RIMS Kyoto Univ.* 9 (1974), 721-741.
 - [Tra76] B. M. Trager, Algebraic factoring and rational function
   integration, *Proc. SYMSAC '76*, ACM 1976, 219-226.
 - [Tuk77] J. W. Tukey, *Exploratory Data Analysis*, Addison-Wesley 1977.

@@ -84,16 +84,66 @@ class PrecisionTest < Minitest::Test
   end
 
   def test_what_has_no_arbitrary_precision_says_so
-    error = assert_raises(RCAS::Precision::Unsupported) { RCAS.evalf(RCAS.erf(1), 30) }
-    assert_includes error.message, "erf"
+    error = assert_raises(RCAS::Precision::Unsupported) { RCAS.evalf(RCAS::Fn.new(:u, [X]), 30, x: 1) }
     assert_includes error.message, "double-precision"
-    assert_raises(RCAS::Precision::Unsupported) { RCAS.evalf(RCAS::Fn.new(:Si, [RCAS::Num.new(1)]), 30) }
-    assert_raises(RCAS::Precision::Unsupported) { RCAS.evalf(RCAS.zeta(3), 30) }
-    assert_raises(RCAS::Precision::Unsupported) { RCAS.evalf(RCAS.integrate(RCAS.exp(-X**4), x: 0..1), 30) }
+    # an integral with no bounds is not a number
+    assert_raises(RCAS::Precision::Unsupported) { RCAS.evalf(RCAS::Integral.new(RCAS.exp(-X**4), X), 30) }
     assert_raises(RCAS::Precision::Unsupported) { RCAS.evalf(RCAS.log(-2), 30) }
     assert_raises(RCAS::Precision::Unsupported) { RCAS.evalf(RCAS.sqrt(-1), 30) }
-    # and the ordinary evalf still answers the ones it can
-    assert_in_delta 0.8427007929497149, RCAS.evalf(RCAS.erf(1)), 1e-12
+    assert_raises(RCAS::Precision::Unsupported) { RCAS.evalf(RCAS::Fn.new(:zeta, [RCAS::Num.new(Rational(3, 2))]), 30) }
+    assert_raises(RCAS::Precision::Unsupported) { RCAS.evalf(RCAS.exp(10**9), 30) }
+    # a series whose cancellation would eat more digits than it can make up
+    assert_raises(RCAS::Precision::Unsupported) { RCAS.evalf(RCAS::Fn.new(:Si, [RCAS::Num.new(10_000)]), 30) }
+  end
+
+  # The functions BigMath does not have, each to thirty digits.
+  def test_the_special_functions
+    assert_equal "0.842700792949714869341220635083", RCAS.evalf(RCAS.erf(1), 30).to_s
+    assert_equal "0.157299207050285130658779364917", RCAS.evalf(RCAS.erfc(1), 30).to_s
+    assert_equal "0.946083070367183014941353313823", RCAS.evalf(RCAS::Fn.new(:Si, [RCAS::Num.new(1)]), 30).to_s
+    assert_equal "0.337403922900968134662646203889", RCAS.evalf(RCAS::Fn.new(:Ci, [RCAS::Num.new(1)]), 30).to_s
+    assert_equal "1.89511781635593675546652093433", RCAS.evalf(RCAS::Fn.new(:Ei, [RCAS::Num.new(1)]), 30).to_s
+    assert_equal "1.04516378011749278484458888919", RCAS.evalf(RCAS::Fn.new(:li, [RCAS::Num.new(2)]), 30).to_s
+    assert_equal "1.20205690315959428539973816151", RCAS.evalf(RCAS.zeta(3), 30).to_s, "Apery's constant"
+    assert_equal RCAS.evalf(PI**2 / 6, 30), RCAS.evalf(RCAS.zeta(2), 30), "the even ones go through pi"
+    # Euler's constant, which Ci and Ei are built on
+    assert_equal "0.57721566490153286060651209008240243104215933593992",
+                 RCAS::Precision.euler_gamma(60).mult(1, 50).to_s("F")
+  end
+
+  # The series and the quadrature are different methods; where they meet is
+  # the check that either of them is right.
+  def test_the_series_agree_with_the_integrals_that_define_them
+    t = RCAS::Var.new(:t)
+    digits = 25
+    pairs = {
+      "Si(1)" => [RCAS::Fn.new(:Si, [RCAS::Num.new(1)]), RCAS::Integral.new(RCAS.sin(t) / t, t, RCAS::Num.new(0), RCAS::Num.new(1))],
+      "erf(1)" => [RCAS.erf(1), 2 / RCAS.sqrt(PI) * RCAS::Integral.new(RCAS.exp(-t**2), t, RCAS::Num.new(0), RCAS::Num.new(1))],
+      "-Ei(-1)" => [-RCAS::Fn.new(:Ei, [RCAS::Num.new(-1)]), RCAS::Integral.new(RCAS.exp(-t) / t, t, RCAS::Num.new(1), RCAS::OO)],
+      "zeta(3)" => [RCAS.zeta(3), RCAS::Integral.new(t**2 / (RCAS.exp(t) - 1), t, RCAS::Num.new(0), RCAS::OO) / 2]
+    }
+    pairs.each do |name, (series, integral)|
+      difference = RCAS.evalf(series, digits) - RCAS.evalf(integral, digits)
+      assert difference.abs < RCAS.evalf(Rational(1, 10**(digits - 2)), digits),
+             "#{name}: the series and the integral differ by #{difference}"
+    end
+  end
+
+  def test_quadrature_to_thirty_digits
+    assert_equal "0.78539816339744830961566084582", RCAS.nintegrate(1 / (1 + X**2), x: 0..1, digits: 30).to_s
+    assert_equal "2.0", RCAS.nintegrate(1 / RCAS.sqrt(X), x: 0..1, digits: 30).to_s, "a singular endpoint"
+    assert_equal "-1.0", RCAS.nintegrate(RCAS.log(X), x: 0..1, digits: 30).to_s
+    assert_equal "0.886226925452758013649083741671", RCAS.nintegrate(RCAS.exp(-X**2), x: 0..RCAS::OO, digits: 30).to_s
+    assert_equal RCAS.evalf(PI, 30), RCAS.nintegrate(1 / (1 + X**2), x: -RCAS::OO..RCAS::OO, digits: 30)
+    assert_instance_of Float, RCAS.nintegrate(1 / (1 + X**2), x: 0..1), "without digits nothing changes"
+  end
+
+  def test_roots_to_forty_digits
+    root = RCAS.nsolve(RCAS.cos(X) - X, x: 0..1, digits: 40)
+    assert_equal "0.7390851332151606416553120876738734040134", root.to_s
+    assert RCAS.evalf(RCAS.cos(X) - X, 40, x: root).abs < RCAS.evalf(Rational(1, 10**38), 40)
+    assert_equal "1.25992104989487316476721060727822835057", RCAS.nsolve(X**3 - 2, x: 1..2, digits: 40).to_s
+    assert_instance_of Float, RCAS.nsolve(X**3 - 2, x: 1..2), "without digits nothing changes"
   end
 
   def test_arguments_are_checked

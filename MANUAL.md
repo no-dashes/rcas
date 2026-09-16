@@ -946,10 +946,34 @@ be inventing thirty-four.
 
 The constants, `exp`, `log`, the trigonometric and hyperbolic functions
 and their inverses, roots, powers, a finite `sum` and a real `RootOf` are
-all there. Anything that exists only in double precision - `erf`, `Si`,
-`Ci`, `Ei`, `li`, `zeta`, an unevaluated integral - raises
-`Precision::Unsupported` and names itself, rather than dressing up sixteen
-good digits as fifty. Plain `evalf` still answers those.
+all there, and so are the ones `BigMath` does not have: `erf` and `erfc`,
+`Si`, `Ci`, `Ei` and `li` by their series, `zeta` by Euler-Maclaurin, and
+Euler's constant itself by Brent and McMillan's algorithm. `nsolve` and
+`nintegrate` take `digits:` too - a root is refined by Newton's method,
+and an integral is computed by the double-exponential rule, which handles
+a singular endpoint and an infinite range without being asked. A definite
+`integral(...)` that nothing could do symbolically goes the same way.
+
+```
+rcas> evalf(erf(1), 30)
+=> 0.842700792949714869341220635083
+rcas> evalf(zeta(3), 30)
+=> 1.20205690315959428539973816151
+rcas> nsolve(cos(x) - x, x: 0..1, digits: 40)
+=> 0.7390851332151606416553120876738734040134
+rcas> nintegrate(1/sqrt(x), x: 0..1, digits: 30)
+=> 2.0
+rcas> nintegrate(exp(-x**2), x: 0..oo, digits: 30)
+=> 0.886226925452758013649083741671
+rcas> evalf(integrate(exp(-x**4), x: 0..1), 30)
+=> 0.8448385947571024007640469307
+```
+
+What is left raises `Precision::Unsupported` and names itself, rather than
+dressing up sixteen good digits as fifty: an indefinite integral, a
+complex value, `zeta` at a fraction, an unknown function, and an argument
+so large that the series for it would cancel away more digits than the
+working precision can make up. Plain `evalf` still answers what it can.
 
 The result is an `RCAS::Decimal`: a `Numeric` that remembers how many
 digits it is good for, prints them, and goes back into an expression like
@@ -3172,7 +3196,7 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | case by case | `piecewise discontinuities kinks` |
 | hypergeometric summation | `sumrecursion sumcertificate hyper` |
 | q-analogues | `qbracket qfactorial qbinomial qpochhammer qgosper qsum qsumrecursion qsumcertificate qsolve qhyper` |
-| numerics | `nsolve nintegrate` |
+| numerics | `nsolve nintegrate` (both take `digits:`) |
 | curve sketching | `critical_points extrema inflections asymptotes tangent normal real_domain` |
 | length, area, volume | `arclength revolution_volume revolution_surface` |
 | several variables | `gradient hessian jacobian divergence curl laplacian lagrange` |
@@ -3312,6 +3336,9 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | Fourier series and half-range expansions | fourier.rb | [Spi08, ch. 13]; the coefficients are rcas's own integrals |
 | Ei, Si, Ci, li: series and continued fractions | integral_functions.rb | [AS64, §5.1, §5.2]; [PTVF07, §6.3]; Lentz [Len76] |
 | arbitrary-precision evalf over BigDecimal, roots by Newton | precision.rb | [AS64, §4.1, §4.3]; [PTVF07, §9.4] |
+| Euler's constant to any precision | precision.rb | Brent-McMillan [BM80] |
+| double-exponential (tanh-sinh) quadrature | precision.rb | [TM74] |
+| erf, Si, Ci, Ei, li and zeta in BigDecimal | precision.rb | the series of [AS64, §5.1, §5.2, §7.1]; Euler-Maclaurin [AS64, §23.2] |
 | worked solutions: the rules named as they are used | steps.rb | [Spi08, ch. 10, 18, 19]; Euclid [Knu98, §4.5.2] |
 | arc length, solids of revolution | analysis.rb | [Spi08, ch. 13] |
 | LU, QR, Cholesky, diagonalization | decompositions.rb | [Str16, ch. 2, 4, 6] |
@@ -3362,6 +3389,8 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   Functions*, National Bureau of Standards 1964, ch. 7 (error function).
 - [BD12] W. E. Boyce, R. C. DiPrima, *Elementary Differential Equations and
   Boundary Value Problems*, 10th ed., Wiley 2012.
+- [BM80] R. P. Brent, E. M. McMillan, Some new algorithms for high-precision
+  computation of Euler's constant, *Math. Comp.* 34 (1980), 305-312.
 - [Bra86] B. Braden, The surveyor's area formula, *College Mathematics
   Journal* 17 (1986), 326-337.
 - [Bre80] R. P. Brent, An improved Monte Carlo factorization algorithm,
@@ -3469,6 +3498,8 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   bases, *Math. Comp.* 86 (2017), 985-1003.
 - [Sze75] G. Szegő, *Orthogonal Polynomials*, 4th ed., American Mathematical
   Society Colloquium Publications 23, AMS 1975.
+- [TM74] H. Takahasi, M. Mori, Double exponential formulas for numerical
+  integration, *Publ. RIMS Kyoto Univ.* 9 (1974), 721-741.
 - [Tra76] B. M. Trager, Algebraic factoring and rational function
   integration, *Proc. SYMSAC '76*, ACM 1976, 219-226.
 - [Tuk77] J. W. Tukey, *Exploratory Data Analysis*, Addison-Wesley 1977.

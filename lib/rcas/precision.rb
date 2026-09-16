@@ -182,6 +182,7 @@ module RCAS
       when Fn      then function(node, prec, bindings, state)
       when RootOf  then root_of(node, prec)
       when Sum     then series_sum(node, prec, bindings, state)
+      when Integral then integral(node, prec, bindings, state)
       when Piecewise then piecewise(node, prec, bindings, state)
       else unsupported!(node.class.name.split("::").last.downcase, node)
       end
@@ -278,17 +279,20 @@ module RCAS
 
     ELEMENTARY = %i[exp log sin cos tan atan asin acos sinh cosh tanh abs sign floor ceil round factorial gamma].freeze
 
+    # The ones BigMath does not have, written out below.
+    SPECIAL = %i[erf erfc Si Ci Ei li zeta].freeze
+
     def function(node, prec, bindings, state)
-      unless ELEMENTARY.include?(node.name) && node.args.size == 1
+      unless (ELEMENTARY + SPECIAL).include?(node.name) && node.args.size == 1
         unsupported!("#{node.name}", node)
       end
       x = walk(node.args.first, prec, bindings, state)
-      apply(node.name, x, prec, node)
+      SPECIAL.include?(node.name) ? special(node.name, x, prec, node) : apply(node.name, x, prec, node)
     end
 
     def apply(name, x, prec, node)
       case name
-      when :exp   then BigMath.exp(x, prec)
+      when :exp   then exponential(x, prec)
       when :log   then positive!(x, node) && BigMath.log(x, prec)
       when :sin   then BigMath.sin(x, prec)
       when :cos   then BigMath.cos(x, prec)
@@ -306,6 +310,15 @@ module RCAS
       when :round then BigDecimal(x.round)
       when :factorial, :gamma then whole_factorial(x, name, node)
       end
+    end
+
+    # Beyond this the exponential is not a number anyone is waiting for,
+    # and BigMath would grind for a very long time on the way to saying so.
+    EXP_LIMIT = 1_000_000
+
+    def exponential(x, prec)
+      raise Unsupported, "evalf: exp(#{x.to_f}) is beyond arbitrary precision" if x.abs > EXP_LIMIT
+      BigMath.exp(x, prec)
     end
 
     def positive!(x, node)
@@ -327,6 +340,284 @@ module RCAS
       n -= 1 if name == :gamma
       raise Unsupported, "evalf: #{node} is only available for whole numbers" unless x.frac.zero? && n >= 0
       BigDecimal((1..n).reduce(1, :*))
+    end
+
+    # ---- the functions BigMath does not have ---------------------------------
+
+    # An alternating series whose terms grow to e**growth before they shrink
+    # cancels away that many digits; the working precision has to make them
+    # up. Past MAX_CANCELLATION the series is the wrong method and saying so
+    # is better than running it.
+    MAX_CANCELLATION = 400
+
+    def cancellation(growth, prec)
+      extra = (growth * Math.log10(Math::E)).ceil
+      if extra > MAX_CANCELLATION
+        raise Unsupported, "evalf: the argument is too large for the series (it would cancel " \
+                           "#{extra} digits away); the asymptotic expansion is not implemented"
+      end
+      prec + [extra, 0].max + 5
+    end
+
+    def tolerance(prec) = BigDecimal("1e-#{prec}")
+
+    # Euler's constant by Brent and McMillan's algorithm B1 [BM80]: the two
+    # Bessel-like sums U and V, whose ratio is gamma up to exp(-4*n).
+    def euler_gamma(prec)
+      work = prec + 10
+      n = (work * Math.log(10) / 4).ceil + 1
+      squared = BigDecimal(n * n)
+      a = -BigMath.log(BigDecimal(n), work)
+      b = BigDecimal(1)
+      u = a
+      v = b
+      k = 1
+      limit = 20 * n + 100
+      loop do
+        b = b.mult(squared, work).div(k * k, work)
+        a = (a.mult(squared, work).div(k, work) + b).div(k, work)
+        u += a
+        v += b
+        break if k > n && a.abs < tolerance(work) * u.abs
+        k += 1
+        break if k > limit
+      end
+      u.div(v, work)
+    end
+
+    def special(name, x, prec, node)
+      case name
+      when :erf  then erf(x, prec)
+      when :erfc then BigDecimal(1) - erf(x, prec)
+      when :Si   then sine_integral(x, prec)
+      when :Ci   then cosine_integral(x, prec, node)
+      when :Ei   then exponential_integral(x, prec, node)
+      when :li   then logarithmic_integral(x, prec, node)
+      when :zeta then zeta(x, prec, node)
+      end
+    end
+
+    # erf(x) = 2/sqrt(pi) * sum (-1)**n x**(2n+1)/(n!*(2n+1)), which is the
+    # whole story until the cancellation bites; beyond the point where erfc
+    # is below the last digit, erf is 1.
+    def erf(x, prec)
+      return -erf(-x, prec) if x.negative?
+      return BigDecimal(1) if x > Math.sqrt((prec + 5) * Math.log(10))
+      work = cancellation(x.to_f**2, prec)
+      squared = x.mult(x, work)
+      term = x
+      sum = x
+      n = 1
+      loop do
+        term = term.mult(squared, work).div(n, work)
+        piece = term.div(2 * n + 1, work)
+        sum += n.odd? ? -piece : piece
+        break if piece.abs < tolerance(work)
+        n += 1
+      end
+      sum.mult(2, work).div(BigMath.PI(work).sqrt(work), work)
+    end
+
+    # Si(x) = sum (-1)**k x**(2k+1)/((2k+1)*(2k+1)!)
+    def sine_integral(x, prec)
+      return -sine_integral(-x, prec) if x.negative?
+      work = cancellation(x.to_f, prec)
+      squared = x.mult(x, work)
+      term = x
+      sum = x
+      k = 1
+      loop do
+        term = term.mult(squared, work).div((2 * k) * (2 * k + 1), work)
+        piece = term.div(2 * k + 1, work)
+        sum += k.odd? ? -piece : piece
+        break if piece.abs < tolerance(work)
+        k += 1
+      end
+      sum
+    end
+
+    # Ci(x) = gamma + log(x) + sum (-1)**k x**(2k)/(2k*(2k)!)
+    def cosine_integral(x, prec, node)
+      raise Unsupported, "evalf: #{node} is real only for a positive argument" unless x.positive?
+      work = cancellation(x.to_f, prec)
+      squared = x.mult(x, work)
+      term = BigDecimal(1)
+      sum = BigDecimal(0)
+      k = 1
+      loop do
+        term = term.mult(squared, work).div((2 * k - 1) * (2 * k), work)
+        piece = term.div(2 * k, work)
+        sum += k.odd? ? -piece : piece
+        break if piece.abs < tolerance(work)
+        k += 1
+      end
+      euler_gamma(work) + BigMath.log(x, work) + sum
+    end
+
+    # Ei(x) = gamma + log|x| + sum x**k/(k*k!)
+    def exponential_integral(x, prec, node)
+      raise Unsupported, "evalf: #{node} is infinite at 0" if x.zero?
+      work = cancellation(x.negative? ? x.abs.to_f : 0.0, prec)
+      term = BigDecimal(1)
+      sum = BigDecimal(0)
+      k = 1
+      loop do
+        term = term.mult(x, work).div(k, work)
+        piece = term.div(k, work)
+        sum += piece
+        break if piece.abs < tolerance(work) && k > x.abs
+        k += 1
+      end
+      euler_gamma(work) + BigMath.log(x.abs, work) + sum
+    end
+
+    def logarithmic_integral(x, prec, node)
+      raise Unsupported, "evalf: #{node} needs a positive argument" unless x.positive?
+      return BigDecimal(0) if x.zero?
+      raise Unsupported, "evalf: li(1) is infinite" if x == 1
+      exponential_integral(BigMath.log(x, prec + GUARD), prec, node)
+    end
+
+    # zeta(s) for a whole s > 1: the even ones are a rational multiple of
+    # pi**s, the odd ones come from Euler-Maclaurin [AS64, §23.2] with the
+    # exact Bernoulli numbers rcas already has.
+    def zeta(s, prec, node)
+      unless s.frac.zero? && s > 1
+        raise Unsupported, "evalf: #{node} is only available for a whole s > 1"
+      end
+      s = s.to_i
+      work = prec + GUARD
+      return even_zeta(s, work) if s.even?
+      n = [prec, 20].max
+      head = (1...n).reduce(BigDecimal(0)) { |acc, i| acc + BigDecimal(1).div(BigDecimal(i)**s, work) }
+      power = BigDecimal(n)**s
+      total = head + BigDecimal(n).div(power.mult(s - 1, work), work) + BigDecimal(1).div(power.mult(2, work), work)
+      product = BigDecimal(s)
+      (1..work).each do |k|
+        bernoulli = Summation.bernoulli(2 * k)
+        piece = BigDecimal(bernoulli.numerator).div(bernoulli.denominator, work)
+                                               .mult(product, work)
+                                               .div(factorial(2 * k).mult(power.mult(BigDecimal(n)**(2 * k - 1), work), work), work)
+        total += piece
+        break if piece.abs < tolerance(work)
+        product = product.mult((s + 2 * k - 1) * (s + 2 * k), work)
+      end
+      total
+    end
+
+    def even_zeta(s, work)
+      value = Summation.zeta_even(s) # a rational times pi**s
+      coefficient, = Simplify.factorize(value)
+      BigDecimal(coefficient.numerator).div(coefficient.denominator, work).mult(BigMath.PI(work)**s, work)
+    end
+
+    def factorial(n) = BigDecimal((1..n).reduce(1, :*))
+
+    # ---- quadrature ----------------------------------------------------------
+
+    MAX_LEVELS = 8
+
+    # Double-exponential (tanh-sinh) quadrature [TM74]: the substitution
+    # x = tanh(pi/2*sinh(t)) makes the integrand and all its derivatives die
+    # away so fast at the ends that the trapezoidal rule in t converges
+    # doubly exponentially - and an endpoint singularity is smothered with
+    # them. The two infinite ranges use exp(pi/2*sinh(t)) and
+    # sinh(pi/2*sinh(t)) in the same skeleton.
+    def quadrature(integrand, var, from, to, prec, bindings = {}, state = { limit: prec })
+      work = prec + 2 * GUARD
+      map = transformation(from, to, work, bindings, state)
+      f = ->(point) { walk(integrand, work, bindings.merge(var.name => point), state) }
+      half = BigMath.PI(work).div(2, work)
+      step = BigDecimal(1)
+      total = level_sum(f, map, half, step, work, 0)
+      previous = nil
+      (1..MAX_LEVELS).each do |level|
+        step = step.div(2, work)
+        # halving the step keeps every point of the level before it
+        total = total.div(2, work) + level_sum(f, map, half, step, work, 1)
+        settled = previous && (total - previous).abs < tolerance(prec) * [total.abs, BigDecimal(1)].max
+        return total.mult(1, prec) if settled && level > 1
+        previous = total
+      end
+      raise Unsupported, "evalf: the quadrature did not settle to #{prec} digits"
+    end
+
+    # One trapezoidal sum in t, over every k (parity 0) or only the odd ones
+    # (parity 1), stopping when the weights have died away.
+    def level_sum(f, map, half, step, work, parity)
+      total = BigDecimal(0)
+      k = parity.zero? ? 0 : 1
+      loop do
+        contribution = BigDecimal(0)
+        [1, -1].each do |sign|
+          next if k.zero? && sign.negative?
+          t = step.mult(sign * k, work)
+          point, weight = map.call(t, half, work)
+          next if weight.zero?
+          value = begin
+            f.call(point)
+          rescue ZeroDivisionError, Unsupported
+            next
+          end
+          contribution += weight.mult(value, work)
+        end
+        total += contribution
+        break if k.positive? && contribution.abs < tolerance(work) && k * step > 2
+        k += parity.zero? ? 1 : 2
+        break if k * step > 8 # the weights are below any precision by here
+      end
+      total.mult(step, work)
+    end
+
+    # [point, weight] as a function of t, for the three shapes of range.
+    def transformation(from, to, work, bindings, state)
+      lower = Limits.infinite?(from)
+      upper = Limits.infinite?(to)
+      if lower && upper then sinh_sinh
+      elsif upper then exp_sinh(walk(from, work, bindings, state), 1)
+      elsif lower then exp_sinh(walk(to, work, bindings, state), -1)
+      else finite(walk(from, work, bindings, state), walk(to, work, bindings, state))
+      end
+    end
+
+    # The point is measured from the near end, never as centre + span*tanh(u):
+    # 1 - tanh(u) is 2/(1 + exp(2*u)) and loses nothing, while the difference
+    # would cancel away every digit that an endpoint singularity needs.
+    def finite(a, b)
+      lambda do |t, half, work|
+        span = (b - a).div(2, work)
+        u = half.mult(sinh(t, work), work)
+        next [a, BigDecimal(0)] if u.abs > EXP_LIMIT
+        gap = span.mult(2, work).div(BigDecimal(1) + BigMath.exp(u.mult(2, work).abs, work), work)
+        point = t.negative? ? a + gap : b - gap
+        [point, half.mult(cosh(t, work), work).div(cosh(u, work)**2, work).mult(span, work)]
+      end
+    end
+
+    def exp_sinh(edge, direction)
+      lambda do |t, half, work|
+        u = half.mult(sinh(t, work), work)
+        next [edge, BigDecimal(0)] if u.abs > EXP_LIMIT || u > Math.log(10) * (work + 30)
+        growth = BigMath.exp(u, work)
+        [edge + growth.mult(direction, work), half.mult(cosh(t, work), work).mult(growth, work)]
+      end
+    end
+
+    def sinh_sinh
+      lambda do |t, half, work|
+        u = half.mult(sinh(t, work), work)
+        next [BigDecimal(0), BigDecimal(0)] if u.abs > Math.log(10) * (work + 30)
+        [sinh(u, work), half.mult(cosh(t, work), work).mult(cosh(u, work), work)]
+      end
+    end
+
+    def sinh(t, work) = (exponential(t, work) - exponential(-t, work)).div(2, work)
+    def cosh(t, work) = (exponential(t, work) + exponential(-t, work)).div(2, work)
+
+    def tanh(t, work)
+      up = BigMath.exp(t, work)
+      down = BigMath.exp(-t, work)
+      (up - down).div(up + down, work)
     end
 
     # ---- the rest -----------------------------------------------------------
@@ -353,6 +644,58 @@ module RCAS
       coefficients.reverse.reduce(BigDecimal(0)) do |acc, c|
         acc.mult(x, prec) + BigDecimal(c.numerator).div(c.denominator, prec)
       end
+    end
+
+    # A definite integral is quadrature; an indefinite one is not a number.
+    def integral(node, prec, bindings, state)
+      unsupported!("indefinite integral", node) unless node.definite?
+      quadrature(node.integrand, node.var, node.from, node.to, prec, bindings, state)
+    end
+
+    # A root to the digits asked for: Newton from the double-precision one,
+    # or the secant method when there is no derivative to be had [PTVF07,
+    # §9.4, §9.2]. The number of correct digits doubles at every step, so a
+    # handful of them is the whole cost.
+    def refine(expr, var, guess, digits, bindings = {})
+      work = digits + 2 * GUARD
+      state = { limit: work }
+      f = ->(point) { walk(expr, work, bindings.merge(var.name => point), state) }
+      slope = begin
+        derivative = Expression.lift(expr).diff(var)
+        ->(point) { walk(derivative, work, bindings.merge(var.name => point), state) }
+      rescue StandardError
+        nil
+      end
+      x = BigDecimal(guess, FLOAT_DIGITS)
+      x = slope ? newton_steps(f, slope, x, work) : secant_steps(f, x, work)
+      Decimal.new(x.mult(1, digits), digits)
+    end
+
+    def newton_steps(f, slope, x, work)
+      MAX_NEWTON.times do
+        divisor = slope.call(x)
+        raise Unsupported, "evalf: the derivative is zero at the root" if divisor.zero?
+        step = f.call(x).div(divisor, work)
+        x -= step
+        break if step.abs < tolerance(work) * [x.abs, BigDecimal(1)].max
+      end
+      x
+    end
+
+    def secant_steps(f, x, work)
+      previous = x + tolerance(FLOAT_DIGITS)
+      before = f.call(previous)
+      MAX_NEWTON.times do
+        value = f.call(x)
+        divisor = value - before
+        break if divisor.zero?
+        step = value.mult(x - previous, work).div(divisor, work)
+        previous = x
+        before = value
+        x -= step
+        break if step.abs < tolerance(work) * [x.abs, BigDecimal(1)].max
+      end
+      x
     end
 
     # A sum with whole bounds, term by term.
