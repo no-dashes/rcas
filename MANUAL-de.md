@@ -51,6 +51,7 @@ Namen, die unten benutzt werden.
     - [Kurvendiskussion](#kurvendiskussion)
     - [Mehrere Veränderliche](#mehrere-veränderliche)
     - [Reihen](#reihen)
+    - [Formale Potenzreihen](#formale-potenzreihen)
     - [Grenzwerte](#grenzwerte)
     - [Summen](#summen)
     - [Bestimmte Summen: kreatives Teleskopieren](#bestimmte-summen-kreatives-teleskopieren)
@@ -281,7 +282,8 @@ Weiterlesen: 1.3 Analysis, 1.4 Gleichungen und Lösen, 1.6 Polynomringe,
 
 ### Grundstudium
 
-Grenzwerte und Reihen, die Integrationstechniken, Differentialgleichungen,
+Grenzwerte und Reihen (`fps` gibt den allgemeinen Koeffizienten, nicht nur
+die ersten Glieder), die Integrationstechniken, Differentialgleichungen,
 Matrizen und ihre Eigenwerte, partielle Ableitungen sowie Statistik mit
 Tests und Konfidenzintervallen. Wo es keine geschlossene Form gibt, geben
 `nsolve` und `nintegrate` die Zahl, und sagen auch, dass es eine ist.
@@ -291,6 +293,8 @@ rcas> limit(sin(x)/x, x, 0)
 => 1
 rcas> series(exp(x), x, 0, 5)
 => 1 + x + x**2/2 + x**3/6 + x**4/24 + O(x**5)
+rcas> fps(sin(x), x)
+=> sum((-1)**k*x**(1 + 2*k)/(1 + 2*k)!, k, 0, oo)
 rcas> integrate(1/(x**2 - 1), x)
 => log(-1 + x)/2 - log(1 + x)/2
 rcas> dsolve(eq(D(y, x, 2) + y, 0), y, x)
@@ -933,6 +937,54 @@ rcas> taylor((1 + x)**a, x, 0, 3)
 => 1 + a*x + a*x**2*(-1 + a)/2
 ```
 
+#### Formale Potenzreihen
+
+`fps(f, x, a)`, auch `series(f, x, formal: true)`, gibt den *allgemeinen*
+Koeffizienten statt der ersten Glieder: `f` als `sum(c(k)*(x - a)**k)` mit
+`c(k)` in geschlossener Form. rcas sucht eine Differentialgleichung mit
+polynomialen Koeffizienten für `f`, liest die Rekursion ab, der die
+Taylor-Koeffizienten genügen, und löst diese; das Ergebnis ist eine
+gewöhnliche `sum`, die `doit` wieder aufsummiert.
+
+```
+rcas> fps(exp(x), x)
+=> sum(x**k/k!, k, 0, oo)
+rcas> fps(sin(x), x)
+=> sum((-1)**k*x**(1 + 2*k)/(1 + 2*k)!, k, 0, oo)
+rcas> fps(cosh(x), x)
+=> sum(x**(2*k)/(2*k)!, k, 0, oo)
+rcas> fps(log(1 + x), x)
+=> sum(-((-1)**k*x**k)/k, k, 1, oo)
+rcas> fps(atan(x), x)
+=> sum((-1)**k*x**(1 + 2*k)/(1 + 2*k), k, 0, oo)
+rcas> fps((1 + x)**a, x)
+=> sum(x**k*binomial(a, k), k, 0, oo)
+rcas> fps(1 / sqrt(1 - 4*x), x)
+=> sum(x**k*(2*k)!/k!**2, k, 0, oo)
+rcas> series(asin(x), x, formal: true)
+=> sum((1/4)**k*x**(1 + 2*k)*(2*k)!/(k!**2*(1 + 2*k)), k, 0, oo)
+rcas> fps(exp(x), x, 1)
+=> sum((x - 1)**k*e/k!, k, 0, oo)
+rcas> fps(sin(x), x).doit
+=> sin(x)
+```
+
+Jede Summe beginnt dort, wo ihre Rekursion beginnt: `log(1 + x)` hat kein
+konstantes Glied, und Koeffizienten, die sich erst später einpendeln,
+stehen mit ihren ersten Gliedern vor der Summe.
+
+```
+rcas> fps(cos(x)**2, x)
+=> 1 + sum((-4)**k*x**(2*k)/(2*(2*k)!), k, 1, oo)
+```
+
+Die Koeffizienten müssen hypergeometrisch sein, das heißt `c(k + m)/c(k)`
+eine rationale Funktion von `k`. Der Tangens (Bernoulli-Zahlen),
+`exp(x)/(1 - x)` und `x/(1 - x - x**2)` (Fibonacci-Zahlen, eine
+dreigliedrige Rekursion) sind es nicht; `fps` sagt das mit einem
+`SeriesError`, statt zu raten, und `series` entwickelt sie weiterhin bis zu
+einer Ordnung.
+
 #### Grenzwerte
 
 Grenzwerte lesen den führenden Term der Reihe ab. `oo` und `-oo` sind
@@ -1062,8 +1114,10 @@ gar nicht genügt, sagt `sumrecursion`, woran es liegt.
 `a**u(k)` gibt `a**sum(u)`, und ein Polynom in `k`, dessen Faktoren über QQ
 linear sind, gibt Fakultäten (bei ganzzahligen Verschiebungen) oder
 `gamma`-Werte (bei rationalen), denn das Produkt von `k + r` von `a` bis `b`
-ist `gamma(b + r + 1)/gamma(a + r)`. Alles andere mit ganzzahligen Grenzen
-wird ausmultipliziert; sonst bleibt das Produkt formal.
+ist `gamma(b + r + 1)/gamma(a + r)`. Eine Verschiebung, die ein Parameter
+ist, gibt dasselbe Verhältnis, generisch: die Nullstelle wird als außerhalb
+des Bereichs angenommen. Alles andere mit ganzzahligen Grenzen wird
+ausmultipliziert; sonst bleibt das Produkt formal.
 
 ```
 rcas> product(k, k: 1..n)
@@ -1076,6 +1130,8 @@ rcas> product(a**k, k: 1..n)
 => a**(n/2 + n**2/2)
 rcas> product((k + 1)/k, k: 1..n)
 => 1 + n
+rcas> product(k + b, k: 1..n)
+=> gamma(1 + b + n)/gamma(1 + b)
 rcas> product(k, k: 1..5)
 => 120
 rcas> product(factorial(k), k: 1..n)
@@ -2577,7 +2633,7 @@ Funktionen der obersten Ebene (bloß in `bin/rcas`, sonst `RCAS.name`):
 | Polynomstruktur | `degree ldegree lcoeff tcoeff coeff coeffs collect resultant discriminant interpolate` |
 | Konstanten | `PI E I oo` (bloß `pi`, `π`, `oo`, `∞`) |
 | Auswerten | `subs evalf` |
-| Analysis | `integrate diff series taylor limit sum product` |
+| Analysis | `integrate diff series taylor fps limit sum product` |
 | hypergeometrische Summation | `sumrecursion sumcertificate hyper` |
 | q-Analoga | `qbracket qfactorial qbinomial qpochhammer qgosper qsum qsumrecursion qsumcertificate qsolve qhyper` |
 | Numerik | `nsolve nintegrate` |
@@ -2615,8 +2671,9 @@ Schwingungen (`sin(x)/x` im Unendlichen), Ungleichungen jenseits
 polynomialer, rationaler und Betragsungleichungen, Zahlkörper mit mehr als
 zwei Erzeugern, hypergeometrische Lösungen *inhomogener* Rekursionen mit
 polynomialen Koeffizienten, Abramovs rationale Lösungen, der
-Almkvist-Zeilberger-Algorithmus für hyperexponentielle Integrale und
-mehrdimensionale (holonome) Summation.
+Almkvist-Zeilberger-Algorithmus für hyperexponentielle Integrale,
+mehrdimensionale (holonome) Summation und formale Potenzreihen, deren
+Koeffizienten nicht hypergeometrisch sind (`tan`, `exp(x)/(1 - x)`).
 
 ## 3. Dateien
 
@@ -2711,6 +2768,7 @@ Literaturangaben stehen in der Sprache der Werke.
 | Produkte: Fakultäts- und Gammaquotienten bei linearen Faktoren, exp von Summen | product.rb | [GKP94, §5.5] |
 | Rekursionen: charakteristische Wurzeln, unbestimmte Koeffizienten, Anfangswerte | recurrence.rb | [GKP94, §7.3] |
 | hypergeometrische Lösungen einer Rekursion mit polynomialen Koeffizienten (Petkovšek), polynomiale Lösungen mit Abramovs Gradschranke | petkovsek.rb, poly_recurrence.rb | [Pet92]; [Koe14, ch. 9]; [PWZ96, ch. 8] |
+| formale Potenzreihen (Koepfs FPS-Algorithmus): holonome Differentialgleichung, Rekursion für die Koeffizienten, hypergeometrische Lösung; Gaußsche Multiplikationsformel für die Gammafaktoren | fps.rb | [Koe92]; [Koe14, ch. 10]; [Sta99, ch. 6]; [AS64, §6.1] |
 | bestimmte hypergeometrische Summen durch kreatives Teleskopieren (Zeilberger), mit rationalem Zertifikat | zeilberger.rb | [Zei91]; [Koe14, ch. 7]; [PWZ96, ch. 6] |
 | q-Analoga: q-Pochhammer und Gaußsche Binomialkoeffizienten, q-Gosper, q-Zeilberger, q-Petkovšek für q-Differenzengleichungen | q_functions.rb, q_summation.rb, q_zeilberger.rb, q_difference.rb | [Koo93]; [Koe14, ch. 10-12]; [APP98]; [GR04] |
 | beschreibende Statistik, Stichprobenquantile (Definition 7), Ausgleichsgerade | statistics.rb | [HF96]; [Ros14, ch. 7] |
@@ -2800,6 +2858,8 @@ Literaturangaben stehen in der Sprache der Werke.
 - [Len76] W. J. Lentz, Generating Bessel functions in Mie scattering
   calculations using continued fractions, *Applied Optics* 15 (1976),
   668-671.
+- [Koe92] W. Koepf, Power series in computer algebra, *J. Symbolic Comput.*
+  13 (1992), 581-603.
 - [Koe14] W. Koepf, *Hypergeometric Summation: An Algorithmic Approach to
   Summation and Special Function Identities*, 2nd ed., Universitext,
   Springer 2014.
@@ -2845,6 +2905,8 @@ Literaturangaben stehen in der Sprache der Werke.
 - [Rud76] W. Rudin, *Principles of Mathematical Analysis*, 3rd ed.,
   McGraw-Hill 1976.
 - [Spi08] M. Spivak, *Calculus*, 4th ed., Publish or Perish 2008.
+- [Sta99] R. P. Stanley, *Enumerative Combinatorics, vol. 2*, Cambridge
+  University Press 1999.
 - [Str16] G. Strang, *Introduction to Linear Algebra*, 5th ed.,
   Wellesley-Cambridge Press 2016.
 - [SW17] J. Sorenson, J. Webster, Strong pseudoprimes to twelve prime

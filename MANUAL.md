@@ -46,6 +46,7 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
     - [Curve sketching](#curve-sketching)
     - [Several variables](#several-variables)
     - [Series](#series)
+    - [Formal power series](#formal-power-series)
     - [Limits](#limits)
     - [Sums](#sums)
     - [Definite sums: creative telescoping](#definite-sums-creative-telescoping)
@@ -267,9 +268,10 @@ Read on: 1.3 Calculus, 1.4 Equations and solving, 1.6 Polynomial rings,
 
 ### College
 
-Limits and series, the techniques of integration, differential equations,
-matrices and their eigenvalues, partial derivatives, and statistics with
-tests and confidence intervals. When a symbolic answer does not exist,
+Limits and series (`fps` gives the general coefficient, not only the first
+terms), the techniques of integration, differential equations, matrices and
+their eigenvalues, partial derivatives, and statistics with tests and
+confidence intervals. When a symbolic answer does not exist,
 `nsolve` and `nintegrate` give the number instead, and say that it is one.
 
 ```
@@ -277,6 +279,8 @@ rcas> limit(sin(x)/x, x, 0)
 => 1
 rcas> series(exp(x), x, 0, 5)
 => 1 + x + x**2/2 + x**3/6 + x**4/24 + O(x**5)
+rcas> fps(sin(x), x)
+=> sum((-1)**k*x**(1 + 2*k)/(1 + 2*k)!, k, 0, oo)
 rcas> integrate(1/(x**2 - 1), x)
 => log(-1 + x)/2 - log(1 + x)/2
 rcas> dsolve(eq(D(y, x, 2) + y, 0), y, x)
@@ -900,6 +904,53 @@ rcas> taylor((1 + x)**a, x, 0, 3)
 => 1 + a*x + a*x**2*(-1 + a)/2
 ```
 
+#### Formal power series
+
+`fps(f, x, a)`, also `series(f, x, formal: true)`, gives the *general*
+coefficient rather than the first few terms: `f` as `sum(c(k)*(x - a)**k)`
+with `c(k)` in closed form. rcas looks for a differential equation with
+polynomial coefficients for `f`, reads off the recurrence its Taylor
+coefficients obey and solves that; the answer is an ordinary `sum`, so
+`doit` sums it back up.
+
+```
+rcas> fps(exp(x), x)
+=> sum(x**k/k!, k, 0, oo)
+rcas> fps(sin(x), x)
+=> sum((-1)**k*x**(1 + 2*k)/(1 + 2*k)!, k, 0, oo)
+rcas> fps(cosh(x), x)
+=> sum(x**(2*k)/(2*k)!, k, 0, oo)
+rcas> fps(log(1 + x), x)
+=> sum(-((-1)**k*x**k)/k, k, 1, oo)
+rcas> fps(atan(x), x)
+=> sum((-1)**k*x**(1 + 2*k)/(1 + 2*k), k, 0, oo)
+rcas> fps((1 + x)**a, x)
+=> sum(x**k*binomial(a, k), k, 0, oo)
+rcas> fps(1 / sqrt(1 - 4*x), x)
+=> sum(x**k*(2*k)!/k!**2, k, 0, oo)
+rcas> series(asin(x), x, formal: true)
+=> sum((1/4)**k*x**(1 + 2*k)*(2*k)!/(k!**2*(1 + 2*k)), k, 0, oo)
+rcas> fps(exp(x), x, 1)
+=> sum((x - 1)**k*e/k!, k, 0, oo)
+rcas> fps(sin(x), x).doit
+=> sin(x)
+```
+
+Every sum starts where its recurrence does: `log(1 + x)` has no constant
+term, and coefficients that only settle down later have their first terms
+written out in front of the sum.
+
+```
+rcas> fps(cos(x)**2, x)
+=> 1 + sum((-4)**k*x**(2*k)/(2*(2*k)!), k, 1, oo)
+```
+
+The coefficients have to be hypergeometric, that is `c(k + m)/c(k)` a
+rational function of `k`. The tangent (Bernoulli numbers), `exp(x)/(1 - x)`
+and `x/(1 - x - x**2)` (Fibonacci numbers, a three-term recurrence) are
+not, and `fps` says so with a `SeriesError` instead of guessing; `series`
+still expands them to an order.
+
 #### Limits
 
 Limits read the leading term of the series. `oo` and `-oo` are valid
@@ -1027,8 +1078,9 @@ obey, `sumrecursion` says what went wrong.
 `a**u(k)` gives `a**sum(u)`, and a polynomial in `k` whose factors are
 linear over QQ gives factorials (integer shifts) or `gamma` values
 (rational shifts), since the product of `k + r` from `a` to `b` is
-`gamma(b + r + 1)/gamma(a + r)`. Anything else with integer bounds is
-multiplied out; otherwise the product stays formal.
+`gamma(b + r + 1)/gamma(a + r)`. A shift that is a parameter gives the same
+ratio, generically: the root is taken to be outside the range. Anything else
+with integer bounds is multiplied out; otherwise the product stays formal.
 
 ```
 rcas> product(k, k: 1..n)
@@ -1041,6 +1093,8 @@ rcas> product(a**k, k: 1..n)
 => a**(n/2 + n**2/2)
 rcas> product((k + 1)/k, k: 1..n)
 => 1 + n
+rcas> product(k + b, k: 1..n)
+=> gamma(1 + b + n)/gamma(1 + b)
 rcas> product(k, k: 1..5)
 => 120
 rcas> product(factorial(k), k: 1..n)
@@ -2505,7 +2559,7 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | polynomial structure | `degree ldegree lcoeff tcoeff coeff coeffs collect resultant discriminant interpolate` |
 | constants | `PI E I oo` (bare `pi`, `π`, `oo`, `∞`) |
 | evaluation | `subs evalf` |
-| calculus | `integrate diff series taylor limit sum product` |
+| calculus | `integrate diff series taylor fps limit sum product` |
 | hypergeometric summation | `sumrecursion sumcertificate hyper` |
 | q-analogues | `qbracket qfactorial qbinomial qpochhammer qgosper qsum qsumrecursion qsumcertificate qsolve qhyper` |
 | numerics | `nsolve nintegrate` |
@@ -2541,8 +2595,9 @@ coefficients beyond first order, limits of bounded oscillation (`sin(x)/x` at in
 polynomial, rational and absolute-value ones, number fields with more than
 two generators, hypergeometric solutions of *inhomogeneous* recurrences
 with polynomial coefficients, Abramov's rational solutions, the
-Almkvist-Zeilberger algorithm for hyperexponential integrals, and
-multivariate (holonomic) summation.
+Almkvist-Zeilberger algorithm for hyperexponential integrals,
+multivariate (holonomic) summation, and formal power series whose
+coefficients are not hypergeometric (`tan`, `exp(x)/(1 - x)`).
 
 ## 3. Files
 
@@ -2636,6 +2691,7 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | products: factorial and gamma ratios for linear factors, exp of sums | product.rb | [GKP94, §5.5] |
 | recurrences: characteristic roots, undetermined coefficients, initial values | recurrence.rb | [GKP94, §7.3] |
 | hypergeometric solutions of a recurrence with polynomial coefficients (Petkovsek), polynomial solutions with Abramov's degree bound | petkovsek.rb, poly_recurrence.rb | [Pet92]; [Koe14, ch. 9]; [PWZ96, ch. 8] |
+| formal power series (Koepf's FPS algorithm): holonomic differential equation, recurrence for the coefficients, hypergeometric solution; Gauss's multiplication formula for the gammas | fps.rb | [Koe92]; [Koe14, ch. 10]; [Sta99, ch. 6]; [AS64, §6.1] |
 | definite hypergeometric sums by creative telescoping (Zeilberger), with the rational certificate | zeilberger.rb | [Zei91]; [Koe14, ch. 7]; [PWZ96, ch. 6] |
 | q-analogues: q-Pochhammer and Gaussian binomials, q-Gosper, q-Zeilberger, q-Petkovsek for q-difference equations | q_functions.rb, q_summation.rb, q_zeilberger.rb, q_difference.rb | [Koo93]; [Koe14, ch. 10-12]; [APP98]; [GR04] |
 | descriptive statistics, sample quantiles (definition 7), least squares line | statistics.rb | [HF96]; [Ros14, ch. 7] |
@@ -2725,6 +2781,8 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 - [Len76] W. J. Lentz, Generating Bessel functions in Mie scattering
   calculations using continued fractions, *Applied Optics* 15 (1976),
   668-671.
+- [Koe92] W. Koepf, Power series in computer algebra, *J. Symbolic Comput.*
+  13 (1992), 581-603.
 - [Koe14] W. Koepf, *Hypergeometric Summation: An Algorithmic Approach to
   Summation and Special Function Identities*, 2nd ed., Universitext,
   Springer 2014.
@@ -2770,6 +2828,8 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 - [Rud76] W. Rudin, *Principles of Mathematical Analysis*, 3rd ed.,
   McGraw-Hill 1976.
 - [Spi08] M. Spivak, *Calculus*, 4th ed., Publish or Perish 2008.
+- [Sta99] R. P. Stanley, *Enumerative Combinatorics, vol. 2*, Cambridge
+  University Press 1999.
 - [Str16] G. Strang, *Introduction to Linear Algebra*, 5th ed.,
   Wellesley-Cambridge Press 2016.
 - [SW17] J. Sorenson, J. Webster, Strong pseudoprimes to twelve prime

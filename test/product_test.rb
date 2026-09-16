@@ -18,6 +18,19 @@ class ProductTest < Minitest::Test
     end
   end
 
+  # A linear factor whose root is a parameter: the same gamma ratio, under
+  # the generic assumption that the root is not inside the range.
+  def test_parametric_linear_factors
+    a = RCAS::Var.new(:a)
+    result = product(a - K, 0, N)
+    assert_equal "-((-1)**n*gamma(1 - a + n))/gamma(-a)", result.to_s
+    (0..4).each do |n|
+      direct = (0..n).reduce(Rational(1)) { |acc, i| acc * (Rational(1, 3) - i) }
+      assert_in_delta direct.to_f, result.evalf(a: Rational(1, 3), n: n).to_f, 1e-9, "at n = #{n}"
+    end
+    assert_equal "gamma(1 + b + n)/gamma(1 + b)", product(K + RCAS::Var.new(:b), 1, N).to_s
+  end
+
   def test_closed_forms
     assert_product K, 1, "n!"
     assert_product 2 * K, 1, "2**n*n!"

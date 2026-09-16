@@ -75,6 +75,10 @@ module RCAS
         method: "Series arithmetic on {exponent => coefficient} maps, with composition for the elementary functions [Knu98, §4.7]. taylor is the same without the O term."
       },
       taylor: :series,
+      fps: {
+        maths: "The formal power series of a function: the general coefficient in closed form, sum(x**k/k!, k, 0, oo) for exp(x), rather than the first few terms of the expansion.",
+        method: "Koepf's FPS algorithm [Koe92], [Koe14, ch. 10]: a homogeneous differential equation with polynomial coefficients is found for f with undetermined coefficients, its coefficient recurrence is read off, and the two-term case - the one an m-fold symmetric hypergeometric coefficient satisfies - is solved by multiplying up the ratio. Gauss's multiplication formula [AS64, §6.1] turns the gammas back into factorials."
+      },
       sum: {
         maths: "A closed form for a finite or infinite sum, so that sum(k**2, k: 1..n) becomes a polynomial in n rather than a loop.",
         method: "Polynomials by Faulhaber's formula through Newton interpolation [GKP94]; hypergeometric terms by Gosper's algorithm, which decides whether an antidifference exists [Gos78]; 1/n**s by the zeta function; classical power series recognised from the ratio of consecutive terms; a definite sum in one other variable by creative telescoping, whose recurrence is then solved [Zei91]."
@@ -365,6 +369,7 @@ module RCAS
       integrate: ["Symbolic integration", "Risch algorithm", "Integration by parts"],
       limit: ["Limit of a function"],
       series: ["Taylor series", "Puiseux series"],
+      fps: ["Formal power series", "Holonomic function", "Binomial series"],
       sum: ["Summation", "Faulhaber's formula", "Gosper's algorithm", "Hypergeometric identity"],
       sumrecursion: ["Wilf-Zeilberger pair", "Hypergeometric identity", "Doron Zeilberger"],
       hyper: ["Petkovsek's algorithm", "Recurrence relation", "Hypergeometric identity"],

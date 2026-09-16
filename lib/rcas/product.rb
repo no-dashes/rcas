@@ -29,6 +29,8 @@ module RCAS
   # a**sum(u), and a polynomial in k that factors into linear factors over QQ
   # gives ratios of factorials (integer shifts) or gamma values (rational
   # shifts), since prod_{k=a}^{b} (k + r) = gamma(b + r + 1) / gamma(a + r).
+  # A linear factor whose root is a parameter gets the same ratio, under the
+  # generic assumption that the root is not inside the range.
   # Products with integer bounds that fit no pattern are multiplied out.
   #
   # Sources (keys: MANUAL.md, Sources): [GKP94, §5.5] for the gamma function
@@ -77,7 +79,7 @@ module RCAS
       poly = begin
         QQ[k.name].call(base)
       rescue DomainError
-        return nil
+        return parametric_product(base, k, from, to, count)
       end
       factorization = poly.factor
       result = factorization.unit**count
@@ -106,6 +108,21 @@ module RCAS
       else
         RCAS.gamma((to + Num.new(r) + 1).simplify) / RCAS.gamma(lower)
       end
+    end
+
+    # A linear factor whose root is a parameter, a - k: the same gamma ratio.
+    # Whether the root falls inside the range cannot be decided, so this is
+    # the generic answer, as everywhere else where a symbolic quantity would
+    # have to be zero for it to be wrong.
+    def parametric_product(base, k, from, to, count)
+      coefficients = Solve.polynomial_coefficients(base.expand, k)
+      return nil unless coefficients && coefficients.size == 2
+      lead = coefficients.last
+      return nil if depends?(lead, k) || Scalar.zero?(lead)
+      r = (coefficients.first / lead).cancel
+      ((lead**count) * RCAS.gamma((to + r + 1).simplify) / RCAS.gamma((from + r).simplify)).simplify
+    rescue DomainError, NotImplementedError, ZeroDivisionError
+      nil
     end
 
     # Integer bounds: multiply out (up to 1000 factors).

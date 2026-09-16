@@ -58,6 +58,11 @@ module RCAS
         return Num.new(0) if nn >= 0 && kk > nn
         return Num.new((0...kk).reduce(1) { |acc, i| acc * (nn - i) } / (1..kk).reduce(1, :*))
       end
+      # binomial(1/2, 3) is a number too: the falling factorial over k!
+      if n.is_a?(Num) && (n.value.is_a?(Rational) || n.value.is_a?(Float))
+        falling = (0...kk).reduce(1) { |acc, i| acc * (n.value - i) }
+        return Num.new(Simplify.normalize_number(falling / (1..kk).reduce(1, :*)))
+      end
       nil
     end
 

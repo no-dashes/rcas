@@ -49,10 +49,17 @@ module RCAS
       gen_or_n.is_a?(Integer) ? FiniteField.of(q, :a, gen_or_n) : FiniteField.of(q, gen_or_n, n)
     end
 
-    # series(sin(x), x, 0, 6) or series(sin(x), x: 0, n: 6); taylor likewise
+    # series(sin(x), x, 0, 6) or series(sin(x), x: 0, n: 6); formal: true for the general coefficient
     def series(f, x = nil, a = 0, n = 6, **opts)
+      formal = opts.delete(:formal)
       x, a, n = Functions.point_arguments(x, a, n, opts, "series")
-      Limits.series(f, x, a, n)
+      formal ? Functions.formal_series(f, x, a) : Limits.series(f, x, a, n)
+    end
+
+    # fps(exp(x), x): the formal power series, sum(x**k/k!, k, 0, oo), coefficient and all
+    def fps(f, x = nil, a = 0, **opts)
+      x, a, = Functions.point_arguments(x, a, nil, opts, "fps")
+      Functions.formal_series(f, x, a)
     end
 
     # taylor(exp(x), x, 0, 5): the series without the O term
@@ -78,6 +85,15 @@ module RCAS
     def sum(f, k = nil, from = nil, to = nil, **range)
       k, from, to = Functions.range_arguments(k, from, to, range, "sum", discrete: true)
       Summation.sum(f, k, from, to)
+    end
+
+    # The formal power series, or the reason there is none: the truncated
+    # expansion stays available, and saying so is more use than a bare nil.
+    def self.formal_series(f, x, a)
+      FPS.expansion(f, x, a) ||
+        raise(SeriesError, "no formal power series for #{Expression.lift(f)}: " \
+                           "its coefficients are not hypergeometric, or the equation for it is too long. " \
+                           "series(f, #{x}) gives the expansion up to an order.")
     end
 
     def self.point_arguments(x, a, n, opts, name)
