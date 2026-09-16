@@ -595,6 +595,9 @@ in the repo.
   coefficient and prints as `(1/2*i)`.
 - `assert_in_delta(exp, act, delta, msg)`: the third argument is the
   tolerance, not the message.
+- Every Expression class needs a case in `LaTeX.print`; `RootOf` had none
+  for a year because nothing typeset one until `discuss` put roots in a
+  report. The audit is cheap: build one of each node and call `LaTeX.of`.
 - `filter_map` drops `false` as well as `nil`: a block returning a boolean
   sign silently loses every negative piece (this ate a sign chart once).
   Map to symbols instead.

@@ -121,8 +121,17 @@ module RCAS
         return constant(expr) if defined?(Const) && expr.is_a?(Const)
         return derivative(expr) if defined?(Derivative) && expr.is_a?(Derivative)
         return piecewise(expr) if defined?(Piecewise) && expr.is_a?(Piecewise)
+        return root_of(expr) if defined?(RootOf) && expr.is_a?(RootOf)
         raise ArgumentError, "don't know how to typeset #{expr.class}"
       end
+    end
+
+    # RootOf(p, k) keeps its name: it is the k-th root of p in rcas's order
+    # (the real ones first, by size), and a root with no radical form has no
+    # better notation than that.
+    def root_of(root)
+      poly = root.poly.to_expr.subs(Var.new(root.var) => Var.new(:x))
+      "\\operatorname{RootOf}\\left(#{print(poly)}, #{root.index}\\right)"
     end
 
     # A function defined case by case as a cases environment.

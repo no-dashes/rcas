@@ -3672,7 +3672,8 @@ rcas is released under the MIT License; see `LICENSE`.
 
 Everything rcas produces has a `to_latex` method: expressions, polynomials,
 factorizations, the number sets and rings, spaces, vectors and matrices,
-equations and derivatives, and also symbols, numbers, arrays and hashes.
+equations and derivatives, a root with no radical form, and also symbols,
+numbers, arrays and hashes.
 The LaTeX follows the tree exactly as `to_s` does and adds only what a
 typesetter expects: `\frac` for division, implicit multiplication, `\sqrt`
 for the exponent 1/2, `\sin^{2} x`, `e^{x}`, `\ln`, `\pi`, `\mathbb{Q}[x]`,
@@ -3700,6 +3701,8 @@ rcas> eq(D(y, x), 2 * x * y).to_latex
 => "\\frac{d y}{dx} = 2 x y"
 rcas> [1, x, QQ].to_latex
 => "\\left[1,\\; x,\\; \\mathbb{Q}\\right]"
+rcas> solve(x**3 - x - 1, x).first.to_latex
+=> "\\operatorname{RootOf}\\left(-1 - x + x^{3}, 0\\right)"
 ```
 
 Long results can be broken into lines. `to_latex(wrap: n)` splits the

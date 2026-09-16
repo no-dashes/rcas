@@ -175,4 +175,12 @@ class LatexOtherNodesTest < Minitest::Test
     assert_equal eq.to_latex, RCAS::LaTeX.of(eq)
     assert_includes RCAS::Equation.new(y, (0..12).map { |i| x**i }.reduce(:+)).to_latex(wrap: 30), '\begin{aligned}'
   end
+
+  def test_a_root_with_no_radical_form_keeps_its_name
+    root = RCAS.solve(:x**3 - :x - 1, :x).first
+    assert_instance_of RCAS::RootOf, root
+    assert_equal '\operatorname{RootOf}\left(-1 - x + x^{3}, 0\right)', root.to_latex
+    assert_equal root.to_s, "RootOf(#{root.poly.to_expr.subs(RCAS::Var.new(root.var) => RCAS::Var.new(:x))}, 0)"
+    assert_includes RCAS::LaTeX.of(RCAS.discuss(2 * :x**2 - 4 * :x - 2 + 1 / :x, :x)), '\operatorname{RootOf}'
+  end
 end
