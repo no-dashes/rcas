@@ -141,6 +141,9 @@ module RCAS
         klass = OPERATORS[name]
         return klass.new(receiver, args.first) if klass && args.size == 1
         return Neg.new(receiver) if name == :-@
+        # RCAS.integrate(f, x) is the same call as a bare integrate(f, x):
+        # outside bin/rcas that qualified form is how the manual writes it.
+        return function(name, args) if receiver.equal?(RCAS)
         return formal(name, [receiver] + args) if FORMAL.include?(name) && receiver.is_a?(Expression)
         lift(receiver.public_send(name, *args))
       end

@@ -339,6 +339,10 @@ module RCAS
     # hold { 1 + 2 } keeps the block's source as an unevaluated expression;
     # evaluate(expr) computes the formal integrals, derivatives, sums and limits in it.
     def hold(&block) = Hold.hold(block)
+
+    # The working, not only the answer: steps { diff(x**2*sin(x), x) },
+    # steps(x**2 - 5*x + 6, :solve), steps(m, :rref)
+    def steps(*args, &block) = Steps.of(*args, &block)
     def evaluate(expr) = Expression.lift(expr).evaluate
     alias doit evaluate
 

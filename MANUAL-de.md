@@ -95,7 +95,8 @@ Namen, die unten benutzt werden.
   - [1.12 Die q-Analoga](#112-die-q-analoga)
     - [q-Summation](#q-summation)
     - [q-Differenzengleichungen](#q-differenzengleichungen)
-  - [1.13 Hinweise zur Geschwindigkeit](#113-hinweise-zur-geschwindigkeit)
+  - [1.13 Rechenwege](#113-rechenwege)
+  - [1.14 Hinweise zur Geschwindigkeit](#114-hinweise-zur-geschwindigkeit)
 - [2. Referenz](#2-referenz)
 - [3. Dateien](#3-dateien)
 - [4. Quellen](#4-quellen)
@@ -237,7 +238,8 @@ Sechstel, nicht 0,8333. Ruby teilt ganze Zahlen ganzzahlig, schreiben Sie
 also `1/2r` (oder `1/2.0`, wenn Sie wirklich eine Dezimalzahl wollen), wenn
 ein Bruch gemeint ist. Primfaktorzerlegung, größter gemeinsamer Teiler,
 einfache Gleichungen, Abstände und Mittelwerte sind alle da, und `plot`
-zeichnet eine Funktion im Terminal.
+zeichnet eine Funktion im Terminal. `steps` zeigt den Rechenweg statt nur
+das Ergebnis - den euklidischen Algorithmus Zeile für Zeile etwa.
 
 ```
 rcas> 2/3r + 1/6r
@@ -266,7 +268,9 @@ die Lösungen einer Periode, mit `all: true` die ganze Schar. Dann die erste
 Analysis: Ableitungen, Kurvendiskussion, bestimmte Integrale, Summen und
 Wahrscheinlichkeit. Eine Funktion darf mit `piecewise` abschnittsweise
 gegeben werden, und `discontinuities` und `kinks` nennen die Stellen, an
-denen ihre Stücke nicht zusammenpassen.
+denen ihre Stücke nicht zusammenpassen. `steps` schreibt den Rechenweg
+aus: die Ableitungsregeln, wie sie benutzt werden, die Lösungsformel mit
+ihren Zahlen darin, den Partialbruchansatz.
 
 ```
 rcas> factor(x**2 - 5*x + 6)
@@ -3080,7 +3084,99 @@ rcas> qhyper(eq(u(q**2*x), u(q*x) + x*u(x)), u, x, q)
 => []
 ```
 
-### 1.13 Hinweise zur Geschwindigkeit
+### 1.13 Rechenwege
+
+`steps` gibt den Rechenweg, nicht nur das Ergebnis. Es nimmt die
+*Aufgabe* statt ihres Werts, also entweder einen Block -
+`steps { diff(f, x) }`, den `hold` unausgewertet festhält - oder die Sache
+zusammen mit dem, was damit zu tun ist: `steps(f, :solve)`,
+`steps(f, :apart)`, `steps(m, :rref)`, `steps(a, b, :gcd)`.
+
+```
+rcas> steps { diff(x**2*sin(x), x) }
+=> D(x**2*sin(x), x)
+     product rule (u*v)' = u'*v + u*v', with u = x**2 and v = sin(x)
+       power rule (u**n)' = n*u**(n - 1)*u', with u = x and n = 2
+       d/dx (x**2) = 2*x
+       d/du sin(u) = cos(u), from the table
+       d/dx (sin(x)) = cos(x)
+   = 2*x*sin(x) + x**2*cos(x)
+rcas> steps { integrate(x*exp(x), x) }
+=> integral(x*exp(x), x)
+     by parts with u = x and dv = exp(x) dx
+     du = 1 dx and v = exp(x)
+     u*v - integral(v*du) leaves integral(exp(x), x)
+   = -exp(x) + x*exp(x)
+rcas> steps { integrate(x*exp(x**2), x) }
+=> integral(x*exp(x**2), x)
+     substitute u = x**2, so du = 2*x dx
+     the integral becomes integral(exp(u)/2, u)
+   = exp(x**2)/2
+```
+
+Jeder Erzähler entscheidet, welche Regel greift, und fragt die Bibliothek
+dann nach dem Stück, das er benennt; der Rechenweg kann also nirgendwo
+anders enden, als `diff` oder `integrate` von sich aus enden würden. Wo
+keine Lehrbuchregel passt - bei einer rationalen Funktion etwa, die
+Lazard-Rioboo-Trager braucht -, sagt die Zeile das, statt eine Herleitung
+zu erfinden.
+
+```
+rcas> steps(x**2 - 5*x + 6, :solve)
+=> x**2 - 5*x + 6 = 0
+     a quadratic a*x**2 + b*x + c = 0 with a = 1, b = -5, c = 6
+     the discriminant b**2 - 4*a*c = 1
+     x = (-b +- sqrt(b**2 - 4*a*c))/(2*a) = (5 +- 1)/2
+   = [2, 3]
+rcas> steps(1/(x**2 - 1), :apart)
+=> apart(1/(-1 + x**2))
+     numerator 1 over denominator -1 + x**2
+     factor the denominator: -1 + x**2 = (-1 + x)*(1 + x)
+     the ansatz: (1)/(-1 + x**2) = A/(-1 + x) + B/(1 + x)
+     comparing the coefficients of x: A = 1/2, B = -1/2
+   = 1/(2*(-1 + x)) - 1/(2*(1 + x))
+rcas> steps(1071, 462, :gcd)
+=> gcd(1071, 462)
+     1071 = 2*462 + 147
+     462 = 3*147 + 21
+     147 = 7*21 + 0
+     the last remainder that is not zero is the gcd
+   = 21
+```
+
+Dasselbe für die Algebra einer ersten Vorlesung über lineare Algebra, eine
+Zeilenumformung nach der anderen:
+
+```
+rcas> steps(matrix([[2, 1, 5], [1, -1, 1]]), :rref)
+=> [2  1 5]
+   [1 -1 1]
+     R1 := R1/(2)
+     [1 1/2 5/2]
+     [1  -1   1]
+     R2 := R2 - (1)*R1
+     [1  1/2  5/2]
+     [0 -3/2 -3/2]
+     R2 := R2/(-3/2)
+     [1 1/2 5/2]
+     [0   1   1]
+     R1 := R1 - (1/2)*R2
+     [1 0 2]
+     [0 1 1]
+   = [1 0 2]
+   [0 1 1]
+```
+
+Abgedeckt ist, was eine Vorlesung verlangt: Summen-, Produkt-, Quotienten-,
+Potenz- und Kettenregel; die Potenzregel, die Tabelle mit linearem
+Argument, Substitution und partielle Integration; lineare und quadratische
+Gleichungen mit ausgeschriebener Diskriminante und Lösungsformel; der
+Partialbruchansatz samt aufgelösten Unbekannten; der Gauß-Algorithmus; und
+der euklidische Algorithmus für Zahlen und für Polynome. Das Ergebnis ist
+eine `Derivation`, die sich wie oben ausgibt und in `rcas-chat` als
+ausgerichteter Block gesetzt wird.
+
+### 1.14 Hinweise zur Geschwindigkeit
 
 `expand` und die Umwandlung in Polynome fassen gleiche Terme schon beim
 Multiplizieren zusammen, ein Produkt vieler Summen erzeugt also nie mehr
@@ -3144,6 +3240,7 @@ Funktionen der obersten Ebene (bloß in `bin/rcas`, sonst `RCAS.name`):
 | Bereiche | `NN ZZ QQ RR CC` (auch `ℕ ℤ ℚ ℝ ℂ`), `GF assume forget assumptions` |
 | lineare Algebra | `vector matrix gram_schmidt least_squares project orthogonal? lu qr cholesky diagonalize jordan` |
 | Festhalten | `hold evaluate` |
+| Rechenwege | `steps` (ein Block, oder `:solve :apart :rref :gcd`) |
 | Hilfe | `doc` (`/help NAME` in rcas-chat) |
 | Sitzung | `In`, `Out` (die nummerierten Zeilen), `_` (irbs letzter Wert) |
 
@@ -3183,6 +3280,7 @@ lib/rcas/piecewise.rb       functions defined case by case
 lib/rcas/fourier.rb         Fourier series
 lib/rcas/integral_functions.rb  Ei, Si, Ci, li
 lib/rcas/precision.rb       Decimal and evalf to a number of digits
+lib/rcas/steps.rb           worked solutions
 lib/rcas/decompositions.rb  LU, QR, Cholesky, Jordan
 lib/rcas/summation.rb       Faulhaber, Gosper, zeta
 lib/rcas/poly_recurrence.rb polynomial solutions of a linear recurrence
@@ -3266,6 +3364,7 @@ Literaturangaben stehen in der Sprache der Werke.
 | Fourier-Reihen und halbseitige Entwicklungen | fourier.rb | [Spi08, ch. 13]; die Koeffizienten sind rcas' eigene Integrale |
 | Ei, Si, Ci, li: Reihen und Kettenbrüche | integral_functions.rb | [AS64, §5.1, §5.2]; [PTVF07, §6.3]; Lentz [Len76] |
 | evalf mit beliebiger Genauigkeit über BigDecimal, Nullstellen mit Newton | precision.rb | [AS64, §4.1, §4.3]; [PTVF07, §9.4] |
+| Rechenwege: die Regeln benannt, wie sie benutzt werden | steps.rb | [Spi08, ch. 10, 18, 19]; Euklid [Knu98, §4.5.2] |
 | Bogenlänge, Rotationskörper | analysis.rb | [Spi08, ch. 13] |
 | LU, QR, Cholesky, Diagonalisierung | decompositions.rb | [Str16, ch. 2, 4, 6] |
 | Jordansche Normalform aus Ketten verallgemeinerter Eigenvektoren | decompositions.rb | [HK71, ch. 7] |

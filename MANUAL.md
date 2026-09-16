@@ -90,7 +90,8 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
   - [1.12 The q-analogues](#112-the-q-analogues)
     - [q-summation](#q-summation)
     - [q-difference equations](#q-difference-equations)
-  - [1.13 Performance notes](#113-performance-notes)
+  - [1.13 Worked solutions](#113-worked-solutions)
+  - [1.14 Performance notes](#114-performance-notes)
 - [2. Reference](#2-reference)
 - [3. Files](#3-files)
 - [4. Sources](#4-sources)
@@ -224,7 +225,8 @@ Exact arithmetic is the point: a third plus a sixth is five sixths, not
 0.8333. Ruby divides integers, so write `1/2r` (or `1/2.0` when you do want
 a decimal) when you mean a fraction. Prime factorization, greatest common
 divisors, simple equations, distances and averages are all here, and `plot`
-draws a function in the terminal.
+draws a function in the terminal. `steps` shows the working rather than
+only the answer - Euclid's algorithm line by line, say.
 
 ```
 rcas> 2/3r + 1/6r
@@ -252,7 +254,9 @@ not a pair). Trigonometric equations give the solutions in one period, or
 the whole family with `all: true`. Then the first calculus: derivatives,
 curve sketching, definite integrals, sums, and probability. A function may
 be given case by case with `piecewise`, and `discontinuities` and `kinks`
-name the points where its pieces do not fit together.
+name the points where its pieces do not fit together. `steps` writes the
+working out: the rules of differentiation as they are used, the quadratic
+formula with its numbers in it, the partial-fraction ansatz.
 
 ```
 rcas> factor(x**2 - 5*x + 6)
@@ -2998,7 +3002,97 @@ rcas> qhyper(eq(u(q**2*x), u(q*x) + x*u(x)), u, x, q)
 => []
 ```
 
-### 1.13 Performance notes
+### 1.13 Worked solutions
+
+`steps` gives the working, not only the answer. It takes the *problem*
+rather than its result, so either a block - `steps { diff(f, x) }`, which
+`hold` keeps unevaluated - or the thing together with what to do with it:
+`steps(f, :solve)`, `steps(f, :apart)`, `steps(m, :rref)`,
+`steps(a, b, :gcd)`.
+
+```
+rcas> steps { diff(x**2*sin(x), x) }
+=> D(x**2*sin(x), x)
+     product rule (u*v)' = u'*v + u*v', with u = x**2 and v = sin(x)
+       power rule (u**n)' = n*u**(n - 1)*u', with u = x and n = 2
+       d/dx (x**2) = 2*x
+       d/du sin(u) = cos(u), from the table
+       d/dx (sin(x)) = cos(x)
+   = 2*x*sin(x) + x**2*cos(x)
+rcas> steps { integrate(x*exp(x), x) }
+=> integral(x*exp(x), x)
+     by parts with u = x and dv = exp(x) dx
+     du = 1 dx and v = exp(x)
+     u*v - integral(v*du) leaves integral(exp(x), x)
+   = -exp(x) + x*exp(x)
+rcas> steps { integrate(x*exp(x**2), x) }
+=> integral(x*exp(x**2), x)
+     substitute u = x**2, so du = 2*x dx
+     the integral becomes integral(exp(u)/2, u)
+   = exp(x**2)/2
+```
+
+Each narrator decides which rule applies and then asks the library for the
+piece it names, so the working can never end anywhere other than `diff`
+or `integrate` would on their own. Where no textbook rule fits - a
+rational function that needs the Lazard-Rioboo-Trager machinery, say - the
+line says so rather than inventing a derivation.
+
+```
+rcas> steps(x**2 - 5*x + 6, :solve)
+=> x**2 - 5*x + 6 = 0
+     a quadratic a*x**2 + b*x + c = 0 with a = 1, b = -5, c = 6
+     the discriminant b**2 - 4*a*c = 1
+     x = (-b +- sqrt(b**2 - 4*a*c))/(2*a) = (5 +- 1)/2
+   = [2, 3]
+rcas> steps(1/(x**2 - 1), :apart)
+=> apart(1/(-1 + x**2))
+     numerator 1 over denominator -1 + x**2
+     factor the denominator: -1 + x**2 = (-1 + x)*(1 + x)
+     the ansatz: (1)/(-1 + x**2) = A/(-1 + x) + B/(1 + x)
+     comparing the coefficients of x: A = 1/2, B = -1/2
+   = 1/(2*(-1 + x)) - 1/(2*(1 + x))
+rcas> steps(1071, 462, :gcd)
+=> gcd(1071, 462)
+     1071 = 2*462 + 147
+     462 = 3*147 + 21
+     147 = 7*21 + 0
+     the last remainder that is not zero is the gcd
+   = 21
+```
+
+The same for the algebra of a first linear algebra course, one row
+operation at a time:
+
+```
+rcas> steps(matrix([[2, 1, 5], [1, -1, 1]]), :rref)
+=> [2  1 5]
+   [1 -1 1]
+     R1 := R1/(2)
+     [1 1/2 5/2]
+     [1  -1   1]
+     R2 := R2 - (1)*R1
+     [1  1/2  5/2]
+     [0 -3/2 -3/2]
+     R2 := R2/(-3/2)
+     [1 1/2 5/2]
+     [0   1   1]
+     R1 := R1 - (1/2)*R2
+     [1 0 2]
+     [0 1 1]
+   = [1 0 2]
+   [0 1 1]
+```
+
+What is covered is what a course asks for: the sum, product, quotient,
+power and chain rules; the power rule, the table with a linear argument,
+substitution and integration by parts; linear and quadratic equations with
+the discriminant and the formula spelled out; the partial-fraction ansatz
+with its unknowns solved for; Gaussian elimination; and Euclid's algorithm
+for numbers and for polynomials. The result is a `Derivation`, which
+prints as above and typesets as an aligned block in `rcas-chat`.
+
+### 1.14 Performance notes
 
 `expand` and polynomial conversion combine like terms while multiplying,
 so a product of many sums never materialises more terms than the result
@@ -3059,6 +3153,7 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | domains | `NN ZZ QQ RR CC` (also `ℕ ℤ ℚ ℝ ℂ`), `GF assume forget assumptions` |
 | linear algebra | `vector matrix gram_schmidt least_squares project orthogonal? lu qr cholesky diagonalize jordan` |
 | holding | `hold evaluate` |
+| worked solutions | `steps` (a block, or `:solve :apart :rref :gcd`) |
 | help | `doc` (`/help NAME` in rcas-chat) |
 | session | `In`, `Out` (the numbered lines), `_` (irb's last value) |
 
@@ -3097,6 +3192,7 @@ lib/rcas/piecewise.rb       functions defined case by case
 lib/rcas/fourier.rb         Fourier series
 lib/rcas/integral_functions.rb  Ei, Si, Ci, li
 lib/rcas/precision.rb       Decimal and evalf to a number of digits
+lib/rcas/steps.rb           worked solutions
 lib/rcas/decompositions.rb  LU, QR, Cholesky, Jordan
 lib/rcas/summation.rb       Faulhaber, Gosper, zeta
 lib/rcas/poly_recurrence.rb polynomial solutions of a linear recurrence
@@ -3179,6 +3275,7 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | Fourier series and half-range expansions | fourier.rb | [Spi08, ch. 13]; the coefficients are rcas's own integrals |
 | Ei, Si, Ci, li: series and continued fractions | integral_functions.rb | [AS64, §5.1, §5.2]; [PTVF07, §6.3]; Lentz [Len76] |
 | arbitrary-precision evalf over BigDecimal, roots by Newton | precision.rb | [AS64, §4.1, §4.3]; [PTVF07, §9.4] |
+| worked solutions: the rules named as they are used | steps.rb | [Spi08, ch. 10, 18, 19]; Euclid [Knu98, §4.5.2] |
 | arc length, solids of revolution | analysis.rb | [Spi08, ch. 13] |
 | LU, QR, Cholesky, diagonalization | decompositions.rb | [Str16, ch. 2, 4, 6] |
 | Jordan normal form from chains of generalized eigenvectors | decompositions.rb | [HK71, ch. 7] |

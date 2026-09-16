@@ -54,6 +54,10 @@ module RCAS
         maths: "A numeric value: every exact number becomes a decimal, so the result is an approximation and says so. With a number of digits it is an arbitrary-precision one, and then the digits are all true: a Float in the expression carries only its own sixteen, and the answer is reported with sixteen.",
         method: "Without digits the tree is floatified once and evaluated; integer exponents stay exact, so x**2 keeps its shape. With digits it is walked in BigDecimal with ten guard digits and rounded once at the end, the elementary functions coming from BigMath [AS64, §4.1, §4.3] and a real RootOf from Newton's method [PTVF07, §9.4]. What exists only in double precision says so instead of padding sixteen good digits out to fifty."
       },
+      steps: {
+        maths: "The working, not only the answer: which rule applies, what its pieces are, and what they give. A student who is learning the mathematics needs the derivation; someone who only wants the number has diff, integrate and solve already.",
+        method: "One narrator per topic decides which rule applies and then asks the library for the piece it names, so the working cannot end anywhere other than the ordinary answer. Covered: the rules of differentiation; the power rule, the table, substitution and parts; linear and quadratic equations; the partial-fraction ansatz; Gaussian elimination; and Euclid's algorithm [Spi08], [Knu98, §4.5.2]. Where no textbook rule fits, the line says so."
+      },
       hold: {
         maths: "An unevaluated expression, MuPAD's hold: the notation itself, not its value. evaluate (also doit) computes it later.",
         method: "The block's source is read back from Ruby's abstract syntax tree, so integrate, diff, sum and limit inside it become formal nodes."
@@ -502,6 +506,7 @@ module RCAS
       collect: ["Polynomial"],
       subs: ["Expression (mathematics)"],
       evalf: ["Floating-point arithmetic", "Arbitrary-precision arithmetic", "Significant figures"],
+      steps: ["Worked-example effect", "Quadratic formula", "Partial fraction decomposition", "Euclidean algorithm"],
       hold: ["Computer algebra"],
       diff: ["Derivative", "Differentiation rules"],
       integrate: ["Symbolic integration", "Risch algorithm", "Integration by parts"],

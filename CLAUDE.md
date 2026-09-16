@@ -124,7 +124,8 @@ lib/rcas/vector.rb          VectorSpace (QQ**3), Vector
 lib/rcas/matrix.rb          MatrixSpace (QQ**[2,3]), Matrix, Elimination (rref, det, cofactor), eigen*
 lib/rcas/poly_matrix.rb     PolyDet/RatDet/PolyLinearSolve/nullspace (Horn 2008 ch. 6): degree bound, rational evaluation, Newton interpolation; Matrix falls back to Elimination when it returns nil
 lib/rcas/scalar.rb          entry arithmetic with Num fast paths; zero? (exact via Algebraic, then numeric)
-lib/rcas/hold.rb            hold { } via RubyVM::AbstractSyntaxTree; sets RubyVM.keep_script_lines = true
+lib/rcas/hold.rb            hold { } via RubyVM::AbstractSyntaxTree; sets RubyVM.keep_script_lines = true; a qualified RCAS.integrate(...) call inside the block is treated like the bare one
+lib/rcas/steps.rb           Step/Derivation and Steps: worked solutions (diff, integrate, solve, apart, rref, gcd). Each narrator names the rule and asks the library for the piece, so the working cannot disagree with the answer; the fallback line says no textbook rule applies
 lib/rcas/functions.rb       the top-level functions (bare in irb, RCAS.x elsewhere); Functions.fold
 lib/rcas/core_ext.rb        Symbol/Numeric operators, Symbol#in/eq/< ...
 lib/rcas/irb.rb             bin/rcas setup (AutoSymbol, includes, prompt, In/Out hooks)
@@ -633,15 +634,17 @@ q-hypergeometric series as objects of their own; the q-twin of the FPS
 algorithm (q-holonomic equations for q-Taylor coefficients) is the obvious
 next step after fps.rb.
 
-The user has asked for feature ideas four times and chose:
+The user has asked for feature ideas five times and chose:
 factorials/inequalities/trig/algebraic numbers, then finite fields, then
 (Sept 2026) non-homogeneous and higher-order ODEs, rationalizing
 substitutions in integrate and Gröbner bases, then (16 Sept 2026) Fourier
 series with the bounded-oscillation limits they needed, `piecewise`, and a
 bundle of small ones: matrix factorizations (lu/qr/cholesky/diagonalize/
 jordan), arc length and solids of revolution, parametric and polar plots,
-and Ei/Si/Ci/li - and then arbitrary-precision evalf, after
-"we don't include BigDecimal yet?" (16 Sept 2026). What followed came from the
+and Ei/Si/Ci/li - then arbitrary-precision evalf, after
+"we don't include BigDecimal yet?", and then `steps`, the worked-solution
+layer, which had been on the suggestion list twice before it was picked
+(all 16 Sept 2026). What followed came from the
 user directly: product/rsolve/complex parts/rounding/sequences,
 interpolate, statistics, hypothesis tests and confidence intervals,
 plotting (text and pictures, function and statistical), `/help NAME` with
