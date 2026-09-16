@@ -141,4 +141,24 @@ class SolveTest < Minitest::Test
     assert_includes error.message, "eq(lhs, rhs)"
     assert_equal [2, -2], RCAS.solve(RCAS::Equation.new(:x**2, 4), :x).map { |r| r.to_s.to_i }
   end
+  def test_absolute_values_and_sign_are_split_into_cases
+    abs = ->(e) { RCAS.abs(e) }
+    assert_equal ["1", "-1"], strs(s(abs[:x] - 1, :x))
+    assert_equal ["5", "-1"], strs(s(abs[:x - 2] - 3, :x))
+    assert_empty s(abs[:x] + 1, :x), "|x| = -1 has no solution"
+    assert_equal ["-5**(1/2)", "5**(1/2)", "-3**(1/2)", "3**(1/2)"], strs(s(abs[:x**2 - 4] - 1, :x))
+    assert_equal ["2", "-1"], strs(s(abs[:x] + abs[:x - 1] - 3, :x)), "two absolute values, four cases"
+    assert_equal ["2"], strs(s(:x * abs[:x] - 4, :x)), "the root of the other branch does not lie in it"
+    assert_equal ["0"], strs(s(RCAS.sign(:x), :x)), "sign vanishes where its argument does"
+    assert_equal ["1", "-1"], strs(s(RCAS.sign(:x) * :x - 1, :x))
+    assert_equal ["pi/6", "5*pi/6", "-pi/6", "7*pi/6"], strs(s(abs[RCAS.sin(:x)] - Rational(1, 2), :x))
+  end
+
+  def test_a_whole_branch_of_solutions_says_so
+    error = assert_raises(ArgumentError) { s(RCAS.abs(:x) - :x, :x) }
+    assert_equal "every x with x >= 0 solves abs(x) - x = 0", error.message
+    error = assert_raises(ArgumentError) { s(RCAS.sign(:x) - 1, :x) }
+    assert_equal "every x with x > 0 solves -1 + sign(x) = 0", error.message
+  end
+
 end

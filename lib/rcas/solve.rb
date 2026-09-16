@@ -49,19 +49,25 @@ module RCAS
   #   solve(exp(2*x) - 3*exp(x) + 2, x) # => [0, log(2)]
   #   solve([eq(x + y, 3), eq(x - y, 1)], [x, y])   # => [{x => 2, y => 1}]
   #
+  #   solve(abs(x) - 1, x)              # => [1, -1]
+  #
   # Polynomials are solved exactly through factorization over QQ, the
   # quadratic formula, k-th roots for binomials and the quadratic formula
   # with symbolic coefficients; irreducible factors of degree >= 3 with
   # numeric coefficients get numeric roots. Transcendental equations are
   # reduced to polynomials in one atom (exp(x), sin(x), sqrt(x), ...) and
-  # inverted. Systems: linear in the unknowns, or two polynomial equations
-  # in two unknowns through resultants.
+  # inverted. An equation with abs or sign is split into its cases and each
+  # candidate substituted back. Systems: linear in the unknowns, or two
+  # polynomial equations in two unknowns through resultants.
   #
   # Sources (keys: MANUAL.md, Sources): elimination by resultants [GCL92,
   # ch. 9], [CLO15, §3.6]; numeric roots by the Durand-Kerner (Weierstrass)
   # simultaneous iteration [Ker66], started at powers of 0.4 + 0.9i.
   module Solve
     MAX_DEPTH = 6
+    # abs and sign split the line into cases; 2**n branches, so a small n.
+    CASES = %i[abs sign].freeze
+    MAX_CASES = 3
 
     module_function
 
@@ -126,11 +132,58 @@ module RCAS
       raise ArgumentError, "every value of #{x} is a solution" if Scalar.zero?(f)
       return [] unless depends?(f, x)
 
+      cases = case_nodes(f, x)
+      return case_split(f, x, cases, depth, all: all) unless cases.empty?
+
       num, den = numerator_denominator(f, x)
       coeffs = polynomial_coefficients(num, x)
       roots = coeffs ? polynomial_roots(coeffs) : transcendental(num, x, depth, all: all)
       roots = roots.map(&:simplify).reject { |r| Scalar.zero?(den.subs(x => r).simplify) }
       verify(f, x, roots)
+    end
+
+    # The distinct abs(u) and sign(u) in f whose u depends on x: the places
+    # where f is one expression to the left of a point and another to the right.
+    def case_nodes(f, x)
+      f.each_node.select { |n| n.is_a?(Fn) && CASES.include?(n.name) && n.args.size == 1 && depends?(n.args.first, x) }.uniq
+    end
+
+    # |u| is u where u >= 0 and -u where u <= 0, and sign(u) is 1, -1 and 0
+    # in the same three places, so an equation with n of them is 2**n
+    # equations without any, together with the points where a sign vanishes.
+    # Every candidate goes back through verify, which drops the roots of a
+    # branch that do not lie in it, so the answer is the case split a
+    # student writes - and |x| - 1 = 0 no longer comes back empty.
+    def case_split(f, x, nodes, depth, all: false)
+      raise NotImplementedError, "can't solve #{f} = 0 for #{x}: too many cases" if nodes.size > MAX_CASES
+      roots = [1, -1].repeated_permutation(nodes.size).flat_map { |signs| branch_roots(f, x, nodes, signs, depth, all: all) }
+      roots += nodes.select { |n| n.name == :sign }.flat_map { |n| univariate(n.args.first, x, depth + 1, all: all) }
+      verify(f, x, dedupe(roots.map(&:simplify)))
+    end
+
+    def branch_roots(f, x, nodes, signs, depth, all: false)
+      branch = nodes.zip(signs).map { |node, sign| [node, branch_value(node, sign)] }.to_h
+      univariate(f.subs(branch), x, depth + 1, all: all)
+    rescue ArgumentError => e
+      raise unless e.message.start_with?("every value")
+      # A whole branch vanishes: |x| - x is zero on all of x >= 0, which is
+      # a set, and solve answers with points. Name the branch instead.
+      raise ArgumentError, "every #{x} with #{branch_conditions(nodes, signs).join(' and ')} solves #{f} = 0"
+    end
+
+    def branch_value(node, sign)
+      return Num.new(sign) if node.name == :sign
+      sign.positive? ? node.args.first : Neg.new(node.args.first)
+    end
+
+    def branch_conditions(nodes, signs)
+      nodes.zip(signs).map do |node, sign|
+        strict = node.name == :sign
+        op = if sign.positive? then strict ? :> : :>=
+             else strict ? :< : :<=
+             end
+        Inequality.new(node.args.first, op, 0)
+      end
     end
 
     # f = num / den with den the product of the x-dependent denominators.

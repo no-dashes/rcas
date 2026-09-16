@@ -53,6 +53,7 @@ module RCAS
   #   steps(1/(x**2 - 1), :apart)        the partial-fraction ansatz
   #   steps(m, :rref)                    the row operations, one at a time
   #   steps(1071, 462, :gcd)             Euclid's algorithm
+  #   steps(f, x, :discuss)              a whole curve discussion, question by question
   #
   # Each narrator decides which rule applies and then asks the library for
   # the piece it names, so the working can never disagree with the answer
@@ -79,6 +80,7 @@ module RCAS
       when :rref      then elimination(target)
       when :gcd       then euclid(target, args[1])
       when :factor    then factorization(target, args[1])
+      when :discuss   then discussion(target, args[1])
       else raise ArgumentError, "steps: don't know how to work through #{how || target.class}"
       end
     end
@@ -102,6 +104,159 @@ module RCAS
     end
 
     def constant?(expr, var) = !expr.variables.include?(var.name)
+
+    # ---- curve discussion ----------------------------------------------------
+
+    # The ritual, question by question. Every answer comes from the report
+    # discuss builds, so the working and the summary cannot disagree; what
+    # rcas cannot decide is said out loud rather than left out.
+    def discussion(target, var)
+      f = Expression.lift(target)
+      x = Expression.lift(var || Solve.variable(f, nil))
+      report = Discussion.discuss(f, x)
+      out = []
+      @section = 0
+      discussion_domain(out, report, f, x)
+      discussion_symmetry(out, report, f, x)
+      discussion_zeros(out, report, x)
+      discussion_gaps(out, report, x)
+      discussion_infinity(out, report, x)
+      discussion_derivatives(out, report)
+      discussion_extrema(out, report, x)
+      discussion_chart(out, report, report.monotonicity, "f'", "the monotonicity: the sign of f' between its zeros")
+      discussion_inflections(out, report, x)
+      discussion_chart(out, report, report.curvature, "f''", "the curvature: the sign of f''")
+      Derivation.new(Fn.new(:discuss, [f, x]), out, report)
+    end
+
+    # "1. the domain: ...", with the working under it.
+    def section(out, text) = line(out, 0, "#{@section += 1}. #{text}")
+
+    def discussion_domain(out, report, f, x)
+      conditions = Analysis.domain_conditions(f, x)
+      if conditions.empty?
+        section(out, "the domain: nothing to exclude, so every real #{x}")
+      else
+        section(out, "the domain: what must not happen")
+        conditions.each { |condition| line(out, 1, condition.to_s) }
+      end
+      line(out, 1, "D = #{report.domain || 'not determined'}")
+    end
+
+    def discussion_symmetry(out, report, f, x)
+      section(out, "symmetry: put -#{x} in for #{x}")
+      line(out, 1, "f(-#{x}) = #{Discussion.reflect(f, x)}")
+      line(out, 1, case report.symmetry
+                   when :even then "that is f(#{x}): the graph is symmetric about the vertical axis"
+                   when :odd then "that is -f(#{x}): the graph is symmetric about the origin"
+                   else "neither f(#{x}) nor -f(#{x}): no symmetry of either kind"
+                   end)
+      line(out, 1, "f(#{x} + #{report.period}) = f(#{x}): the period is #{report.period}") if report.period
+    end
+
+    def discussion_zeros(out, report, x)
+      section(out, "the zeros: solve f(#{x}) = 0")
+      line(out, 1, if report.zeros.nil? then "rcas cannot solve f(#{x}) = 0"
+                   elsif report.zeros.empty? then "no real zero"
+                   else "#{x} = #{report.zeros.join(', ')}"
+                   end)
+      line(out, 1, "and every #{report.period} on from each of them") if report.period && report.zeros&.any?
+      line(out, 1, "f(0) = #{report.intercept}, where the graph crosses the vertical axis") if report.intercept
+    end
+
+    def discussion_gaps(out, report, x)
+      return if report.gaps.empty?
+      section(out, "the gaps: where a denominator vanishes")
+      report.gaps.each do |point, kind, left, right|
+        line(out, 1, "#{x} = #{point}: f -> #{left || '?'} from the left, f -> #{right || '?'} from the right")
+        line(out, 1, case kind
+                     when :pole then "the graph runs away there: a pole"
+                     when :removable then "the same value from both sides: the gap can be filled"
+                     else "rcas cannot tell what happens there"
+                     end)
+      end
+    end
+
+    def discussion_infinity(out, report, x)
+      section(out, "at infinity: the limits, and the lines the graph approaches")
+      report.limits.each do |point, value|
+        line(out, 1, if value then "limit(f, #{x}, #{point}) = #{value}"
+                     elsif report.period then "f repeats every #{report.period}, so it has no limit as #{x} -> #{point}"
+                     else "limit(f, #{x}, #{point}): rcas cannot decide it"
+                     end)
+      end
+      lines = report.asymptotes
+      (lines[:vertical] || []).each { |p| line(out, 1, "the pole at #{p} makes #{x} = #{p} a vertical asymptote") }
+      (lines[:horizontal] || []).each { |c| line(out, 1, "the limit #{c} makes y = #{c} a horizontal asymptote") }
+      (lines[:oblique] || []).each { |l| line(out, 1, "f - (#{l}) -> 0, so y = #{l} is an oblique asymptote") }
+    end
+
+    def discussion_derivatives(out, report)
+      section(out, "the derivatives")
+      line(out, 1, "rcas cannot differentiate this one") if report.derivatives.first.nil?
+      ["f'", "f''", "f'''"].zip(report.derivatives).each do |name, value|
+        line(out, 1, "#{name}(#{report.var}) = #{value}", value) if value
+      end
+    end
+
+    def discussion_extrema(out, report, x)
+      section(out, "the extrema: solve f'(#{x}) = 0, then the second derivative decides")
+      if report.extrema.nil?
+        line(out, 1, "rcas cannot solve f'(#{x}) = 0, so the extrema stay open")
+        return
+      end
+      points = Discussion.solutions(report.derivatives[0], x)
+      line(out, 1, "f'(#{x}) = 0 at #{x} = #{Analysis.sort_points(points).join(', ')}") if points&.any?
+      line(out, 1, "no #{x} with f'(#{x}) = 0: no extremum") if report.extrema.empty?
+      second = report.derivatives[1]
+      report.extrema.each do |point, value, kind|
+        curvature = second.subs(x => point).simplify
+        sign = Analysis.numeric(curvature)
+        test = if Scalar.zero?(curvature) || sign&.zero?
+                 "f''(#{point}) = 0, so the sign of f' on either side decides"
+               elsif sign
+                 "f''(#{point}) = #{curvature} #{sign.positive? ? '>' : '<'} 0"
+               else
+                 "f''(#{point}) = #{curvature}"
+               end
+        line(out, 1, "#{test}: a #{kind} at (#{point}, #{value})")
+      end
+    end
+
+    def discussion_inflections(out, report, x)
+      section(out, "the inflections: solve f''(#{x}) = 0")
+      if report.inflections.nil?
+        line(out, 1, "rcas cannot solve f''(#{x}) = 0, so the inflections stay open")
+        return
+      end
+      points = Discussion.solutions(report.derivatives[1], x)
+      line(out, 1, "f''(#{x}) = 0 at #{x} = #{Analysis.sort_points(points).join(', ')}") if points&.any?
+      line(out, 1, "no #{x} with f''(#{x}) = 0: the curvature never turns") if report.inflections.empty?
+      third = report.derivatives[2]
+      report.inflections.each do |point, value|
+        rate = third.subs(x => point).simplify
+        test = if Scalar.zero?(rate)
+                 "f'''(#{point}) = 0, so the sign of f'' on either side decides"
+               else
+                 "f'''(#{point}) = #{rate}, not 0"
+               end
+        line(out, 1, "#{test}: an inflection at (#{point}, #{value})")
+      end
+    end
+
+    def discussion_chart(out, report, chart, name, headline)
+      section(out, headline)
+      if chart.nil?
+        line(out, 1, "the sign of #{name} is not decided on every piece")
+        return
+      end
+      line(out, 1, "#{name} is zero throughout: nothing to report") if chart.empty?
+      chart.each do |interval, kind|
+        sign = %i[increasing convex].include?(kind) ? ">" : "<"
+        line(out, 1, "#{name} #{sign} 0 on #{interval}: #{kind}")
+      end
+      line(out, 1, "one period, and it repeats every #{report.period}") if report.period && chart.any?
+    end
 
     # ---- derivatives ---------------------------------------------------------
 

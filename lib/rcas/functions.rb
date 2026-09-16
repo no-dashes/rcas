@@ -225,10 +225,14 @@ module RCAS
     def critical_points(f, var = nil) = Analysis.critical_points(f, var)
     def extrema(f, var = nil) = Analysis.extrema(f, var)
     def inflections(f, var = nil) = Analysis.inflections(f, var)
-    def asymptotes(f, var = nil) = Analysis.asymptotes(f, var)
+    def asymptotes(f, var = nil, at: nil) = Analysis.asymptotes(f, var, at: at)
     def tangent(f, var = nil, at = nil) = Analysis.tangent(f, var, at)
     def normal(f, var = nil, at = nil) = Analysis.normal(f, var, at)
     def real_domain(f, var = nil) = Analysis.real_domain(f, var)
+
+    # discuss(f, x): the whole curve discussion - domain, symmetry, zeros,
+    # gaps, behaviour at infinity, extrema, monotonicity, inflections, curvature
+    def discuss(f, var = nil) = Discussion.discuss(f, var)
 
     # gradient(f, [x, y]), hessian(f, vars), jacobian([f, g], vars), divergence(field, vars),
     # curl(field, [x, y, z]), laplacian(f, vars), lagrange(f, [g], vars): several variables

@@ -196,7 +196,7 @@ module RCAS
       # ---- equations -------------------------------------------------------------
       solve: {
         maths: "Exact solutions. A polynomial of degree n has n complex roots with multiplicity, but only degrees 1 to 4 have general radical formulas, so a root that cannot be written in radicals is returned as an exact RootOf object you can still compute with.",
-        method: "Factor over QQ, then radicals for linear, quadratic, binomial and biquadratic factors, RootOf otherwise; transcendental equations by substituting an atom and inverting; linear systems by row reduction; polynomial systems by a lex Gröbner basis, which is triangular, then back-substitution [CLO15]."
+        method: "Factor over QQ, then radicals for linear, quadratic, binomial and biquadratic factors, RootOf otherwise; transcendental equations by substituting an atom and inverting; abs and sign by the case split, every candidate substituted back; linear systems by row reduction; polynomial systems by a lex Gröbner basis, which is triangular, then back-substitution [CLO15]."
       },
       groebner: {
         maths: "A Gröbner basis generates the same ideal but with a unique remainder on division, so it answers ideal membership and, in the lex order, triangularizes a polynomial system the way row reduction triangularizes a linear one.",
@@ -288,6 +288,10 @@ module RCAS
         method: "solve on the derivative, then the sign of the second derivative, falling back to a numeric comparison on either side."
       },
       critical_points: :extrema,
+      discuss: {
+        maths: "Every question a course asks about a graph, in the order it asks them: the domain, symmetry and periodicity, the zeros and the value at 0, the gaps and what happens at them, the limits at infinity and the lines the graph approaches, then the extrema, the monotonicity, the inflections and the curvature. The point of the ritual is that the answers hold each other up: an extremum between two zeros, a sign of f' that fits the shape, a pole where an asymptote is.",
+        method: "Each question goes to the function that owns it (real_domain, solve, limit, extrema, inflections, asymptotes), so the report cannot disagree with them; what rcas cannot decide is reported as undecided rather than dropped. Monotonicity and curvature come from a sign chart: the line cut at the zeros of f' (of f'') and at the gaps, the sign of each piece read off three sample points [Spi08, ch. 11]. steps(f, x, :discuss) writes the whole thing out."
+      },
       inflections: { maths: "Where the curvature changes sign, so the graph turns from bending one way to the other; the second derivative vanishes and changes sign there.", method: "solve on the second derivative, with the third derivative or a sign check to confirm." },
       asymptotes: {
         maths: "The lines a graph approaches: vertical at a pole, horizontal or oblique at infinity, where the function comes arbitrarily close to a line y = m*x + c.",
@@ -612,6 +616,7 @@ module RCAS
       nsolve: ["Root-finding algorithm", "Newton's method", "Bisection method"],
       nintegrate: ["Numerical integration", "Simpson's rule", "Tanh-sinh quadrature"],
       extrema: ["Maximum and minimum", "Derivative test", "Critical point (mathematics)"],
+      discuss: ["Curve sketching", "Monotonic function", "Concave function"],
       inflections: ["Inflection point"],
       asymptotes: ["Asymptote"],
       tangent: ["Tangent", "Linear approximation"],

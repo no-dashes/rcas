@@ -49,11 +49,13 @@ module RCAS
 
     # [[x, f(x), :minimum | :maximum | :saddle], ...] by the second derivative,
     # falling back to the sign of the first derivative on either side.
-    def extrema(f, var = nil)
+    # `points` supplies the critical points, for a caller that knows them
+    # (or can find more of them) already.
+    def extrema(f, var = nil, points: nil)
       f = Expression.lift(f)
       x = variable(f, var)
       second = f.diff(x, 2)
-      critical_points(f, x).filter_map do |point|
+      (points || critical_points(f, x)).filter_map do |point|
         value = (f.subs(x => point)).simplify
         curvature = numeric(second.subs(x => point).simplify)
         kind =
@@ -77,12 +79,13 @@ module RCAS
       :saddle
     end
 
-    # Where the curvature changes sign.
-    def inflections(f, var = nil)
+    # Where the curvature changes sign; `points` supplies the zeros of the
+    # second derivative, as for extrema.
+    def inflections(f, var = nil, points: nil)
       f = Expression.lift(f)
       x = variable(f, var)
       second = f.diff(x, 2)
-      candidates = begin
+      candidates = points || begin
         Solve.solve(second, x)
       rescue NotImplementedError, ArgumentError
         []
@@ -95,26 +98,45 @@ module RCAS
     end
 
     # { vertical: [...], horizontal: [...], oblique: [...] }; the horizontal
-    # and oblique lines are the limits at minus and plus infinity.
-    def asymptotes(f, var = nil)
+    # and oblique lines are the limits at minus and plus infinity. `at` names
+    # the ends to look at, for a function that only reaches one of them.
+    def asymptotes(f, var = nil, at: nil)
       f = Expression.lift(f)
       x = variable(f, var)
-      { vertical: vertical_asymptotes(f, x), horizontal: horizontal_asymptotes(f, x), oblique: oblique_asymptotes(f, x) }
+      ends = at || infinities
+      { vertical: vertical_asymptotes(f, x), horizontal: horizontal_asymptotes(f, x, at: ends), oblique: oblique_asymptotes(f, x, at: ends) }
     end
 
+    def infinities = [OO, Neg.new(OO).simplify]
+
     def vertical_asymptotes(f, x)
-      denominator = RationalFunction.denom(f)
-      return [] if denominator.variables.empty?
-      poles = begin
+      poles = denominators(f, x).flat_map do |denominator|
         Solve.solve(denominator, x)
       rescue NotImplementedError, ArgumentError
         []
       end
-      sort_points(poles.select { |p| Limits.infinite?(Limits.limit(f, x, p, :right)) || Limits.infinite?(Limits.limit(f, x, p, :left)) })
+      sort_points(poles.uniq.select { |p| Limits.infinite?(Limits.limit(f, x, p, :right)) || Limits.infinite?(Limits.limit(f, x, p, :left)) })
     end
 
-    def horizontal_asymptotes(f, x)
-      [OO, Neg.new(OO).simplify].filter_map do |point|
+    # The denominators f divides by: the one of its normal form, and the ones
+    # it is written with, which the normal form may have cancelled away
+    # ((x**2 - 1)/(x - 1) is still undefined at 1).
+    def denominators(f, x)
+      found = [RationalFunction.denom(f)]
+      f.each_node do |node|
+        case node
+        when Div then found << node.right
+        when Pow
+          exponent = node.exponent
+          found << node.base if exponent.is_a?(Num) && exponent.value.is_a?(Numeric) &&
+                                !exponent.value.is_a?(Complex) && exponent.value.negative?
+        end
+      end
+      found.select { |d| d.variables.include?(x.name) }.uniq
+    end
+
+    def horizontal_asymptotes(f, x, at: nil)
+      (at || infinities).filter_map do |point|
         value = Limits.limit(f, x, point)
         next nil if value.is_a?(Limit) || Limits.infinite?(value)
         value.simplify
@@ -122,8 +144,8 @@ module RCAS
     end
 
     # y = m*x + c with m the limit of f/x and c the limit of f - m*x.
-    def oblique_asymptotes(f, x)
-      [OO, Neg.new(OO).simplify].filter_map do |point|
+    def oblique_asymptotes(f, x, at: nil)
+      (at || infinities).filter_map do |point|
         slope = Limits.limit((f / x).cancel, x, point)
         next nil if slope.is_a?(Limit) || Limits.infinite?(slope) || Scalar.zero?(slope)
         offset = Limits.limit((f - slope * x).cancel, x, point)
@@ -154,9 +176,15 @@ module RCAS
     def real_domain(f, var = nil)
       f = Expression.lift(f)
       x = variable(f, var)
-      conditions = []
-      denominator = RationalFunction.denom(f)
-      conditions << Inequality.new(denominator, :!=, 0) if denominator.variables.include?(x.name)
+      conditions = domain_conditions(f, x)
+      return RealSet.reals if conditions.empty?
+      conditions.map { |c| Inequalities.solve(c, x) }.reduce(:&)
+    end
+
+    # The conditions behind that domain, so that a caller can name them:
+    # one per denominator, even root and logarithm.
+    def domain_conditions(f, x)
+      conditions = denominators(f, x).map { |d| Inequality.new(d, :!=, 0) }
       f.each_node do |node|
         if node.is_a?(Pow) && node.exponent.is_a?(Num) && node.exponent.value.is_a?(Rational) &&
            node.exponent.value.denominator.even? && node.base.variables.include?(x.name)
@@ -165,8 +193,7 @@ module RCAS
           conditions << Inequality.new(node.args.first, :>, 0)
         end
       end
-      return RealSet.reals if conditions.empty?
-      conditions.map { |c| Inequalities.solve(c, x) }.reduce(:&)
+      conditions
     end
 
     # ---- several variables ---------------------------------------------------------

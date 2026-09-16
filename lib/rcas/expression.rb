@@ -220,8 +220,21 @@ module RCAS
       digits ||= bindings.delete(:digits)
       return Precision.evalf(self, digits, bindings) if digits
       value = Expression.floatify_tree(self).call(**bindings.transform_values { |v| Expression.floatify(v) })
+      folded = value.is_a?(Expression) && value.variables.empty? ? refloat(value) : nil
+      value = folded if folded
       value = Numerics.resolve(value) if value.is_a?(Expression) && value.each_node.any? { |n| n.is_a?(Integral) }
       value.is_a?(Num) ? value.value : value
+    end
+
+    # Folding can put an exact constant back after the floats went in:
+    # exp(-1.0) is 1/e again, and the e never saw floatify. One more pass,
+    # kept only when it really ends in a number.
+    def refloat(value)
+      again = Expression.floatify_tree(value).call
+      again = again.value if again.is_a?(Num)
+      again.is_a?(Numeric) ? again : nil
+    rescue StandardError
+      nil
     end
 
     # Every number becomes a Float, except integer exponents: x**2 stays

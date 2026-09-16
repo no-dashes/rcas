@@ -95,13 +95,14 @@ lib/rcas/docs.rb            Docs.doc(name) -> Documentation: signature + comment
 lib/rcas/plot.rb            Plot (braille canvas, SVG, PNG via Render.which/run + Chrome) and Plotting.plot/parametric/polar/scatter/histogram/boxplot/barchart (Curve markers: line, :dot, :stem, :bar, :box; ylabels/xlabels name the rows and columns); Plot has no to_latex on purpose, so the chat shows the art. `Plot.style` (:text/:image, RCAS_PLOT_STYLE) is the hook the chat's /plotstyle writes; `picture?`/`picture` draw the inline image
 lib/rcas/numerics.rb        Numerics.nsolve (bisection + Newton), nintegrate (adaptive Simpson, infinite ranges by substitution), resolve (evalf on a definite Integral)
 lib/rcas/analysis.rb        Analysis: critical_points/extrema/inflections/asymptotes/tangent/normal/real_domain, gradient/hessian/jacobian/divergence/curl/laplacian/lagrange, arclength/revolution_volume/revolution_surface
+lib/rcas/discussion.rb      Discussion.discuss -> Report: the whole Kurvendiskussion in one object (domain, symmetry/period, zeros, gaps, limits+asymptotes, extrema, monotonicity, inflections, curvature). Every row comes from the function that owns it; nil means undecided and prints as "not determined", [] means none. Monotonicity/curvature by sign chart (three samples a piece); a periodic f is charted over one period. steps(f, x, :discuss) narrates the same report
 lib/rcas/geometry.rb        Geometry::{Point Line Circle} (a line is a*x + b*y + c = 0, normalized) and the constructions; exact coordinates
 lib/rcas/linear_algebra.rb  LinearAlgebra: gram_schmidt/project/least_squares, exact
 lib/rcas/decompositions.rb  Decompositions + Matrix#lu/qr/cholesky/diagonalize/jordan; the Jordan form from chains of generalized eigenvectors
 lib/rcas/laplace.rb         Laplace.transform (table + first shift + multiplication by t) and .inverse (partial fractions)
 lib/rcas/hypothesis.rb      Hypothesis: ttest/ztest/chisquare_test/ftest/binomial_test (exact), confidence_interval, proportion_interval; TestResult prints one line
 lib/rcas/combinatorics.rb   factorial/binomial/gamma values, factorial cancellation, known power series
-lib/rcas/solve.rb           Equation, Solve (polynomial, transcendental, systems: linear, lex Gröbner + triangular, resultants for parameters), polynomial_roots (binomial, biquadratic, RootOf)
+lib/rcas/solve.rb           Equation, Solve (polynomial, transcendental, abs/sign by case split + verify, systems: linear, lex Gröbner + triangular, resultants for parameters), polynomial_roots (binomial, biquadratic, RootOf)
 lib/rcas/groebner.rb        Groebner: Buchberger (product criterion), reduce, interreduce, zero_dimensional?; orders :lex :grlex :grevlex
 lib/rcas/named_polynomials.rb  Poly: the named families (chebyshev_t/u, legendre, hermite/hermite_prob, laguerre, gegenbauer, jacobi, bernoulli, euler, cyclotomic, swinnerton_dyer, abel, fibonacci, lucas, bell) as coefficient lists, handed back expanded; a namespace, registered in `Constants` (so all three front ends see `Poly`), never bare names - `legendre`/`bernoulli`/`fibonacci` are taken
 lib/rcas/interpolate.rb     Interpolate.newton (divided differences over Scalar arithmetic; PolyMatrix keeps its own Rational-only copy)
@@ -125,7 +126,7 @@ lib/rcas/matrix.rb          MatrixSpace (QQ**[2,3]), Matrix, Elimination (rref, 
 lib/rcas/poly_matrix.rb     PolyDet/RatDet/PolyLinearSolve/nullspace (Horn 2008 ch. 6): degree bound, rational evaluation, Newton interpolation; Matrix falls back to Elimination when it returns nil
 lib/rcas/scalar.rb          entry arithmetic with Num fast paths; zero? (exact via Algebraic, then numeric)
 lib/rcas/hold.rb            hold { } via RubyVM::AbstractSyntaxTree; sets RubyVM.keep_script_lines = true; a qualified RCAS.integrate(...) call inside the block is treated like the bare one
-lib/rcas/steps.rb           Step/Derivation and Steps: worked solutions (diff, integrate, solve, factor, apart, rref, gcd). Each narrator names the rule and asks the library for the piece, so the working cannot disagree with the answer; the fallback line says no textbook rule applies
+lib/rcas/steps.rb           Step/Derivation and Steps: worked solutions (diff, integrate, solve, factor, apart, rref, gcd, discuss). Each narrator names the rule and asks the library for the piece, so the working cannot disagree with the answer; the fallback line says no textbook rule applies
 lib/rcas/functions.rb       the top-level functions (bare in irb, RCAS.x elsewhere); Functions.fold
 lib/rcas/core_ext.rb        Symbol/Numeric operators, Symbol#in/eq/< ...
 lib/rcas/irb.rb             bin/rcas setup (AutoSymbol, includes, prompt, In/Out hooks)
@@ -594,6 +595,14 @@ in the repo.
   coefficient and prints as `(1/2*i)`.
 - `assert_in_delta(exp, act, delta, msg)`: the third argument is the
   tolerance, not the message.
+- `filter_map` drops `false` as well as `nil`: a block returning a boolean
+  sign silently loses every negative piece (this ate a sign chart once).
+  Map to symbols instead.
+- `Expand.table(e)` returns `[constant, { {base => exponent} => coeff }]`,
+  as `Simplify.factorize` returns `[coeff, factors]`; destructure both.
+- `Expression#evalf` can come back symbolic because folding puts an exact
+  constant back *after* floatify (`exp(-1.0)` is `1/e` again); it now makes
+  one more pass (`refloat`) and keeps it only if that ends in a number.
 - `Array#-` in recombination, `or return` after multiple assignment
   (syntax error), `@x ||=` on frozen objects (use a class-level cache),
   `return x if (x = ...)` (the body is parsed before the condition:
@@ -663,7 +672,9 @@ polynomials - it'd be convenient to have them directly accessible, but not
 in the global namespace"; the user chose `Poly.legendre(4, x)` over
 `Polynomials.` and over a ring method `ZZ[x].legendre(4)`), and then, from
 Koepf's *Hypergeometric Summation* (Sept 2026, "implement what's in the book"):
-Petkovsek, Zeilberger and the whole q-side. ODEs with variable
+Petkovsek, Zeilberger and the whole q-side, and `discuss` (16 Sept 2026,
+after asking whether the Kurvendiskussion is a German school thing: the
+ritual as one report, and `steps(f, x, :discuss)` for the whole write-up). ODEs with variable
 coefficients (Bernoulli, Riccati, exact equations, Cauchy-Euler, and
 Frobenius series solutions, which are fps.rb run backwards) are the most
 requested-adjacent remaining item; a `steps`/`explain` layer that narrates

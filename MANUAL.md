@@ -47,6 +47,7 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
     - [Numbers when the symbols run out](#numbers-when-the-symbols-run-out)
     - [As many digits as you ask for](#as-many-digits-as-you-ask-for)
     - [Curve sketching](#curve-sketching)
+    - [The whole discussion](#the-whole-discussion)
     - [Several variables](#several-variables)
     - [Series](#series)
     - [Formal power series](#formal-power-series)
@@ -254,9 +255,11 @@ not a pair). Trigonometric equations give the solutions in one period, or
 the whole family with `all: true`. Then the first calculus: derivatives,
 curve sketching, definite integrals, sums, and probability. A function may
 be given case by case with `piecewise`, and `discontinuities` and `kinks`
-name the points where its pieces do not fit together. `steps` writes the
-working out: the rules of differentiation as they are used, the quadratic
-formula with its numbers in it, the partial-fraction ansatz.
+name the points where its pieces do not fit together. `discuss` answers
+the whole Kurvendiskussion in one report, and `steps` writes the working
+out: the rules of differentiation as they are used, the quadratic formula
+with its numbers in it, the questions of a curve discussion one at a
+time.
 
 ```
 rcas> factor(x**2 - 5*x + 6)
@@ -1003,6 +1006,122 @@ decides; where that vanishes too, as for `x**4`, the sign of the first
 derivative on either side does. `asymptotes` gives the vertical ones from
 the poles and the horizontal or oblique ones from the limits at infinity.
 
+#### The whole discussion
+
+`discuss(f, x)` asks all of those questions at once, in the order a course
+asks them, and answers them in one report: where the function is defined,
+whether it is symmetric or periodic, its zeros and its value at 0, the
+gaps and what happens at them, the limits at infinity together with the
+lines the graph approaches, and then the extrema, where it rises and
+falls, its inflections and where it bends which way. Continental schools
+drill the ritual under a name of its own - *Kurvendiskussion* in German,
+*étude de fonction* in French, *studio di funzione* in Italian; English
+calls the same work curve sketching.
+
+```
+rcas> discuss(x**3 - 3*x, x)
+=> f(x) = x**3 - 3*x
+     domain       (-oo, oo)
+     symmetry     odd: f(-x) = -f(x), symmetric about the origin
+     zeros        -3**(1/2), 0, 3**(1/2)
+     y intercept  f(0) = 0
+     at infinity  f -> -oo as x -> -oo; f -> oo as x -> oo
+     asymptotes   none
+     extrema      maximum at (-1, 2); minimum at (1, -2)
+     monotonic    increasing on (-oo, -1), decreasing on (-1, 1), increasing on (1, oo)
+     inflections  (0, 0)
+     curvature    concave on (-oo, 0), convex on (0, oo)
+rcas> discuss((x**2 + 1)/x, x)
+=> f(x) = (x**2 + 1)/x
+     domain       (-oo, 0) ∪ (0, oo)
+     symmetry     odd: f(-x) = -f(x), symmetric about the origin
+     zeros        none
+     gaps         0 (pole)
+     at infinity  f -> -oo as x -> -oo; f -> oo as x -> oo
+     asymptotes   x = 0, y = x
+     extrema      maximum at (-1, -2); minimum at (1, 2)
+     monotonic    increasing on (-oo, -1), decreasing on (-1, 0), decreasing on (0, 1), increasing on (1, oo)
+     inflections  none
+     curvature    concave on (-oo, 0), convex on (0, oo)
+```
+
+`none` and `not determined` are different answers: the first says there is
+nothing to report, the second that rcas could not decide the question, and
+neither is quietly dropped. The domain counts a gap that cancels away -
+`(x**2 - 1)/(x - 1)` is still undefined at 1 - and only the ends the
+domain reaches are asked about at infinity. The monotonicity and the
+curvature come from a sign chart: the line is cut at the zeros of `f'`
+(of `f''`) and at the gaps, and the sign of each piece is read off sample
+points, three of them, so that a piece whose sign is not constant - a zero
+the solver missed - is left undecided rather than guessed.
+
+A periodic function is discussed over one period, and every row that
+repeats says so:
+
+```
+rcas> discuss(sin(x), x)
+=> f(x) = sin(x)
+     domain       (-oo, oo)
+     symmetry     odd: f(-x) = -f(x), symmetric about the origin
+     period       2*pi
+     zeros        0, pi (+ k*2*pi, k an integer)
+     y intercept  f(0) = 0
+     at infinity  no limit as x -> -oo; no limit as x -> oo
+     asymptotes   none
+     extrema      minimum at (-pi/2, -1); maximum at (pi/2, 1) (+ k*2*pi, k an integer)
+     monotonic    increasing on (0, pi/2), decreasing on (pi/2, 3*pi/2), increasing on (3*pi/2, 2*pi) (+ k*2*pi, k an integer)
+     inflections  (0, 0), (pi, 0) (+ k*2*pi, k an integer)
+     curvature    concave on (0, pi), convex on (pi, 2*pi) (+ k*2*pi, k an integer)
+```
+
+With `steps` the same questions are worked through one at a time, the way
+the answer would be handed in, and the report is the summary at the end:
+
+```
+rcas> steps(x**3 - 3*x, x, :discuss)
+=> discuss(x**3 - 3*x, x)
+     1. the domain: nothing to exclude, so every real x
+       D = (-oo, oo)
+     2. symmetry: put -x in for x
+       f(-x) = 3*x - x**3
+       that is -f(x): the graph is symmetric about the origin
+     3. the zeros: solve f(x) = 0
+       x = -3**(1/2), 0, 3**(1/2)
+       f(0) = 0, where the graph crosses the vertical axis
+     4. at infinity: the limits, and the lines the graph approaches
+       limit(f, x, -oo) = -oo
+       limit(f, x, oo) = oo
+     5. the derivatives
+       f'(x) = -3 + 3*x**2
+       f''(x) = 6*x
+       f'''(x) = 6
+     6. the extrema: solve f'(x) = 0, then the second derivative decides
+       f'(x) = 0 at x = -1, 1
+       f''(-1) = -6 < 0: a maximum at (-1, 2)
+       f''(1) = 6 > 0: a minimum at (1, -2)
+     7. the monotonicity: the sign of f' between its zeros
+       f' > 0 on (-oo, -1): increasing
+       f' < 0 on (-1, 1): decreasing
+       f' > 0 on (1, oo): increasing
+     8. the inflections: solve f''(x) = 0
+       f''(x) = 0 at x = 0
+       f'''(0) = 6, not 0: an inflection at (0, 0)
+     9. the curvature: the sign of f''
+       f'' < 0 on (-oo, 0): concave
+       f'' > 0 on (0, oo): convex
+   = f(x) = x**3 - 3*x
+     domain       (-oo, oo)
+     symmetry     odd: f(-x) = -f(x), symmetric about the origin
+     zeros        -3**(1/2), 0, 3**(1/2)
+     y intercept  f(0) = 0
+     at infinity  f -> -oo as x -> -oo; f -> oo as x -> oo
+     asymptotes   none
+     extrema      maximum at (-1, 2); minimum at (1, -2)
+     monotonic    increasing on (-oo, -1), decreasing on (-1, 1), increasing on (1, oo)
+     inflections  (0, 0)
+     curvature    concave on (-oo, 0), convex on (0, oo)
+```
+
 #### Several variables
 
 `diff` already takes a partial derivative, since it differentiates with
@@ -1547,6 +1666,25 @@ rcas> solve(sin(x) - 1/2r, x)
 => [pi/6, 5*pi/6]
 rcas> solve(cos(x), x)
 => [pi/2, -pi/2]
+```
+
+An equation with `abs` or `sign` in it is split into its cases - `|u|` is
+`u` where `u >= 0` and `-u` where `u <= 0`, and `sign(u)` is 1, -1 or 0 in
+the same three places - which makes 2**n ordinary equations. Every
+candidate is substituted back into the original, so only the roots lying
+in the case they came from survive.
+
+```
+rcas> solve(abs(x) - 1, x)
+=> [1, -1]
+rcas> solve(abs(x - 2) - 3, x)
+=> [5, -1]
+rcas> solve(abs(x**2 - 4) - 1, x)
+=> [-5**(1/2), 5**(1/2), -3**(1/2), 3**(1/2)]
+rcas> solve(abs(x) + abs(x - 1) - 3, x)
+=> [2, -1]
+rcas> solve(abs(x) + 1, x)
+=> []
 ```
 
 Systems take an array of equations and an array of unknowns and return an
@@ -3032,7 +3170,7 @@ rcas> qhyper(eq(u(q**2*x), u(q*x) + x*u(x)), u, x, q)
 rather than its result, so either a block - `steps { diff(f, x) }`, which
 `hold` keeps unevaluated - or the thing together with what to do with it:
 `steps(f, :solve)`, `steps(f, :apart)`, `steps(m, :rref)`,
-`steps(a, b, :gcd)`.
+`steps(a, b, :gcd)`, `steps(f, x, :discuss)`.
 
 ```
 rcas> steps { diff(x**2*sin(x), x) }
@@ -3149,8 +3287,9 @@ substitution and integration by parts; linear and quadratic equations with
 the discriminant and the formula spelled out; factoring by common factors,
 difference of squares and rational roots, and a number by trial division;
 the partial-fraction ansatz
-with its unknowns solved for; Gaussian elimination; and Euclid's algorithm
-for numbers and for polynomials. The result is a `Derivation`, which
+with its unknowns solved for; Gaussian elimination; Euclid's algorithm
+for numbers and for polynomials; and the whole curve discussion
+(1.3 Calculus, The whole discussion). The result is a `Derivation`, which
 prints as above and typesets as an aligned block in `rcas-chat`.
 
 ### 1.14 Performance notes
@@ -3197,7 +3336,7 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | hypergeometric summation | `sumrecursion sumcertificate hyper` |
 | q-analogues | `qbracket qfactorial qbinomial qpochhammer qgosper qsum qsumrecursion qsumcertificate qsolve qhyper` |
 | numerics | `nsolve nintegrate` (both take `digits:`) |
-| curve sketching | `critical_points extrema inflections asymptotes tangent normal real_domain` |
+| curve sketching | `critical_points extrema inflections asymptotes tangent normal real_domain`, `discuss` for all of it at once |
 | length, area, volume | `arclength revolution_volume revolution_surface` |
 | several variables | `gradient hessian jacobian divergence curl laplacian lagrange` |
 | algebra | `solve eq factor groebner reduce interval` |
@@ -3214,7 +3353,7 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | domains | `NN ZZ QQ RR CC` (also `ℕ ℤ ℚ ℝ ℂ`), `GF assume forget assumptions` |
 | linear algebra | `vector matrix gram_schmidt least_squares project orthogonal? lu qr cholesky diagonalize jordan` |
 | holding | `hold evaluate` |
-| worked solutions | `steps` (a block, or `:solve :factor :apart :rref :gcd`) |
+| worked solutions | `steps` (a block, or `:solve :factor :apart :rref :gcd :discuss`) |
 | help | `doc` (`/help NAME` in rcas-chat) |
 | session | `In`, `Out` (the numbered lines), `_` (irb's last value) |
 
@@ -3272,6 +3411,7 @@ lib/rcas/special.rb         incomplete gamma and beta, numerically
 lib/rcas/hypothesis.rb      t, z, chi-square, F and binomial tests; confidence intervals
 lib/rcas/numerics.rb        nsolve and nintegrate: numbers when the symbols run out
 lib/rcas/analysis.rb        curve sketching and several variables
+lib/rcas/discussion.rb      the whole curve discussion in one report
 lib/rcas/geometry.rb        points, lines and circles in the plane
 lib/rcas/linear_algebra.rb  orthogonality, projections and least squares
 lib/rcas/laplace.rb         the Laplace transform and its inverse
@@ -3375,7 +3515,7 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | differential equations: separable, integrating factor, characteristic roots, undetermined coefficients, variation of parameters | ode.rb | [BD12, ch. 2-4] |
 | inequalities by sign charts over exact real roots | inequalities.rb | textbook; roots from solve.rb |
 | numeric roots (bisection with Newton steps) and adaptive Simpson quadrature | numerics.rb | [PTVF07, §4.2, §9.1-9.4] |
-| curve sketching: critical points, the second-derivative test, asymptotes from limits | analysis.rb | [Spi08, ch. 11] |
+| curve sketching: critical points, the second-derivative test, asymptotes from limits, and the whole discussion with its sign chart | analysis.rb, discussion.rb | [Spi08, ch. 11] |
 | several variables: gradient, Hessian, Jacobian, Lagrange multipliers | analysis.rb | [Rud76, ch. 9]; [Spi08, ch. 17] |
 | analytic geometry: lines and circles, the shoelace area | geometry.rb | [Spi08, ch. 4]; [Bra86] |
 | Gram-Schmidt orthogonalization, least squares by the normal equations | linear_algebra.rb | [Str16, ch. 4] |
