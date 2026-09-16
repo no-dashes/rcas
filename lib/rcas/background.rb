@@ -340,6 +340,75 @@ module RCAS
       geometric_mean: { maths: "The geometric mean is the n-th root of the product, the right average for growth rates; the harmonic mean is n over the sum of reciprocals, the right average for speeds. Both are at most the arithmetic mean.", method: "Exact roots and reciprocals." },
       harmonic_mean: :geometric_mean,
       scatter: { maths: "The points of a two-variable sample, where a relationship becomes visible; fit: true draws the least squares line through them.", method: "Points on the braille canvas, the line from linreg." },
+      # ---- the named polynomials (Poly) ----------------------------------------
+      Poly: {
+        maths: "The classical families: solutions of the equations of mathematical physics, orthogonal systems for approximation, and the polynomials that count. Each is fixed by a three-term recurrence and a pair of starting values.",
+        method: "The recurrence is run on lists of exact coefficients and the result is expanded in the indeterminate given; the parameters may stay symbolic [AS64, ch. 22]."
+      },
+      "Poly.chebyshev_t": {
+        maths: "T_n(cos(u)) = cos(n*u): the polynomial that turns a cosine of a multiple angle into a polynomial in the cosine. Its extrema are equal in size, which is what makes the Chebyshev nodes the good interpolation points and T_n the polynomial of least deviation from zero.",
+        method: "T_(k+1) = 2*x*T_k - T_(k-1) from T_0 = 1, T_1 = x [AS64, ch. 22]."
+      },
+      "Poly.chebyshev_u": {
+        maths: "U_n(cos(u)) = sin((n + 1)*u)/sin(u), the second kind: orthogonal on [-1, 1] with weight sqrt(1 - x**2), and the derivative of T_(n+1) up to a factor.",
+        method: "The same recurrence from U_0 = 1, U_1 = 2*x [AS64, ch. 22]."
+      },
+      "Poly.legendre": {
+        maths: "The orthogonal system on [-1, 1] with weight 1: P_n has n simple roots there, the Gauss quadrature nodes, and the P_n are the multipole terms of a potential in spherical symmetry.",
+        method: "Bonnet's recurrence k*P_k = (2*k - 1)*x*P_(k-1) - (k - 1)*P_(k-2) [AS64, ch. 22], [Sze75]."
+      },
+      "Poly.hermite": {
+        maths: "Orthogonal with the Gaussian weight exp(-x**2): the physicists' H_n, whose product with exp(-x**2/2) gives the states of the harmonic oscillator.",
+        method: "H_(k+1) = 2*x*H_k - 2*k*H_(k-1) [AS64, ch. 22]."
+      },
+      "Poly.hermite_prob": {
+        maths: "The probabilists' He_n, orthogonal with the weight of the standard normal distribution, so that He_n of a standard normal variable has expectation zero for every n >= 1; the Edgeworth expansions are written in them. He_n(x) = 2**(-n/2)*H_n(x/sqrt(2)).",
+        method: "He_(k+1) = x*He_k - k*He_(k-1) [AS64, ch. 22]."
+      },
+      "Poly.laguerre": {
+        maths: "Orthogonal on [0, oo) with weight exp(-x), and with weight x**alpha*exp(-x) in the generalized form; the radial part of the hydrogen atom is a generalized Laguerre polynomial.",
+        method: "k*L_k = (2*k - 1 + alpha - x)*L_(k-1) - (k - 1 + alpha)*L_(k-2), which keeps alpha symbolic [AS64, ch. 22]."
+      },
+      "Poly.gegenbauer": {
+        maths: "The ultraspherical polynomials, orthogonal with weight (1 - x**2)**(alpha - 1/2): Legendre is alpha = 1/2 and Chebyshev of the second kind is alpha = 1, so they interpolate between the two.",
+        method: "k*C_k = 2*(k - 1 + alpha)*x*C_(k-1) - (k - 2 + 2*alpha)*C_(k-2) [AS64, ch. 22], [Sze75]."
+      },
+      "Poly.jacobi": {
+        maths: "The most general classical family, orthogonal with weight (1 - x)**alpha*(1 + x)**beta; Legendre, Chebyshev and Gegenbauer are the special cases of its two parameters.",
+        method: "The explicit sum of binomial(n + alpha, n - s)*binomial(n + beta, s)*((x - 1)/2)**s*((x + 1)/2)**(n - s), with the binomials expanded as polynomials in alpha and beta [AS64, ch. 22], [Sze75]."
+      },
+      "Poly.bernoulli": {
+        maths: "B_n(x) is the polynomial with B_n(x + 1) - B_n(x) = n*x**(n - 1), which is why sums of powers are Bernoulli polynomials (Faulhaber) and why B_n(0) is the Bernoulli number.",
+        method: "B_n(x) = sum(binomial(n, k)*B_(n-k)*x**k) with the Bernoulli numbers of summation.rb [AS64, ch. 23], [GKP94, ch. 6]."
+      },
+      "Poly.euler": {
+        maths: "E_n(x) is to alternating sums what B_n(x) is to sums: E_n(x + 1) + E_n(x) = 2*x**n; 2**n*E_n(1/2) is the Euler number.",
+        method: "E_n(x) = 2/(n + 1)*(B_(n+1)(x) - 2**(n+1)*B_(n+1)(x/2)), read off the Bernoulli coefficients [AS64, ch. 23]."
+      },
+      "Poly.cyclotomic": {
+        maths: "Phi_n is the minimal polynomial of a primitive n-th root of unity: it is irreducible over the rationals, its degree is Euler's totient of n, and the x**n - 1 factor into the Phi_d over the divisors d of n. Its coefficients are not always 0 and +-1: Phi_105 has a -2.",
+        method: "Exact division of x**n - 1 by the Phi_d of the proper divisors, over the integers [vzGG13, ch. 14]."
+      },
+      "Poly.swinnerton_dyer": {
+        maths: "The minimal polynomial of sqrt(2) + sqrt(3) + ... over the first n primes: degree 2**n, irreducible over the rationals, but reducible modulo every prime. That is what makes it the hard case for factorization by Hensel lifting, where recombination has to try every subset.",
+        method: "One conjugation at a time: with f(x + s) = u(x) + s*v(x) and s**2 = p, the product over both signs is u**2 - p*v**2, so the coefficients stay integers [Coh93]."
+      },
+      "Poly.abel": {
+        maths: "A_n(x; a) = x*(x - a*n)**(n - 1), the polynomials of Abel's binomial theorem; they are the sequence of binomial type behind Cayley's count of labelled trees.",
+        method: "The binomial expansion of the linear factor, multiplied by x [GKP94, ch. 5]."
+      },
+      "Poly.fibonacci": {
+        maths: "F_n(x) = x*F_(n-1)(x) + F_(n-2)(x): the Fibonacci rule with the sum replaced by a weighted one, so F_n(1) is the Fibonacci number and F_n(2) the Pell number.",
+        method: "The recurrence on coefficient lists [GKP94, ch. 6]."
+      },
+      "Poly.lucas": {
+        maths: "The companion of the Fibonacci polynomials, from L_0 = 2 and L_1 = x; L_n(1) is the Lucas number and L_n(x) = F_(n+1)(x) + F_(n-1)(x).",
+        method: "The same recurrence with the other starting values [GKP94, ch. 6]."
+      },
+      "Poly.bell": {
+        maths: "The Bell (Touchard) polynomial: its k-th coefficient counts the ways to split n labelled objects into k non-empty blocks, so its value at 1 is the Bell number, the number of all such splittings.",
+        method: "The Stirling numbers of the second kind by S(n, k) = k*S(n-1, k) + S(n-1, k-1) [GKP94, ch. 6], [Sta99]."
+      },
       assumptions: :assume, forget: :assume, doit: :hold
     }.freeze
 
@@ -477,7 +546,24 @@ module RCAS
       congruence: ["Modular arithmetic", "Chinese remainder theorem"],
       legendre: ["Legendre symbol", "Quadratic reciprocity", "Jacobi symbol"],
       order: ["Multiplicative order", "Primitive root modulo n"],
-      continued_fraction: ["Continued fraction", "Simple continued fraction"]
+      continued_fraction: ["Continued fraction", "Simple continued fraction"],
+      Poly: ["Orthogonal polynomials", "Classical orthogonal polynomials"],
+      "Poly.chebyshev_t": ["Chebyshev polynomials"],
+      "Poly.chebyshev_u": ["Chebyshev polynomials"],
+      "Poly.legendre": ["Legendre polynomials"],
+      "Poly.hermite": ["Hermite polynomials"],
+      "Poly.hermite_prob": ["Hermite polynomials"],
+      "Poly.laguerre": ["Laguerre polynomials"],
+      "Poly.gegenbauer": ["Gegenbauer polynomials"],
+      "Poly.jacobi": ["Jacobi polynomials"],
+      "Poly.bernoulli": ["Bernoulli polynomials"],
+      "Poly.euler": ["Bernoulli polynomials"],
+      "Poly.cyclotomic": ["Cyclotomic polynomial", "Root of unity"],
+      "Poly.swinnerton_dyer": ["Minimal polynomial (field theory)"],
+      "Poly.abel": ["Abel polynomials"],
+      "Poly.fibonacci": ["Fibonacci polynomials"],
+      "Poly.lucas": ["Fibonacci polynomials", "Lucas sequence"],
+      "Poly.bell": ["Touchard polynomials", "Bell number", "Stirling numbers of the second kind"]
     }.freeze
 
     BASE = "https://en.wikipedia.org/wiki/"

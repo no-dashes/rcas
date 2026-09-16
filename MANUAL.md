@@ -62,6 +62,7 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
     - [Gröbner bases](#gröbner-bases)
     - [Degree and coefficients](#degree-and-coefficients)
     - [Interpolation](#interpolation)
+    - [Named polynomials](#named-polynomials)
     - [Algebraic numbers](#algebraic-numbers)
     - [Finite fields](#finite-fields)
   - [1.7 Linear algebra](#17-linear-algebra)
@@ -271,8 +272,10 @@ Read on: 1.3 Calculus, 1.4 Equations and solving, 1.6 Polynomial rings,
 Limits and series (`fps` gives the general coefficient, not only the first
 terms), the techniques of integration, differential equations, matrices and
 their eigenvalues, partial derivatives, and statistics with tests and
-confidence intervals. When a symbolic answer does not exist,
-`nsolve` and `nintegrate` give the number instead, and say that it is one.
+confidence intervals. The classical orthogonal polynomials - Legendre,
+Chebyshev, Hermite, Laguerre - are in `Poly`. When a symbolic answer does
+not exist, `nsolve` and `nintegrate` give the number instead, and say that
+it is one.
 
 ```
 rcas> limit(sin(x)/x, x, 0)
@@ -311,6 +314,8 @@ rcas> groebner([x**2 + y**2 - 1, x - y], [x, y])
 => [x - y, -1/2 + y**2]
 rcas> minpoly(sqrt(2) + sqrt(3))
 => 1 - 10*x**2 + x**4
+rcas> Poly.cyclotomic(12, x)
+=> 1 - x**2 + x**4
 rcas> GF(9).elements.first(4)
 => [0, 1, 2, a]
 rcas> laplace(t*exp(3*t))
@@ -1647,6 +1652,143 @@ rcas> interpolate({0 => a, 1 => b}, x)
 => a - a*x + b*x
 ```
 
+#### Named polynomials
+
+The classical families have a namespace of their own, `Poly`: there are many
+of them, and the bare names are needed elsewhere - `legendre` is the Legendre
+symbol, `bernoulli` the Bernoulli number, `fibonacci` the Fibonacci number.
+Each takes the degree and, after it, the indeterminate, which defaults to
+`x`; the answer is an ordinary expanded expression.
+
+| family | call |
+|---|---|
+| Chebyshev, first and second kind | `Poly.chebyshev_t(n, x)`, `Poly.chebyshev_u(n, x)` |
+| Legendre | `Poly.legendre(n, x)` |
+| Hermite, physicists' and probabilists' | `Poly.hermite(n, x)`, `Poly.hermite_prob(n, x)` |
+| Laguerre, generalized | `Poly.laguerre(n, x)`, `Poly.laguerre(n, x, alpha: 1)` |
+| Gegenbauer (ultraspherical) | `Poly.gegenbauer(n, x, alpha: 2)` |
+| Jacobi | `Poly.jacobi(n, x, alpha: 1, beta: 2)` |
+| Bernoulli, Euler | `Poly.bernoulli(n, x)`, `Poly.euler(n, x)` |
+| cyclotomic | `Poly.cyclotomic(n, x)` |
+| Swinnerton-Dyer | `Poly.swinnerton_dyer(n, x)` |
+| Abel | `Poly.abel(n, x, a: 1)` |
+| Fibonacci, Lucas | `Poly.fibonacci(n, x)`, `Poly.lucas(n, x)` |
+| Bell (Touchard) | `Poly.bell(n, x)` |
+
+```
+rcas> Poly.chebyshev_t(5, x)
+=> 5*x - 20*x**3 + 16*x**5
+rcas> Poly.legendre(4, x)
+=> 3/8 - 15*x**2/4 + 35*x**4/8
+rcas> Poly.hermite(3, x)
+=> -12*x + 8*x**3
+rcas> Poly.laguerre(3, x)
+=> 1 - 3*x + 3*x**2/2 - x**3/6
+```
+
+Each family is run from its three-term recurrence on exact coefficients, so
+the identities that define it come back exactly: the Legendre polynomials
+are orthogonal on `[-1, 1]`, the roots of `P_n` are the nodes of Gauss
+quadrature, and the derivative of `T_n` is `n*U_(n-1)`.
+
+```
+rcas> integrate(Poly.legendre(2, x)*Poly.legendre(3, x), x: -1..1)
+=> 0
+rcas> integrate(Poly.legendre(3, x)**2, x: -1..1)
+=> 2/7
+rcas> solve(Poly.legendre(3, x), x)
+=> [0, -15**(1/2)/5, 15**(1/2)/5]
+rcas> nsolve(Poly.legendre(5, x), x: 0.9)
+=> 0.9061798459386641
+rcas> (diff(Poly.chebyshev_t(4, x), x) - 4*Poly.chebyshev_u(3, x)).simplify
+=> 0
+```
+
+The second argument is any expression, not only an indeterminate, and a
+number gives a number: `T_n(cos(t))` is the polynomial in the cosine that
+equals `cos(n*t)`.
+
+```
+rcas> Poly.chebyshev_t(3, cos(t))
+=> -3*cos(t) + 4*cos(t)**3
+rcas> Poly.hermite(3, 2)
+=> 40
+rcas> Poly.legendre(2, 1 + y)
+=> 1 + 3*y + 3*y**2/2
+```
+
+The parameters of the three families that have them stay symbolic unless a
+value is given, so the general member can be looked at; with values they
+specialize, and Legendre, Chebyshev and Gegenbauer are the special cases of
+Jacobi.
+
+```
+rcas> Poly.gegenbauer(2, x)
+=> -alpha + 2*alpha*x**2 + 2*alpha**2*x**2
+rcas> Poly.jacobi(1, x)
+=> alpha/2 - beta/2 + x + alpha*x/2 + beta*x/2
+rcas> Poly.laguerre(2, x, alpha: 1)
+=> 3 - 3*x + x**2/2
+rcas> (Poly.jacobi(2, x, alpha: 0, beta: 0) - Poly.legendre(2, x)).simplify
+=> 0
+rcas> (Poly.gegenbauer(3, x, alpha: 1) - Poly.chebyshev_u(3, x)).simplify
+=> 0
+```
+
+Beside the orthogonal families are those that count and those of number
+theory. `Poly.bernoulli(n, x)` is the polynomial with
+`B_n(x + 1) - B_n(x) = n*x**(n - 1)`, which is where Faulhaber's sums of
+powers come from; `Poly.bell(n, x)` has the number of ways of splitting `n`
+labelled objects into `k` blocks as the coefficient of `x**k`, so its value
+at 1 is the Bell number.
+
+```
+rcas> Poly.bernoulli(4, x)
+=> -1/30 + x**2 - 2*x**3 + x**4
+rcas> (Poly.bernoulli(3, x + 1) - Poly.bernoulli(3, x)).simplify
+=> 3*x**2
+rcas> Poly.euler(3, x)
+=> 1/4 - 3*x**2/2 + x**3
+rcas> Poly.bell(4, x)
+=> x + 7*x**2 + 6*x**3 + x**4
+rcas> Poly.bell(6, 1)
+=> 203
+rcas> Poly.fibonacci(6, x)
+=> 3*x + 4*x**3 + x**5
+rcas> Poly.abel(3, x)
+=> 9*x - 6*x**2 + x**3
+```
+
+The cyclotomic polynomial `Phi_n` is the minimal polynomial of a primitive
+`n`-th root of unity: the `Phi_d` over the divisors `d` of `n` multiply to
+`x**n - 1`, which is how rcas computes them, and their coefficients are
+small but not always 0 and ±1 - `Phi_105` is the first with a -2. The
+Swinnerton-Dyer polynomial is the minimal polynomial of
+`sqrt(2) + sqrt(3) + ...` over the first `n` primes: irreducible over the
+rationals, of degree `2**n`, and reducible modulo every prime, which makes
+it the standard hard case for factorization.
+
+```
+rcas> Poly.cyclotomic(12, x)
+=> 1 - x**2 + x**4
+rcas> Poly.cyclotomic(105, x).degree(x)
+=> 48
+rcas> coeff(Poly.cyclotomic(105, x), x, 7)
+=> -2
+rcas> Poly.swinnerton_dyer(2, x)
+=> 1 - 10*x**2 + x**4
+rcas> minpoly(sqrt(2) + sqrt(3))
+=> 1 - 10*x**2 + x**4
+rcas> factor(Poly.swinnerton_dyer(2, x), extension: sqrt(2))
+=> (-1 + 2*2**(1/2)*x + x**2)*(-1 - 2*2**(1/2)*x + x**2)
+rcas> Poly.swinnerton_dyer(3, x)
+=> 576 - 960*x**2 + 352*x**4 - 40*x**6 + x**8
+```
+
+`doc("Poly.legendre")` (`/help Poly.legendre` in the chat) gives the
+recurrence used, the weight the family is orthogonal for, and where to read
+on; `doc(:Poly)` lists them all.
+
 #### Algebraic numbers
 
 Constant expressions built from rationals, `i`, radicals (`sqrt(2)`,
@@ -2557,6 +2699,7 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | rational functions | `numer denom apart gcd lcm quo rem divmod` |
 | integers | `factor ifactor isprime nextprime prevprime divisors totient invmod chrem congruence legendre jacobi order primitive_root continued_fraction convergents` |
 | polynomial structure | `degree ldegree lcoeff tcoeff coeff coeffs collect resultant discriminant interpolate` |
+| named polynomials | `Poly.chebyshev_t Poly.chebyshev_u Poly.legendre Poly.hermite Poly.hermite_prob Poly.laguerre Poly.gegenbauer Poly.jacobi Poly.bernoulli Poly.euler Poly.cyclotomic Poly.swinnerton_dyer Poly.abel Poly.fibonacci Poly.lucas Poly.bell` (a namespace, not bare names) |
 | constants | `PI E I oo` (bare `pi`, `π`, `oo`, `∞`) |
 | evaluation | `subs evalf` |
 | calculus | `integrate diff series taylor fps limit sum product` |
@@ -2593,7 +2736,8 @@ three-dimensional and parametric plots, geometry in space, Fourier
 transforms, group theory, differential equations with variable
 coefficients beyond first order, limits of bounded oscillation (`sin(x)/x` at infinity), inequalities beyond
 polynomial, rational and absolute-value ones, number fields with more than
-two generators, hypergeometric solutions of *inhomogeneous* recurrences
+two generators, the associated Legendre functions and the multivariate
+(partial) Bell polynomials, hypergeometric solutions of *inhomogeneous* recurrences
 with polynomial coefficients, Abramov's rational solutions, the
 Almkvist-Zeilberger algorithm for hyperexponential integrals,
 multivariate (holonomic) summation, and formal power series whose
@@ -2638,6 +2782,7 @@ lib/rcas/background.rb      the mathematics behind each name, its sources and Wi
 lib/rcas/solve.rb           equations, solve, systems
 lib/rcas/groebner.rb        Gröbner bases: Buchberger, normal forms, monomial orders
 lib/rcas/interpolate.rb     Newton interpolation
+lib/rcas/named_polynomials.rb  Poly: the named polynomial families
 lib/rcas/ode.rb             D, dsolve
 lib/rcas/constants.rb       pi, e, i and exact values
 lib/rcas/domains.rb         NN ZZ QQ RR CC, assumptions, PolynomialRing, FractionField
@@ -2704,6 +2849,7 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | Gaussian integrals: exp(quadratic) by completing the square, x**n exp(quadratic) by reduction | integrate_substitutions.rb | [AS64, §7.1, §7.4] |
 | polynomial systems: lex Gröbner basis and triangular back-substitution; resultants for two equations with parameters | solve.rb | [CLO15, ch. 2 §8, ch. 3 §1]; [GCL92, ch. 9-10] |
 | Newton interpolation by divided differences | interpolate.rb | [Knu98, §4.6.4]; [vzGG13, ch. 5] |
+| named polynomial families: three-term recurrences, cyclotomic by exact division of x**n - 1, Swinnerton-Dyer by one conjugation per prime | named_polynomials.rb | [AS64, ch. 22-23]; [Sze75]; [GKP94, ch. 5-6]; [vzGG13, ch. 14]; [Coh93] |
 | Gröbner bases: Buchberger's algorithm with the product criterion, normal forms, reduced bases, the dimension test | groebner.rb | [Buc65]; [CLO15, ch. 2 §§3, 7, 9-10; ch. 5 §3]; [GCL92, ch. 10] |
 | numeric polynomial roots: Durand-Kerner (Weierstrass) iteration | solve.rb | [Ker66] |
 | minimal polynomial via resultants, arithmetic in QQ(alpha) | algebraic.rb | [Loo83]; [Coh93, §4.2] |
@@ -2834,6 +2980,8 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   Wellesley-Cambridge Press 2016.
 - [SW17] J. Sorenson, J. Webster, Strong pseudoprimes to twelve prime
   bases, *Math. Comp.* 86 (2017), 985-1003.
+- [Sze75] G. Szegő, *Orthogonal Polynomials*, 4th ed., American Mathematical
+  Society Colloquium Publications 23, AMS 1975.
 - [Tra76] B. M. Trager, Algebraic factoring and rational function
   integration, *Proc. SYMSAC '76*, ACM 1976, 219-226.
 - [Tuk77] J. W. Tukey, *Exploratory Data Analysis*, Addison-Wesley 1977.

@@ -53,22 +53,38 @@ module RCAS
     def doc(name)
       key = name.is_a?(Symbol) || name.is_a?(String) ? name.to_s : name.to_s
       key = key.sub(/\A[A-Z]+::/, "").delete_prefix("RCAS::")
-      found = function(key) || expression_method(key) || constant(key)
+      found = function(key) || namespaced(key) || expression_method(key) || constant(key)
       raise NotFound, "nothing known about #{key}#{suggestion(key)}" if found.nil?
       found
     end
 
+    # Near misses, compared on the part after the namespace, so that
+    # `chebyshev` finds Poly.chebyshev_t.
     def suggestion(key)
-      near = names.select { |n| n.start_with?(key[0, 2].to_s) || levenshtein(n, key) <= 2 }.sort_by { |n| levenshtein(n, key) }
+      target = bare(key)
+      near = names.select { |n| bare(n).start_with?(target[0, 2].to_s) || levenshtein(bare(n), target) <= 2 }
+                  .sort_by { |n| levenshtein(bare(n), target) }
       near.empty? ? "" : "; did you mean #{near.first(4).join(', ')}?"
     end
+
+    def bare(name) = name.split(".").last.to_s
+
+    # Modules with functions of their own, addressed through their name:
+    # `Poly.legendre` is the polynomial, the bare `legendre` the symbol.
+    NAMESPACES = %w[Poly].freeze
 
     # Every name doc knows about.
     def names
       functions = Functions.instance_methods(false).map(&:to_s)
       methods = Expression.public_instance_methods(false).map(&:to_s)
       constants = RCAS.constants.map(&:to_s)
-      (functions + methods + constants).uniq.sort
+      (functions + methods + constants + namespaced_names).uniq.sort
+    end
+
+    def namespaced_names
+      NAMESPACES.flat_map do |prefix|
+        RCAS.const_get(prefix).public_instance_methods(false).map { |name| "#{prefix}.#{name}" }
+      end
     end
 
     def levenshtein(a, b)
@@ -95,6 +111,21 @@ module RCAS
       Documentation.new(key, :function, info[:signature], info[:lines], also.empty? ? nil : also.join(", "), sections(key), Background[key], sources_for(key), Background.reading(key))
     end
 
+    # Poly.legendre, or the bare chebyshev_t when no top-level function has
+    # that name. The documentation is keyed by the qualified name, so that
+    # Poly.legendre and the Legendre symbol can have a background each.
+    def namespaced(key)
+      prefix, name = key.sub("::", ".").split(".", 2)
+      prefix, name = [nil, prefix] if name.nil?
+      prefixes = prefix ? NAMESPACES & [prefix] : NAMESPACES
+      found = prefixes.find { |p| RCAS.const_get(p).public_method_defined?(name.to_sym) }
+      return nil if found.nil?
+      qualified = "#{found}.#{name}"
+      info = from_source(RCAS.const_get(found).instance_method(name.to_sym), name.to_sym)
+      Documentation.new(qualified, :function, "#{found}.#{info[:signature]}", info[:lines], nil,
+                        sections(qualified), Background[qualified], sources_for(qualified), Background.reading(qualified))
+    end
+
     def expression_method(key)
       name = key.to_sym
       return nil unless Expression.method_defined?(name)
@@ -103,7 +134,7 @@ module RCAS
     end
 
     def constant(key)
-      return nil unless key.match?(/\A[[:upper:]]/) && RCAS.const_defined?(key)
+      return nil unless key.match?(/\A[[:upper:]][[:alnum:]_]*\z/) && RCAS.const_defined?(key)
       value = RCAS.const_get(key)
       location = Object.const_source_location("RCAS::#{key}")
       lines = location && location.first ? comment_above(location.first, location.last) : []
