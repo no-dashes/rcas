@@ -222,6 +222,45 @@ module RCAS
       VectorSpace.new(RR, 3).unchecked(components.map(&:simplify))
     end
 
+    # ---- lengths, areas, volumes ---------------------------------------------
+
+    # The length of a curve: integral(sqrt(1 + f'**2)) for a graph and
+    # integral(sqrt(x'**2 + y'**2)) for [x(t), y(t)]. The integral is
+    # rarely elementary and then stays an integral(...) node, which evalf
+    # or nintegrate finishes.
+    def arclength(f, var, from, to)
+      var = Expression.lift(var)
+      integrand =
+        if f.is_a?(Array)
+          raise ArgumentError, "arclength: a parametric curve needs two components" unless f.size == 2
+          f.map { |c| Expression.lift(c).diff(var)**2 }.reduce(:+)
+        else
+          Num.new(1) + Expression.lift(f).diff(var)**2
+        end
+      Integrate.definite(root(integrand), var, from, to)
+    end
+
+    # The volume of the solid the graph of f sweeps out: pi*integral(f**2)
+    # about the x-axis, and 2*pi*integral(x*f) (cylindrical shells) about
+    # the y-axis.
+    def revolution_volume(f, var, from, to, axis: :x)
+      f = Expression.lift(f)
+      var = Expression.lift(var)
+      integrand = axis == :y ? 2 * PI * var * f : PI * f**2
+      Integrate.definite(integrand.simplify, var, from, to)
+    end
+
+    # The area of the surface of revolution: 2*pi*integral(f*sqrt(1 + f'**2))
+    # about the x-axis, 2*pi*integral(x*sqrt(1 + f'**2)) about the y-axis.
+    def revolution_surface(f, var, from, to, axis: :x)
+      f = Expression.lift(f)
+      var = Expression.lift(var)
+      line = root(Num.new(1) + f.diff(var)**2)
+      Integrate.definite((2 * PI * (axis == :y ? var : f) * line).simplify, var, from, to)
+    end
+
+    def root(u) = Pow.new(u.simplify, Num.new(Rational(1, 2))).simplify
+
     # Stationary points of f under the constraints g = 0, by the multiplier
     # rule: grad f = sum(lambda_i grad g_i) together with the constraints.
     def lagrange(f, constraints, vars = nil)

@@ -39,13 +39,23 @@ module RCAS
       end
     end
 
-    # Shortest form among several rewritings using sin**2 + cos**2 = 1.
+    # The function whose even powers are replaced when +keep+ is kept, and
+    # what its square becomes: sin**2 + cos**2 = 1, cosh**2 - sinh**2 = 1.
+    SQUARES = {
+      sin: [:cos, ->(p) { Num.new(1) - p**2 }],
+      cos: [:sin, ->(p) { Num.new(1) - p**2 }],
+      sinh: [:cosh, ->(p) { Num.new(1) + p**2 }],
+      cosh: [:sinh, ->(p) { p**2 - Num.new(1) }]
+    }.freeze
+
+    # Shortest form among several rewritings using sin**2 + cos**2 = 1 and
+    # cosh**2 - sinh**2 = 1.
     def trigsimp(expr)
       base = tan_to_sin_cos(Expression.lift(expr)).simplify
       candidates = [Expression.lift(expr).simplify, base, polynomial_cancel(base)]
       [false, true].each do |expanded|
         f = expanded ? expand_trig(base) : base
-        %i[sin cos].each do |keep|
+        SQUARES.each_key do |keep|
           candidates << polynomial_cancel(reduce_squares(f, keep))
         end
       end
@@ -77,7 +87,7 @@ module RCAS
     end
 
     def reduce_table(expr, keep)
-      victim = keep == :sin ? :cos : :sin
+      victim, square = SQUARES[keep]
       constant, table = Expand.table(expr)
       result = Num.new(constant)
       table.each do |factors, coeff|
@@ -86,7 +96,7 @@ module RCAS
           next unless base.is_a?(Fn) && base.name == victim && exp.is_a?(Integer) && exp >= 2
           u = base.args.first
           partner = Fn.new(keep, [u])
-          replacement = (Num.new(1) - partner**2)**(exp / 2) * base**(exp % 2)
+          replacement = square.call(partner)**(exp / 2) * base**(exp % 2)
           term = (Simplify.rebuild_product(coeff, factors.reject { |b, _| b == base }) * replacement).expand
         end
         result += term

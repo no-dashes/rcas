@@ -87,6 +87,56 @@ module RCAS
         method: "Series arithmetic on {exponent => coefficient} maps, with composition for the elementary functions [Knu98, §4.7]. taylor is the same without the O term."
       },
       taylor: :series,
+      Si: {
+        maths: "The sine integral Si(x) = integral(sin(t)/t, t, 0, x). sin(x)/x has no elementary antiderivative, so this is the answer, not a way of avoiding one; Si(oo) = pi/2 is the Dirichlet integral.",
+        method: "Values by the power series below 2 and by a continued fraction above it [PTVF07, §6.3], [AS64, §5.2]."
+      },
+      Ci: :Si,
+      Ei: {
+        maths: "The exponential integral Ei(x) = integral(exp(t)/t, t, -oo, x) as a principal value, the antiderivative of exp(x)/x. The logarithmic integral li(x) = Ei(log(x)) counts the primes below x better than x/log(x) does.",
+        method: "The series gamma + log|x| + sum(x**k/(k*k!)) for moderate x, the asymptotic expansion exp(x)/x*sum(k!/x**k) beyond it [AS64, §5.1], [PTVF07, §6.3]."
+      },
+      li: :Ei,
+      arclength: {
+        maths: "The length of a curve: integral(sqrt(1 + f'**2)) for a graph, integral(sqrt(x'**2 + y'**2)) for a parametric one. The integrand is a square root of a polynomial, so the integral is often not elementary - that is the nature of the question, not a gap.",
+        method: "The integrand is assembled and handed to integrate; what it cannot do stays an integral(...) node for evalf or nintegrate [Spi08, ch. 13]."
+      },
+      revolution_volume: {
+        maths: "The volume a graph sweeps out when it is turned about an axis: pi*integral(f**2) about the x-axis (discs), 2*pi*integral(x*f) about the y-axis (cylindrical shells).",
+        method: "The integral of the disc or shell formula [Spi08, ch. 13]."
+      },
+      revolution_surface: {
+        maths: "The area of that surface: 2*pi*integral(f*sqrt(1 + f'**2)), the arc length element turned about the axis.",
+        method: "The integral of the frustum formula [Spi08, ch. 13]."
+      },
+      lu: {
+        maths: "P*A = L*U: Gaussian elimination written as a product. L records the multipliers, U is what elimination leaves, P the row swaps. Determinants, solving and inverting all read off it.",
+        method: "Elimination in exact arithmetic, so rows are swapped only to get away from a zero pivot - there is no rounding to steer around [Str16, ch. 2]."
+      },
+      qr: {
+        maths: "A = Q*R with the columns of Q orthonormal: Gram-Schmidt on the columns of A, kept as a factorization. It is what least squares problems are solved with.",
+        method: "Exact Gram-Schmidt (linear_algebra.rb), so the entries of Q carry square roots; R is Q'*A [Str16, ch. 4]."
+      },
+      cholesky: {
+        maths: "A = L*L' for a symmetric positive definite A: the square root of a matrix, half the work of LU and the test for positive definiteness at the same time.",
+        method: "The entries in order, each one a square root or a division; a non-positive diagonal entry means the matrix is not positive definite [Str16, ch. 6]."
+      },
+      diagonalize: {
+        maths: "A = P*D*P**-1 with D diagonal: the eigenvectors as the columns of P. It exists exactly when there are enough independent eigenvectors, and then powers and exponentials of A are easy.",
+        method: "The eigenvectors of matrix.rb, checked for independence [Str16, ch. 6]."
+      },
+      jordan: {
+        maths: "A = P*J*P**-1 with J made of Jordan blocks: the normal form every square matrix has, diagonal where there are enough eigenvectors and with ones above the diagonal where there are not.",
+        method: "For each eigenvalue the kernels of (A - lambda)**k are built up, and a basis of chains v, (A - lambda)v, ... is chosen in them; one block per chain [HK71, ch. 7]."
+      },
+      parametric: {
+        maths: "A curve given by its two coordinates as functions of a parameter. It may loop and cross itself, which the graph of a function cannot.",
+        method: "The parameter is sampled and the points joined in that order."
+      },
+      polar: {
+        maths: "A curve given by its distance from the origin as a function of the angle: r = 1 + cos(t) is a cardioid, r = t a spiral. A negative r points the other way.",
+        method: "Drawn as the parametric curve (r*cos(t), r*sin(t)); the angle runs over a full turn unless another range is given."
+      },
       fourier: {
         maths: "The Fourier series of a periodic function: a sum of sines and cosines with the coefficients a_k = (2/T)*integral(f*cos(k*omega*x)) and b_k the same with sin. Where f jumps, the series converges to the mean of the two sides, and the partial sums overshoot however many terms are taken (Gibbs' phenomenon).",
         method: "The coefficients are the definite integrals, computed with the index assumed to be an integer, which is what turns sin(k*pi) into 0 and cos(k*pi) into (-1)**k and so gives the general coefficient in closed form. The half-range forms expand the odd or the even extension on [0, L]. Convergence is not checked [Spi08, ch. 13]."
@@ -458,6 +508,20 @@ module RCAS
       kinks: ["Differentiable function", "Semi-differentiability"],
       series: ["Taylor series", "Puiseux series"],
       fourier: ["Fourier series", "Gibbs phenomenon", "Joseph Fourier"],
+      Si: ["Trigonometric integral", "Dirichlet integral"],
+      Ci: ["Trigonometric integral"],
+      Ei: ["Exponential integral", "Logarithmic integral function"],
+      li: ["Logarithmic integral function", "Prime-counting function"],
+      arclength: ["Arc length", "Catenary"],
+      revolution_volume: ["Solid of revolution", "Disc integration", "Shell integration"],
+      revolution_surface: ["Surface of revolution"],
+      lu: ["LU decomposition", "Gaussian elimination"],
+      qr: ["QR decomposition", "Gram-Schmidt process"],
+      cholesky: ["Cholesky decomposition", "Definite matrix"],
+      diagonalize: ["Diagonalizable matrix", "Eigendecomposition of a matrix"],
+      jordan: ["Jordan normal form", "Generalized eigenvector"],
+      parametric: ["Parametric equation"],
+      polar: ["Polar coordinate system", "Rose (mathematics)"],
       fps: ["Formal power series", "Holonomic function", "Binomial series"],
       sum: ["Summation", "Faulhaber's formula", "Gosper's algorithm", "Hypergeometric identity"],
       sumrecursion: ["Wilf-Zeilberger pair", "Hypergeometric identity", "Doron Zeilberger"],

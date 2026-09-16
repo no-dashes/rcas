@@ -9,7 +9,7 @@ module RCAS
   # Elementary functions. Available as RCAS.sin(:x) or, after
   # `include RCAS::Functions`, as bare sin(:x).
   module Functions
-    NAMES = %i[sin cos tan exp log atan asin acos sinh cosh zeta factorial gamma abs sign erf erfc].freeze
+    NAMES = %i[sin cos tan exp log atan asin acos sinh cosh zeta factorial gamma abs sign erf erfc Ei Si Ci li].freeze
 
     # Symbolic arguments build an Fn node; constant arguments fold right
     # away, the way Ruby folds 1 + 2: sin(PI/6) is 1/2, sin(x) stays sin(x).
@@ -190,6 +190,15 @@ module RCAS
     def project(v, onto:) = LinearAlgebra.project(v, onto: onto)
     def orthogonal?(u, v) = LinearAlgebra.orthogonal?(u, v)
 
+    # lu(a) gives [l, u, p] with p*a = l*u; qr(a) gives [q, r] with a = q*r
+    def lu(matrix) = Decompositions.lu(matrix)
+    def qr(matrix) = Decompositions.qr(matrix)
+    # cholesky(a) is the l with a = l*l.transpose, for a symmetric positive definite a
+    def cholesky(matrix) = Decompositions.cholesky(matrix)
+    # diagonalize(a) gives [p, d] and jordan(a) gives [p, j] with a = p*d*p**-1
+    def diagonalize(matrix) = Decompositions.diagonalize(matrix)
+    def jordan(matrix) = Decompositions.jordan(matrix)
+
     # point(0, 0), line(p, q) or line(p, slope: 2), circle(centre, r): plane geometry
     def point(x, y = nil) = Geometry.point(x, y)
     def line(first, second = nil, slope: nil) = Geometry.line(first, second, slope: slope)
@@ -229,6 +238,24 @@ module RCAS
     def curl(field, vars = nil) = Analysis.curl(field, vars)
     def laplacian(f, vars = nil) = Analysis.laplacian(f, vars)
     def lagrange(f, constraints, vars = nil) = Analysis.lagrange(f, constraints, vars)
+
+    # arclength(x**2, x: 0..1) or arclength([cos(t), sin(t)], t: 0..pi): the length of a curve
+    def arclength(f, var = nil, from = nil, to = nil, **range)
+      var, from, to = Functions.range_arguments(var, from, to, range, "arclength", discrete: false)
+      Analysis.arclength(f, var, from, to)
+    end
+
+    # revolution_volume(sqrt(x), x: 0..1): the volume swept out around the x-axis (axis: :y for the other)
+    def revolution_volume(f, var = nil, from = nil, to = nil, axis: :x, **range)
+      var, from, to = Functions.range_arguments(var, from, to, range, "revolution_volume", discrete: false)
+      Analysis.revolution_volume(f, var, from, to, axis: axis)
+    end
+
+    # revolution_surface(sqrt(x), x: 0..1): the area of that surface of revolution
+    def revolution_surface(f, var = nil, from = nil, to = nil, axis: :x, **range)
+      var, from, to = Functions.range_arguments(var, from, to, range, "revolution_surface", discrete: false)
+      Analysis.revolution_surface(f, var, from, to, axis: axis)
+    end
 
     # nsolve(cos(x) - x, x: 0..1) or nsolve(f, x, guess): a root as a Float when no formula applies
     def nsolve(f, var = nil, guess = nil, **range) = Numerics.nsolve(f, var, guess, **range)
@@ -423,6 +450,12 @@ module RCAS
     def plot(f, var = nil, from = nil, to = nil, **opts) = Plotting.plot(f, var, from, to, **opts)
     # scatter(xs, ys) or scatter(points), fit: true adds the least squares line
     def scatter(xs, ys = nil, **opts) = Plotting.scatter(xs, ys, **opts)
+
+    # parametric([cos(t), sin(t)], t: 0..2*pi): a curve given by its two components
+    def parametric(pair, var = nil, from = nil, to = nil, **opts) = Plotting.parametric(pair, var, from, to, **opts)
+
+    # polar(1 + cos(t), t: 0..2*pi): a curve in polar coordinates
+    def polar(r, var = nil, from = nil, to = nil, **opts) = Plotting.polar(r, var, from, to, **opts)
     # histogram(data, bins: 8), boxplot(data) or boxplot("a" => xs, "b" => ys), barchart(frequencies(data))
     def histogram(data, **opts) = Plotting.histogram(data, **opts)
     def boxplot(data = nil, **opts)
@@ -505,7 +538,7 @@ module RCAS
       end
     end
 
-    ODD = %i[sin tan atan asin sinh sign erf].freeze
+    ODD = %i[sin tan atan asin sinh sign erf Si].freeze
     EVEN = %i[cos cosh abs].freeze
 
     # Constant folding for function applications; called by Simplify.
@@ -612,6 +645,8 @@ module RCAS
         return Simplify.negate(arg).simplify if %i[negative nonpositive].include?(RCAS.sign_of(arg))
         d = arg.domain
         d && d <= NN ? arg : nil
+      when *IntegralFunctions::NAMES
+        IntegralFunctions.value(name, arg)
       when :sign
         return Num.new(arg.value <=> 0) if arg.is_a?(Num) && arg.value.real?
         case RCAS.sign_of(arg)

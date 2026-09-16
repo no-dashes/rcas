@@ -67,7 +67,7 @@ module RCAS
         when :cosh then Fn.new(:sinh, [u])
         when :erf then Div.new(Mul.new(Num.new(2), Fn.new(:exp, [Neg.new(Pow.new(u, Num.new(2)))])), Pow.new(PI, Num.new(Rational(1, 2))))
         when :erfc then Neg.new(Div.new(Mul.new(Num.new(2), Fn.new(:exp, [Neg.new(Pow.new(u, Num.new(2)))])), Pow.new(PI, Num.new(Rational(1, 2)))))
-        else raise ArgumentError, "don't know the derivative of #{expr.name}"
+        else IntegralFunctions.derivative(expr.name, u) || raise(ArgumentError, "don't know the derivative of #{expr.name}")
         end
       Mul.new(outer, diff(u, var))
     end

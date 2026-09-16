@@ -123,8 +123,11 @@ class OdeTest < Minitest::Test
     sols = dsolve(eq)
     assert_equal ["y = C1*cos(x) + C2*sin(x) + cos(x)*log(cos(x)) + x*sin(x)"], sols.map(&:to_s)
     assert_solves eq, sols
-    # Integrals rcas cannot do stay formal instead of being dropped.
+    # 1/x needs the sine and cosine integrals, and gets them.
     sols = dsolve(RCAS::Equation.new(d(2) + Y, 1 / X))
+    assert_equal ["y = C1*cos(x) + C2*sin(x) + Ci(x)*sin(x) - Si(x)*cos(x)"], sols.map(&:to_s)
+    # Integrals rcas cannot do stay formal instead of being dropped.
+    sols = dsolve(RCAS::Equation.new(d(2) + Y, 1 / RCAS.log(X)))
     assert_includes sols.first.to_s, "integral("
   end
 

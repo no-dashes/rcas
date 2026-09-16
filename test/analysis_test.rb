@@ -65,4 +65,18 @@ class AnalysisTest < Minitest::Test
     assert_equal Rational(1, 4), RCAS.integrate(X * Y, x: 0..1, y: 0..1)
     assert_equal 2, RCAS.integrate(1, x: 0..1, y: 0..2)
   end
+  def test_arclength
+    assert_equal "pi", RCAS.arclength([RCAS.cos(:t), RCAS.sin(:t)], t: 0..RCAS::PI).to_s, "half a unit circle"
+    assert_in_delta 1.4789428575445973, RCAS.arclength(:x**2, x: 0..1).evalf, 1e-9
+    assert_equal 5, RCAS.arclength(3 * :x / 4, x: 0..4), "a 3-4-5 triangle"
+    assert_raises(ArgumentError) { RCAS.arclength([:t, :t, :t], t: 0..1) }
+  end
+
+  def test_solids_of_revolution
+    assert_equal "pi/2", RCAS.revolution_volume(RCAS.sqrt(:x), x: 0..1).to_s
+    assert_equal "pi/3", RCAS.revolution_volume(:x, x: 0..1).to_s, "a cone"
+    assert_equal "pi/2", RCAS.revolution_volume(:x**2, x: 0..1, axis: :y).to_s, "cylindrical shells"
+    assert_in_delta 4 * Math::PI / 3, RCAS.revolution_volume(RCAS.sqrt(1 - :x**2), x: -1..1).evalf, 1e-12, "the unit ball"
+    assert_in_delta 4 * Math::PI, RCAS.revolution_surface(RCAS.sqrt(1 - :x**2), x: -1..1).evalf, 1e-9, "its surface"
+  end
 end

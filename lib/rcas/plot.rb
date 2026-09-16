@@ -481,6 +481,48 @@ module RCAS
       [los.min, his.max]
     end
 
+    # A curve given by two components: parametric([cos(t), sin(t)], t: 0..2*PI).
+    # The points are joined in the order the parameter runs through them, so
+    # the curve may loop and cross itself.
+    def parametric(pair, var = nil, from = nil, to = nil, n: SAMPLES, title: nil, label: nil, x: nil, y: nil, width: 60, height: 15, **range)
+      raise ArgumentError, "parametric: two components are needed, [x(t), y(t)]" unless pair.is_a?(Array) && pair.size == 2
+      var, from, to = Functions.range_arguments(var, from, to, range, "parametric", discrete: false)
+      variable = Expression.lift(var)
+      lo = numeric(from)
+      hi = numeric(to)
+      raise ArgumentError, "parametric: the range needs two finite ends" if lo.nil? || hi.nil?
+      components = pair.map { |c| Expression.lift(c) }
+      points = (0..n).map do |i|
+        t = lo + (hi - lo) * i / n.to_f
+        values = components.map { |c| evaluate(c, variable.name, t) }
+        values.all? ? values : nil
+      end
+      curve = Plot::Curve.new(label, points, false)
+      drawn = points.compact
+      raise ArgumentError, "parametric: nothing to draw" if drawn.empty?
+      xlo, xhi = x ? [numeric(x.begin), numeric(x.end)] : padded(drawn.map(&:first))
+      ylo, yhi = y_range([curve], y)
+      Plot.new([curve], var: Var.new(:x), xlo: xlo, xhi: xhi, ylo: ylo, yhi: yhi, title: title, width: width, height: height)
+    end
+
+    # A curve in polar coordinates: polar(1 + cos(t), t: 0..2*PI), drawn as
+    # the parametric curve (r*cos(t), r*sin(t)). The angle runs over a full
+    # turn unless another range is given.
+    def polar(r, var = nil, from = nil, to = nil, **opts)
+      r = Expression.lift(r)
+      unless opts.empty? || opts.keys.none? { |k| opts[k].is_a?(Range) }
+        key = opts.keys.find { |k| opts[k].is_a?(Range) }
+        span = opts.delete(key)
+        var ||= key
+        from = span.begin
+        to = span.end
+      end
+      var ||= r.variables.first || :theta
+      variable = Expression.lift(var)
+      angle = [Fn.new(:cos, [variable]), Fn.new(:sin, [variable])]
+      parametric(angle.map { |c| (r * c).simplify }, variable, from || Num.new(0), to || (2 * PI).simplify, **opts)
+    end
+
     # Points of data: scatter([1, 2], [3, 4]) or scatter([[1, 3], [2, 4]])
     def scatter(xs, ys = nil, fit: false, title: nil, label: nil, x: nil, y: nil, width: 60, height: 15)
       given = if ys.nil?

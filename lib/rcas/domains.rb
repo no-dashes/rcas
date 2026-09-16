@@ -316,6 +316,7 @@ module RCAS
       when :sign, :floor, :ceil, :round then ZZ
       when :re, :im, :arg then RR
       when :erf, :erfc then arg <= RR ? RR : CC
+      when :Ei, :Si, :Ci, :li then arg <= RR ? RR : CC
       when :conj then arg
       when :fibonacci then arg <= NN ? NN : ZZ
       when :bernoulli, :harmonic then QQ

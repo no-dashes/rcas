@@ -117,7 +117,7 @@ module RCAS
       end
 
       result = begin
-        table(f, x) || piecewise(f, x, depth) || rational(f, x) || substitution(f, x, depth) ||
+        table(f, x) || IntegralFunctions.antiderivative(f, x) || piecewise(f, x, depth) || rational(f, x) || substitution(f, x, depth) ||
           by_parts(f, x, depth) || Substitutions.radical(f, x, depth) || Substitutions.gaussian(f, x) || heurisch(f, x) ||
           Substitutions.root_of_linear(f, x, depth) || Substitutions.root_of_ratio(f, x, depth) ||
           Substitutions.exponential(f, x, depth) ||
@@ -268,7 +268,7 @@ module RCAS
 
     # v brings in a function dv did not have, so integrating u' * v would be a
     # step backwards (x**2*exp(-x**2): v = erf, and u'*v is the original problem).
-    SPECIAL = %i[erf erfc].freeze
+    SPECIAL = %i[erf erfc Ei Si Ci li].freeze
 
     def harder?(v, dv)
       names = ->(e) { e.each_node.filter_map { |n| n.name if n.is_a?(Fn) } }

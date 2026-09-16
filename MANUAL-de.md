@@ -47,6 +47,8 @@ Namen, die unten benutzt werden.
     - [Ableitungen](#ableitungen)
     - [Stammfunktionen](#stammfunktionen)
     - [Bestimmte Integrale](#bestimmte-integrale)
+    - [Integrale mit Namen](#integrale-mit-namen)
+    - [Länge, Fläche und Volumen](#länge-fläche-und-volumen)
     - [Zahlen, wenn die Symbole nicht reichen](#zahlen-wenn-die-symbole-nicht-reichen)
     - [Kurvendiskussion](#kurvendiskussion)
     - [Mehrere Veränderliche](#mehrere-veränderliche)
@@ -73,6 +75,7 @@ Namen, die unten benutzt werden.
     - [Algebraische Zahlen](#algebraische-zahlen)
     - [Endliche Körper](#endliche-körper)
   - [1.7 Lineare Algebra](#17-lineare-algebra)
+    - [Zerlegungen](#zerlegungen)
     - [Orthogonalität und kleinste Quadrate](#orthogonalität-und-kleinste-quadrate)
   - [1.8 Differentialgleichungen und Rekursionen](#18-differentialgleichungen-und-rekursionen)
     - [Rekursionen](#rekursionen)
@@ -86,6 +89,7 @@ Namen, die unten benutzt werden.
     - [Hypothesentests](#hypothesentests)
     - [Konfidenzintervalle](#konfidenzintervalle)
   - [1.11 Grafik](#111-grafik)
+    - [Parameter- und Polarkurven](#parameter--und-polarkurven)
     - [Statistische Grafiken](#statistische-grafiken)
   - [1.12 Die q-Analoga](#112-die-q-analoga)
     - [q-Summation](#q-summation)
@@ -294,7 +298,10 @@ Matrizen und ihre Eigenwerte, partielle Ableitungen sowie Statistik mit
 Tests und Konfidenzintervallen. Die klassischen orthogonalen Polynome -
 Legendre, Tschebyschow, Hermite, Laguerre - stehen in `Poly`. Wo es keine
 geschlossene Form gibt, geben `nsolve` und `nintegrate` die Zahl, und sagen
-auch, dass es eine ist.
+auch, dass es eine ist. Ein Integrand wie `sin(x)/x` bekommt den Namen
+seiner Stammfunktion (`Si`), Bogenlängen und Rotationskörper haben eigene
+Funktionen, und die benannten Matrixzerlegungen - `lu`, `qr`, `cholesky`,
+`diagonalize`, `jordan` - sind alle exakt.
 
 ```
 rcas> limit(sin(x)/x, x, 0)
@@ -846,6 +853,67 @@ rcas> integrate(exp(-x**2), x: -oo..oo)
 => pi**(1/2)
 ```
 
+#### Integrale mit Namen
+
+Manche Integranden haben keine elementare Stammfunktion, aber eine mit
+Namen, und das zu sagen nützt mehr als ein unausgewertetes
+`integral(...)`. `Si` und `Ci` sind der Integralsinus und der
+Integralkosinus, `Ei` der Integralexponent und `li = Ei(log(x))` der
+Integrallogarithmus, der die Primzahlen zählt.
+
+```
+rcas> integrate(sin(x)/x, x)
+=> Si(x)
+rcas> integrate(exp(x)/x, x)
+=> Ei(x)
+rcas> integrate(1/log(x), x)
+=> li(x)
+rcas> integrate(exp(x)/(x + 1), x)
+=> Ei(1 + x)/e
+rcas> integrate(sin(x)/x, x: 0..oo)
+=> pi/2
+rcas> integrate(sin(x)/x, x: 0..1).evalf
+=> 0.946083070367183
+rcas> diff(Si(x), x)
+=> sin(x)/x
+rcas> dsolve(eq(D(y, x, 2) + y, 1/x), y, x)
+=> [y = C1*cos(x) + C2*sin(x) + Ci(x)*sin(x) - Si(x)*cos(x)]
+```
+
+Sie kennen ihre Ableitungen, ihre Werte bei `0` und im Unendlichen (das
+Integral über `sin(x)/x` von `0` bis `oo` ist also Dirichlets `pi/2`), und
+`evalf` gibt ihre Zahlen. Sie tauchen auch dort auf, wo sie hingehören:
+die Gleichung `y'' + y = 1/x` oben wird durch Variation der Konstanten
+gelöst, und was dabei übrig bleibt, sind genau `Si` und `Ci`.
+
+#### Länge, Fläche und Volumen
+
+Die drei Fragen, mit denen eine erste Integralrechnung endet.
+`arclength(f, x: a..b)` ist `integral(sqrt(1 + f'**2))` für einen Graphen
+und `integral(sqrt(x'**2 + y'**2))` für eine Parameterkurve
+`[x(t), y(t)]`; `revolution_volume` und `revolution_surface` drehen einen
+Graphen um die x-Achse (oder mit `axis: :y` um die y-Achse, das ist die
+Formel mit den Zylinderschalen).
+
+```
+rcas> arclength(x**2, x: 0..1)
+=> 5**(1/2)/2 - log(2)/4 + log(4 + 2*5**(1/2))/4
+rcas> arclength(x**2, x: 0..1).evalf
+=> 1.4789428575445975
+rcas> arclength([cos(t), sin(t)], t: 0..pi)
+=> pi
+rcas> revolution_volume(sqrt(x), x: 0..1)
+=> pi/2
+rcas> revolution_volume(sqrt(1 - x**2), x: -1..1)
+=> 4*pi/3
+rcas> revolution_surface(x, x: 0..1)
+=> 2**(1/2)*pi
+```
+
+Die Wurzel aus einem Polynom hat selten eine elementare Stammfunktion,
+eine Bogenlänge bleibt also oft ein `integral(...)`-Knoten; `evalf`
+rechnet ihn aus.
+
 #### Zahlen, wenn die Symbole nicht reichen
 
 Nicht jede Gleichung hat eine Lösung in geschlossener Form, und die meisten
@@ -867,8 +935,8 @@ rcas> nintegrate(sin(x)/x, x: 0..1)
 => 0.9460830703671829
 rcas> nintegrate(exp(-x**2), x: -oo..oo)
 => 1.7724538509061416
-rcas> integrate(sin(x)/x, x: 0..1).evalf
-=> 0.9460830703671829
+rcas> integrate(exp(-x**4), x: 0..1).evalf
+=> 0.8448385947571027
 ```
 
 #### Kurvendiskussion
@@ -2247,6 +2315,45 @@ rcas> forget
 => true
 ```
 
+#### Zerlegungen
+
+Die benannten Zerlegungen einer quadratischen Matrix, alle exakt. `lu`
+gibt `[l, u, p]` mit `p*a == l*u` (Zeilen werden nur getauscht, um einem
+Pivot null auszuweichen, denn exaktes Rechnen muss um keine Rundung
+herumsteuern), `qr` gibt `[q, r]` mit orthonormalen Spalten in `q`,
+`cholesky` das `l` mit `a == l*l.transpose` für ein symmetrisches, positiv
+definites `a`, `diagonalize` das Paar `[p, d]` und `jordan` das Paar
+`[p, j]`, beide mit `a == p*d*p.inverse`.
+
+```
+rcas> am = matrix([[0, 1], [2, 3]])
+=> [0 1]
+   [2 3]
+rcas> lmat, umat, pmat = lu(am); umat
+=> [2 3]
+   [0 1]
+rcas> pmat*am == lmat*umat
+=> true
+rcas> qmat, rmat = qr(matrix([[1, 1], [1, 0]])); qmat
+=> [2**(1/2)/2  2**(1/2)/2]
+   [2**(1/2)/2 -2**(1/2)/2]
+rcas> cholesky(matrix([[4, 12], [12, 37]]))
+=> [2 0]
+   [6 1]
+rcas> jordan(matrix([[5, 4, 2, 1], [0, 1, -1, -1], [-1, -1, 3, 0], [1, 1, -1, 2]])).last
+=> [1 0 0 0]
+   [0 2 0 0]
+   [0 0 4 1]
+   [0 0 0 4]
+```
+
+`jordan` ist die Zerlegung, die es immer gibt: zu jedem Eigenwert werden
+die Kerne von `(a - lambda)**k` aufgebaut und darin eine Basis aus Ketten
+`v, (a - lambda)*v, ...` gewählt, ein Jordanblock je Kette. Die Matrix
+oben hat die Eigenwerte 1, 2 und eine doppelte 4 mit nur einem
+Eigenvektor, der Block zur 4 hat also die Größe zwei. `diagonalize` lehnt
+eine solche Matrix ab und sagt, warum.
+
 #### Orthogonalität und kleinste Quadrate
 
 `gram_schmidt` macht aus einer Basis eine orthogonale, mit
@@ -2702,6 +2809,50 @@ rcas> scatter([1, 2, 3, 4], [2, 4, 7, 8], width: 30, height: 6)
         0.85                      4.15
 ```
 
+#### Parameter- und Polarkurven
+
+`parametric([x(t), y(t)], t: a..b)` zeichnet eine Kurve, die kein
+Funktionsgraph sein muss: die Punkte werden in der Reihenfolge verbunden,
+in der der Parameter sie durchläuft, die Kurve darf sich also schließen
+und selbst schneiden. `polar(r, t: a..b)` tut dasselbe für `r` als
+Funktion des Winkels, gezeichnet als `(r*cos(t), r*sin(t))`; der Winkel
+läuft über eine volle Umdrehung, wenn kein anderer Bereich angegeben ist.
+
+```
+rcas> parametric([cos(t), sin(t)], t: 0..2*pi, width: 40, height: 12, title: "the unit circle")
+=> the unit circle
+    1.1 ┤⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⣀⣠⠤⠤⠤⠥⠤⠤⣄⣀⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+        │⠀⠀⠀⠀⠀⠀⠀⠀⣀⠤⠖⠚⠉⠉⠀⠀⠀⠀⠀⠀⠅⠀⠀⠀⠀⠀⠉⠉⠓⠲⠤⣀⠀⠀⠀⠀⠀⠀⠀⠀
+        │⠀⠀⠀⠀⠀⣠⠔⠋⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⠢⣄⠀⠀⠀⠀⠀
+        │⠀⠀⠀⣠⠞⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠳⣄⠀⠀⠀
+        │⠀⠀⣰⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⣆⠀⠀
+        │⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⠀⠀
+        │⠁⠀⡇⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠅⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⢸⠁⠀
+        │⠀⠀⠹⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⠏⠀⠀
+        │⠀⠀⠀⠙⢦⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡴⠋⠀⠀⠀
+        │⠀⠀⠀⠀⠀⠙⠢⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⠔⠋⠀⠀⠀⠀⠀
+        │⠀⠀⠀⠀⠀⠀⠀⠀⠉⠒⠦⢤⣀⣀⠀⠀⠀⠀⠀⠀⠅⠀⠀⠀⠀⠀⣀⣀⡤⠴⠒⠉⠀⠀⠀⠀⠀⠀⠀⠀
+   -1.1 ┤⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠉⠙⠒⠒⠒⠗⠒⠒⠋⠉⠉⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+        └────────────────────────────────────────
+         -1.1                                 1.1
+rcas> polar(1 + cos(t), width: 40, height: 12, title: "r = 1 + cos(t)")
+=> r = 1 + cos(t)
+    1.429 ┤⠀⠀⠀⠀⠀⠀⠅⠀⠀⠀⠀⣀⣀⣀⡤⠤⠤⠤⠤⠤⠤⢄⣀⣀⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+          │⠀⠀⠀⠀⠀⢀⣥⠴⠒⠊⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠉⠒⠒⠤⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+          │⠀⠀⠀⡠⠞⠉⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠒⢤⡀⠀⠀⠀⠀⠀
+          │⠀⠀⡞⠁⠀⠀⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠢⡀⠀⠀⠀
+          │⠀⠀⡇⠀⠀⠀⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⣆⠀⠀
+          │⠀⠀⠘⠦⣄⣀⡅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⠀⠀
+          │⠁⠀⢡⠖⠋⠉⠅⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⢸⠁⠀
+          │⠀⠀⡇⠀⠀⠀⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⠏⠀⠀
+          │⠀⠀⢧⡀⠀⠀⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠔⠁⠀⠀⠀
+          │⠀⠀⠀⠑⢦⣀⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⠤⠚⠁⠀⠀⠀⠀⠀
+          │⠀⠀⠀⠀⠀⠈⠝⠲⠤⢄⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⣀⠤⠤⠒⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   -1.429 ┤⠀⠀⠀⠀⠀⠀⠅⠀⠀⠀⠀⠉⠉⠉⠓⠒⠒⠒⠒⠒⠒⠊⠉⠉⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+          └────────────────────────────────────────
+           -0.3625                            2.112
+```
+
 #### Statistische Grafiken
 
 `histogram(data, bins: 4)` zählt die Werte in gleich breiten Klassen (die
@@ -2929,6 +3080,7 @@ Funktionen der obersten Ebene (bloß in `bin/rcas`, sonst `RCAS.name`):
 | q-Analoga | `qbracket qfactorial qbinomial qpochhammer qgosper qsum qsumrecursion qsumcertificate qsolve qhyper` |
 | Numerik | `nsolve nintegrate` |
 | Kurvendiskussion | `critical_points extrema inflections asymptotes tangent normal real_domain` |
+| Länge, Fläche, Volumen | `arclength revolution_volume revolution_surface` |
 | mehrere Veränderliche | `gradient hessian jacobian divergence curl laplacian lagrange` |
 | Algebra | `solve eq factor groebner reduce interval` |
 | Differentialgleichungen, Rekursionen | `D dsolve rsolve hyper laplace inverse_laplace` |
@@ -2938,11 +3090,11 @@ Funktionen der obersten Ebene (bloß in `bin/rcas`, sonst `RCAS.name`):
 | Statistik | `mean median mode variance stdev quantile quartiles iqr moment skewness kurtosis geometric_mean harmonic_mean frequencies covariance correlation linreg` |
 | Verteilungen | `Normal Uniform Exponential Bernoulli Binomial Poisson Geometric DiscreteUniform StudentT ChiSquare FRatio pdf cdf probability` |
 | Tests und Intervalle | `ttest ztest chisquare_test ftest binomial_test confidence_interval proportion_interval` |
-| Grafik | `plot scatter histogram boxplot barchart` |
+| Grafik | `plot parametric polar scatter histogram boxplot barchart` |
 | Geometrie | `point line circle distance midpoint angle area perimeter collinear? centroid intersect circumcircle perpendicular_bisector parallel_through perpendicular_through` |
-| spezielle Funktionen | `erf erfc` |
+| spezielle Funktionen | `erf erfc Ei Si Ci li` |
 | Bereiche | `NN ZZ QQ RR CC` (auch `ℕ ℤ ℚ ℝ ℂ`), `GF assume forget assumptions` |
-| lineare Algebra | `vector matrix gram_schmidt least_squares project orthogonal?` |
+| lineare Algebra | `vector matrix gram_schmidt least_squares project orthogonal? lu qr cholesky diagonalize jordan` |
 | Festhalten | `hold evaluate` |
 | Hilfe | `doc` (`/help NAME` in rcas-chat) |
 | Sitzung | `In`, `Out` (die nummerierten Zeilen), `_` (irbs letzter Wert) |
@@ -2954,8 +3106,9 @@ coeffs domain in in? to_poly to_sexp`, das zu `hold` Gehörige und
 `evaluate`.
 
 Nicht umgesetzt: der vollständige Risch-Algorithmus und spezielle Funktionen
-über `erf` hinaus (`Ei`, `Si`), Varianzanalyse und nichtparametrische Tests,
-dreidimensionale und parametrische Grafiken, Geometrie im Raum,
+über `erf`, `Ei`, `Si`, `Ci` und `li` hinaus (der Dilogarithmus, also
+`log(x)/(1 + x)`), Varianzanalyse und nichtparametrische Tests,
+dreidimensionale Grafiken, Geometrie im Raum,
 Fourier-Transformationen, Gruppentheorie, Differentialgleichungen mit
 variablen Koeffizienten jenseits der ersten Ordnung, Ungleichungen jenseits
 polynomialer, rationaler und Betragsungleichungen, Zahlkörper mit mehr als
@@ -2980,6 +3133,8 @@ lib/rcas/integrate_substitutions.rb  rationalizing substitutions (roots, exp, si
 lib/rcas/series.rb          Puiseux series, limits
 lib/rcas/piecewise.rb       functions defined case by case
 lib/rcas/fourier.rb         Fourier series
+lib/rcas/integral_functions.rb  Ei, Si, Ci, li
+lib/rcas/decompositions.rb  LU, QR, Cholesky, Jordan
 lib/rcas/summation.rb       Faulhaber, Gosper, zeta
 lib/rcas/poly_recurrence.rb polynomial solutions of a linear recurrence
 lib/rcas/petkovsek.rb       hypergeometric solutions of a recurrence
@@ -3060,6 +3215,10 @@ Literaturangaben stehen in der Sprache der Werke.
 | Einschnürungssatz für einen beschränkten mal einen Nullfaktor | series.rb | [Rud76, th. 3.19] |
 | Abschnittsweise Funktionen: Zweigwahl, stetige Stammfunktion | piecewise.rb | [Spi08, ch. 13] |
 | Fourier-Reihen und halbseitige Entwicklungen | fourier.rb | [Spi08, ch. 13]; die Koeffizienten sind rcas' eigene Integrale |
+| Ei, Si, Ci, li: Reihen und Kettenbrüche | integral_functions.rb | [AS64, §5.1, §5.2]; [PTVF07, §6.3]; Lentz [Len76] |
+| Bogenlänge, Rotationskörper | analysis.rb | [Spi08, ch. 13] |
+| LU, QR, Cholesky, Diagonalisierung | decompositions.rb | [Str16, ch. 2, 4, 6] |
+| Jordansche Normalform aus Ketten verallgemeinerter Eigenvektoren | decompositions.rb | [HK71, ch. 7] |
 | Faulhaber-Summen durch Newton-Interpolation, Bernoulli-Zahlen, zeta(2m) | summation.rb | [GKP94, §6.5]; Euler-Maclaurin-Rest [GKP94, §9.5] |
 | Gospers Algorithmus mit der Gradschranke für den Polynomansatz | summation.rb | [Gos78]; [PWZ96, ch. 5] |
 | Produkte: Fakultäts- und Gammaquotienten bei linearen Faktoren, exp von Summen | product.rb | [GKP94, §5.5] |
@@ -3145,6 +3304,8 @@ Literaturangaben stehen in der Sprache der Werke.
   Sci. École Norm. Sup.* (2) 1 (1872), 215-218.
 - [HF96] R. J. Hyndman, Y. Fan, Sample quantiles in statistical packages,
   *The American Statistician* 50 (1996), 361-365.
+- [HK71] K. Hoffman, R. Kunze, *Linear Algebra*, 2nd ed., Prentice-Hall
+  1971.
 - [Hor08] P. Horn, *Faktorisierung in Schief-Polynomringen*, Dissertation,
   Universität Kassel 2008, chapter 6 (Lineare Algebra mit Polynom-Matrizen).
 - [HW08] G. H. Hardy, E. M. Wright, *An Introduction to the Theory of

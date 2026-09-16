@@ -147,6 +147,8 @@ module RCAS
       a = Expression.lift(a)
       f = Piecewises.hoist(f)
       return Piecewises.limit(f, x, a, dir) if f.is_a?(Piecewise)
+      known = IntegralFunctions.limit(f, x, a)
+      return known if known
       g, = localize(f, x, a)
       side = infinite?(a) ? :right : (dir || :both)
       if side == :both

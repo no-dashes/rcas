@@ -202,4 +202,22 @@ end
     assert_includes boxes, "<circle", "the outlier is drawn"
     assert_includes RCAS.barchart({ "x" => 2, "y" => 5 }).to_svg, "<rect"
   end
+  def test_parametric_and_polar
+    circle = RCAS.parametric([RCAS.cos(:t), RCAS.sin(:t)], t: 0..2 * RCAS::PI, width: 20, height: 8)
+    points = circle.curves.first.points.compact
+    assert_in_delta 1.0, points.map { |x, y| Math.sqrt(x * x + y * y) }.max, 1e-9, "every point is on the unit circle"
+    assert_in_delta(-1.0, circle.x_range.first, 0.2)
+    assert_includes circle.to_s, "\u2800", "braille art"
+
+    cardioid = RCAS.polar(1 + RCAS.cos(:t), width: 20, height: 8)
+    xs = cardioid.curves.first.points.compact.map(&:first)
+    assert_in_delta 2.0, xs.max, 1e-9, "r = 2 at the angle zero"
+    assert_in_delta(-0.25, xs.min, 1e-4, "the dimple of the cardioid, up to the sampling")
+
+    spiral = RCAS.polar(:t, t: 0..4 * RCAS::PI, width: 20, height: 8)
+    assert_equal 401, spiral.curves.first.points.size
+
+    assert_raises(ArgumentError) { RCAS.parametric([:t], t: 0..1) }
+    assert_raises(ArgumentError) { RCAS.parametric([:t, :t], t: 0..RCAS::OO) }
+  end
 end

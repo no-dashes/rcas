@@ -32,14 +32,14 @@ class NumericsTest < Minitest::Test
   end
 
   def test_evalf_finishes_what_integrate_could_not
-    formal = RCAS.integrate(RCAS.sin(X) / X, x: 0..1)
+    formal = RCAS.integrate(RCAS.exp(-X**4), x: 0..1)
     assert_kind_of RCAS::Integral, formal
-    assert_in_delta 0.9460830703671830, formal.evalf, 1e-9
+    assert_in_delta 0.8448385947571027, formal.evalf, 1e-9
     assert_in_delta 0.29469818224, RCAS.integrate(RCAS.exp(-X**2) * RCAS.sin(X), x: 0..1).evalf, 1e-9
     # an exact answer is never replaced by a float
     assert_equal Rational(1, 3), RCAS.integrate(X**2, x: 0..1)
     # a free parameter keeps the integral unevaluated
-    assert_kind_of RCAS::Integral, RCAS.integrate(RCAS.sin(X * RCAS::Var.new(:a)) / X, x: 0..1).evalf
+    assert_kind_of RCAS::Integral, RCAS.integrate(RCAS.exp(-RCAS::Var.new(:a) * X**4), x: 0..1).evalf
   end
 
   def test_the_results_are_honest_floats

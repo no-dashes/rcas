@@ -101,7 +101,7 @@ class IntegrateTest < Minitest::Test
 
     r = (exp(-:x**4) + :x).integrate(:x)
     assert_equal "integral(exp(-x**4), x) + x**2/2", r.to_s
-    assert_equal "integral(sin(x)/x, x)", (sin(:x) / :x).integrate(:x).to_s
+    assert_equal "integral(log(x)/(1 + x), x)", (log(:x) / (1 + :x)).integrate(:x).to_s
   end
 
   # |u| and sign(u) for a linear u: sign is a constant on each side of the
