@@ -198,7 +198,7 @@ module RCAS
           break unless s.zero?
         end
       rescue SeriesError
-        return squeeze(g) || termwise(g) || exponential_fallback(g)
+        return squeeze(g) || termwise(g) || dominant(g) || exponential_fallback(g)
       end
       return Num.new(0) if s.zero?
 
@@ -260,14 +260,11 @@ module RCAS
     end
 
     # The limit of a sum is the sum of the limits when every term has a
-    # finite one (exp(-1/t)/t + erf(1/t) at t -> 0+, say); nil otherwise.
+    # finite one (exp(-1/t)/t + erf(1/t) at t -> 0+, say); nil otherwise, and
+    # nil rather than the error when a term has no series at all, so that the
+    # rules after this one still get their turn.
     def termwise(g)
-      constant, terms = Simplify.termize(g)
-      if terms.size + (constant.zero? ? 0 : 1) < 2 # c * (a + b): distribute first
-        return nil unless g.each_node.any? { |n| n.is_a?(Add) || n.is_a?(Sub) }
-        constant, terms = Simplify.termize(Expand.expand(g))
-        return nil if terms.size + (constant.zero? ? 0 : 1) < 2
-      end
+      constant, terms = sum_terms(g) || return
       total = Num.new(constant)
       terms.each do |factors, coeff|
         value = one_sided(Simplify.rebuild_product(coeff, factors), :right)
@@ -275,6 +272,139 @@ module RCAS
         total += value
       end
       total.simplify
+    rescue SeriesError, ZeroDivisionError
+      nil
+    end
+
+    # The terms of a sum; c * (a + b) is distributed first, because a single
+    # term is nothing to compare. A sum that cancels away entirely comes back
+    # with no terms and is its constant - sin(x) - sin(x) is 0 wherever both
+    # halves are defined, whether or not either half has a series there.
+    # nil when what is left is one term and nothing else.
+    def sum_terms(g)
+      constant, terms = Simplify.termize(g)
+      return [constant, terms] if sum?(constant, terms)
+      return nil unless g.each_node.any? { |n| n.is_a?(Add) || n.is_a?(Sub) }
+      constant, terms = Simplify.termize(Expand.expand(g))
+      sum?(constant, terms) ? [constant, terms] : nil
+    end
+
+    def sum?(constant, terms) = terms.empty? || terms.size + (constant.zero? ? 0 : 1) >= 2
+
+    # The squeeze rule additively [Rud76, th. 3.19]: a sum follows the term
+    # that runs away, as long as the others cannot catch it. Three criteria,
+    # each of them sound and each doing what the one before it cannot - let
+    # the oscillation grow, and compare two runaways:
+    #
+    #   x**2/4 - sin(x)    every other term is bounded, so the sum is caught
+    #                      between x**2/4 - 1 and x**2/4 + 1
+    #   x**2 - x*sin(x)    |x*sin(x)| <= |x| is of strictly smaller order than
+    #                      x**2, so the sum is caught between x**2 - x and
+    #                      x**2 + x
+    #   exp(x) - x         x/exp(x) is 0, so what is left is exp(x)*(1 + o(1))
+    #
+    # nil as soon as a term cannot be placed, and nil whenever two of them
+    # could cancel: x + x*sin(x) swings between 0 and 2*x, x - x**2*sin(x)
+    # swings through both infinities, and neither of them has a limit.
+    def dominant(g)
+      terms = (sum_terms(g) || return).last
+      measured = terms.map do |factors, coeff|
+        term = Simplify.rebuild_product(coeff, factors)
+        (measure(term) || return) + [term]
+      end
+      bounded_rest(measured) || least_order(measured) || ratio_dominance(measured)
+    end
+
+    # [kind, order, value] for one term of the sum: :divergent with the signed
+    # infinity it goes to, :bounded for one that stays in an interval,
+    # :oscillating for a bounded factor times something that does not stay in
+    # one (x*sin(x)). The order is the exponent of the leading term in t and
+    # is nil for a :divergent term that only exponential_fallback could
+    # decide - exp(1/t) has no series to read an order off. nil for a term
+    # that cannot be placed at all.
+    def measure(term)
+      if (value = value_of(term))
+        return nil if !infinite?(value) && value.each_node.any? { |n| n == OO }
+        return [infinite?(value) ? :divergent : :bounded, order_of(term), value]
+      end
+      coeff, factors = Simplify.factorize(term)
+      bounded, rest = factors.partition { |base, exp| bounded?(base, exp) }
+      return nil if bounded.empty?
+      rest = Simplify.rebuild_product(coeff, rest.to_h)
+      value = value_of(rest) || return
+      order = order_of(rest) || return
+      runaway = infinite?(value) || value.each_node.any? { |n| n == OO }
+      [runaway ? :oscillating : :bounded, order, nil]
+    end
+
+    # Everything that is not a runaway stays in a bounded interval and the
+    # runaways agree on a direction; the constant of the sum is bounded too,
+    # so the terms decide alone. exp(x) + 1 needs this rather than the orders:
+    # exp has no series at infinity, so only its limit is known.
+    def bounded_rest(measured)
+      return nil if measured.any? { |kind,| kind == :oscillating }
+      values = measured.filter_map { |kind, _, value| value if kind == :divergent }
+      return nil if values.empty?
+      values.all? { |value| value == values.first } ? values.first : nil
+    end
+
+    # One term is of strictly smallest order (most negative in t, so fastest
+    # in x) and runs away; every other term, oscillation included, is o() of
+    # it and cannot reach back.
+    def least_order(measured)
+      orders = measured.map { |_, order,| order }
+      return nil if orders.any?(&:nil?)
+      least = orders.min
+      return nil unless orders.count(least) == 1
+      kind, _, value = measured[orders.index(least)]
+      kind == :divergent ? value : nil
+    end
+
+    # The last resort: divide by a term that runs away and ask whether all the
+    # others vanish against it, which leaves the sum as that term times
+    # 1 + o(1). exp(x) - x needs this - the exponential has no series at
+    # infinity, so there is no order to compare it by, but x/exp(x) is a limit
+    # of its own and it is zero. The rule does not re-enter itself: the
+    # quotients it builds are limits again, and one comparison is enough.
+    def ratio_dominance(measured)
+      return nil if @comparing
+
+      begin
+        @comparing = true
+        measured.each do |kind, _, value, term|
+          next unless kind == :divergent
+          others = measured.reject { |_, _, _, other| other.equal?(term) }
+          return value if others.all? { |_, _, _, other| vanishes?(other, term) }
+        end
+        nil
+      ensure
+        @comparing = false
+      end
+    end
+
+    def vanishes?(term, against)
+      value = value_of((term / against).simplify)
+      value.is_a?(Num) && value.value.zero?
+    end
+
+    # The one-sided limit at t -> 0+, and the leading exponent of the series
+    # there; nil when the expansion cannot supply them.
+    def value_of(e)
+      value = one_sided(e, :right)
+      value.is_a?(Limit) ? nil : value
+    rescue SeriesError, ZeroDivisionError
+      nil
+    end
+
+    def order_of(e)
+      s = nil
+      [4, 8, 16, 32].each do |n|
+        s = adaptive(e, n)
+        break unless s.zero?
+      end
+      s.zero? ? nil : s.leading.first
+    rescue SeriesError, ZeroDivisionError
+      nil
     end
 
     def log_of(g)

@@ -69,7 +69,7 @@ lib/rcas/expand.rb          distribution on term tables with like-term merging (
 lib/rcas/differentiate.rb   derivative rules
 lib/rcas/integrate.rb       rules (table, abs/sign, parts) -> exact rational (Hermite, LRT, then real quadratic factors of a biquadratic denominator) -> Risch-Norman heuristic; Integral node
 lib/rcas/integrate_substitutions.rb  Integrate::Substitutions: R(x, sqrt(quadratic)) reduction, roots of linear forms and of ratios of them (Moebius), exp, tan(x/2); hooked into Integrate.attempt
-lib/rcas/series.rb          Puiseux series with log terms, limits (squeeze rule for a bounded factor), Limit node, OO
+lib/rcas/series.rb          Puiseux series with log terms, limits (squeeze rule for a bounded factor, `dominant` for a sum whose other terms are bounded, of strictly smaller order, or vanish in the quotient), Limit node, OO
 lib/rcas/fourier.rb         Fourier.series: partial sums and the general coefficient (the index is assumed integer while the coefficient integrals run), half-range :sine/:cosine
 lib/rcas/integral_functions.rb  Ei Si Ci li: Fn nodes, exact values, derivatives, the integration rule, Floats by series/continued fraction
 lib/rcas/fps.rb             FPS: Koepf's formal power series. Holonomic differential equation by undetermined coefficients, coefficient recurrence, the two-term (m-fold symmetric hypergeometric) case; behind fps() and series(formal: true)

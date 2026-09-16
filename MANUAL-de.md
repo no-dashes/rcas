@@ -1286,6 +1286,21 @@ erledigt der Einschnürungssatz: `sin`, `cos`, `sign`, `atan`, `erf` und
 einem Faktor, der gegen null geht, geht also gegen null. Eine ungedämpfte
 Oszillation hat keinen Grenzwert und sagt das auch.
 
+Dasselbe Argument gilt additiv: Eine Summe folgt dem Term, der davonläuft,
+solange die übrigen ihn nicht einholen. Entweder ist jeder andere Term
+beschränkt (`x**2/4 - sin(x)` ist zwischen `x**2/4 - 1` und `x**2/4 + 1`
+eingeschnürt), oder die Oszillation wächst zwar, bleibt aber von echt
+kleinerer Ordnung (`x**2 - x*sin(x)` zwischen `x**2 - x` und
+`x**2 + x`). Laufen zwei Terme zugleich davon, entscheidet der Quotient:
+`exp(x) - x` ist `oo`, weil `x/exp(x)` gleich `0` ist und `exp(x)*(1 - 0)`
+übrig bleibt. Eine Oszillation, die bis an den führenden Term
+heranreicht, hat wieder keinen Grenzwert, und `x + x*sin(x)`, das zwischen
+`0` und `2*x` schwankt, bleibt unausgewertet.
+
+Eine Summe, die sich weghebt, braucht überhaupt keine Reihe:
+`sin(x) - sin(x)` ist `0`, wo immer es definiert ist, und genau das sagt
+der Grenzwert.
+
 ```
 rcas> limit(sin(x) / x, x, 0)
 => 1
@@ -1311,6 +1326,18 @@ rcas> limit(x * sin(1/x), x, 0)
 => 0
 rcas> limit(sin(x), x, oo)
 => limit(sin(x), x, oo)
+rcas> limit(x**2/4 - sin(x), x, oo)
+=> oo
+rcas> limit(x**2 - x*sin(x), x, oo)
+=> oo
+rcas> limit(exp(x) + 1, x, oo)
+=> oo
+rcas> limit(x + x*sin(x), x, oo)
+=> limit(x + x*sin(x), x, oo)
+rcas> limit(exp(x) - x, x, oo)
+=> oo
+rcas> limit(sin(x) - sin(x), x, oo)
+=> 0
 ```
 
 #### Abschnittsweise definierte Funktionen
@@ -3587,6 +3614,7 @@ Literaturangaben stehen in der Sprache der Werke.
 | reelle quadratische Faktoren eines biquadratischen Nenners; Möbius-Substitution für die Wurzel aus einem Quotienten linearer Formen | integrate.rb, integrate_substitutions.rb | [Har16, ch. II-III]; [GCL92, ch. 11] |
 | Puiseux-Reihen mit Logarithmustermen, Grenzwerte über den führenden Term | series.rb | Potenzreihenarithmetik wie in [Knu98, §4.7]; die Grenzwertstrategie ist die des Lehrbuchs, nicht Gruntz' MRV-Algorithmus [Gru96] |
 | Einschnürungssatz für einen beschränkten mal einen Nullfaktor | series.rb | [Rud76, th. 3.19] |
+| Eine Summe, die ihrem beherrschenden Term folgt (beschränkter Rest, Oszillation echt kleinerer Ordnung oder verschwindender Quotient) | series.rb | [Rud76, th. 3.19] |
 | Abschnittsweise Funktionen: Zweigwahl, stetige Stammfunktion | piecewise.rb | [Spi08, ch. 13] |
 | Das Fenster: HTTP-Nachrichtenformat, der Host-Kopf gegen DNS-Rebinding, die Desktop-Datei | app/server.rb, app/launcher.rb | [RFC9112]; [RFC9110, sec. 7.2]; [FDO14] |
 | Fourier-Reihen und halbseitige Entwicklungen | fourier.rb | [Spi08, ch. 13]; die Koeffizienten sind rcas' eigene Integrale |

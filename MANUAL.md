@@ -1242,6 +1242,19 @@ fast for a series is handled by the squeeze rule: `sin`, `cos`, `sign`,
 them with a factor that tends to zero tends to zero. An oscillation that
 is not damped has no limit and says so.
 
+The same argument holds additively, so a sum follows the term that runs
+away as long as the rest cannot catch it: either every other term is
+bounded (`x**2/4 - sin(x)` is caught between `x**2/4 - 1` and
+`x**2/4 + 1`), or the oscillation grows but stays of strictly smaller
+order (`x**2 - x*sin(x)` between `x**2 - x` and `x**2 + x`). When two
+terms run away at once, the quotient decides: `exp(x) - x` is `oo`
+because `x/exp(x)` is `0`, which leaves `exp(x)*(1 - 0)`. An oscillation
+that reaches as far as the leading term has no limit again, and
+`x + x*sin(x)`, which swings between `0` and `2*x`, stays unevaluated.
+
+A sum that cancels needs no series at all: `sin(x) - sin(x)` is `0`
+wherever it is defined, and that is what the limit says.
+
 ```
 rcas> limit(sin(x) / x, x, 0)
 => 1
@@ -1267,6 +1280,18 @@ rcas> limit(x * sin(1/x), x, 0)
 => 0
 rcas> limit(sin(x), x, oo)
 => limit(sin(x), x, oo)
+rcas> limit(x**2/4 - sin(x), x, oo)
+=> oo
+rcas> limit(x**2 - x*sin(x), x, oo)
+=> oo
+rcas> limit(exp(x) + 1, x, oo)
+=> oo
+rcas> limit(x + x*sin(x), x, oo)
+=> limit(x + x*sin(x), x, oo)
+rcas> limit(exp(x) - x, x, oo)
+=> oo
+rcas> limit(sin(x) - sin(x), x, oo)
+=> 0
 ```
 
 #### Functions defined case by case
@@ -3490,6 +3515,7 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | real quadratic factors of a biquadratic denominator; the Möbius substitution for a root of a ratio of linear forms | integrate.rb, integrate_substitutions.rb | [Har16, ch. II-III]; [GCL92, ch. 11] |
 | Puiseux series with log terms, limits by the leading term | series.rb | power series arithmetic as in [Knu98, §4.7]; the limit strategy is the textbook one, not Gruntz's MRV algorithm [Gru96] |
 | squeeze rule for a bounded factor times a null factor | series.rb | [Rud76, th. 3.19] |
+| a sum that follows its dominant term (bounded rest, an oscillation of strictly smaller order, or a quotient that vanishes) | series.rb | [Rud76, th. 3.19] |
 | piecewise functions: branch selection, continuous antiderivative | piecewise.rb | [Spi08, ch. 13] |
 | the window: HTTP message format, the Host header against DNS rebinding, the desktop entry file | app/server.rb, app/launcher.rb | [RFC9112]; [RFC9110, sec. 7.2]; [FDO14] |
 | Fourier series and half-range expansions | fourier.rb | [Spi08, ch. 13]; the coefficients are rcas's own integrals |

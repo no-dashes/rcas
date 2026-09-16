@@ -76,6 +76,47 @@ class SeriesTest < Minitest::Test
     assert_kind_of RCAS::Limit, RCAS.limit(sin(1 / :x), :x, 0)
   end
 
+  def test_dominant_term
+    # A bounded summand cannot hold back a term that runs away.
+    assert_equal "oo", RCAS.limit(:x**2 / 4 - sin(:x), :x, OO).to_s
+    assert_equal "oo", RCAS.limit(:x - sin(:x), :x, OO).to_s
+    assert_equal "oo", RCAS.limit(:x + sin(:x), :x, OO).to_s
+    assert_equal "-oo", RCAS.limit(sin(:x) - :x, :x, OO).to_s
+    assert_equal "oo", RCAS.limit(:x**2 - sin(:x), :x, -OO).to_s
+    assert_equal "oo", RCAS.limit(1 / :x**2 + sin(1 / :x), :x, 0).to_s
+    assert_equal "-oo", RCAS.limit(RCAS.sign(:x) - 1 / :x**2, :x, 0, :right).to_s
+    # The runaway may be one only its limit is known of, not its order.
+    assert_equal "oo", RCAS.limit(exp(:x) + 1, :x, OO).to_s
+    assert_equal "oo", RCAS.limit(exp(:x) - sin(:x), :x, OO).to_s
+    # Two runaways: the quotient says which of them wins.
+    assert_equal "oo", RCAS.limit(exp(:x) - :x, :x, OO).to_s
+    assert_equal "-oo", RCAS.limit(:x**2 - exp(:x), :x, OO).to_s
+    assert_equal "-oo", RCAS.limit(exp(:x) - exp(2 * :x), :x, OO).to_s
+    assert_equal "-oo", RCAS.limit(exp(-:x) - :x, :x, OO).to_s
+    # An oscillation that grows is allowed while it stays of smaller order.
+    assert_equal "oo", RCAS.limit(:x**2 - :x * sin(:x), :x, OO).to_s
+    assert_equal "oo", RCAS.limit(:x * (:x - sin(:x)), :x, OO).to_s
+    assert_equal "-oo", RCAS.limit(:x * cos(:x) - :x**2, :x, OO).to_s
+    # The bound is the claim: x**2/4 - sin(x) >= x**2/4 - 1 all the way out.
+    [10, 100, 1000].each do |at|
+      assert_operator (:x**2 / 4 - sin(:x)).evalf(x: at), :>, at**2 / 4.0 - 1
+    end
+    # An oscillation that can reach back stays honest.
+    assert_kind_of RCAS::Limit, RCAS.limit(:x + :x * sin(:x), :x, OO)
+    assert_kind_of RCAS::Limit, RCAS.limit(:x - :x**2 * sin(:x), :x, OO)
+    assert_kind_of RCAS::Limit, RCAS.limit(sin(:x) + 1 / :x, :x, OO)
+    assert_kind_of RCAS::Limit, RCAS.limit(sin(:x) + cos(:x), :x, OO)
+    assert_kind_of RCAS::Limit, RCAS.limit(exp(:x) * sin(:x) - :x, :x, OO)
+  end
+
+  def test_sum_that_cancels
+    # No series at the point on either side, and none needed.
+    assert_equal 0, RCAS.limit(sin(:x) - sin(:x), :x, OO)
+    assert_equal 0, RCAS.limit(:x * sin(:x) - :x * sin(:x), :x, OO)
+    assert_equal 1, RCAS.limit(1 + sin(1 / :x) - sin(1 / :x), :x, 0)
+    assert_equal 2, RCAS.limit(2 + :x * sin(1 / :x), :x, 0)
+  end
+
   def test_polynomial_sums
     assert_equal "n/2 + n**2/2", RCAS.sum(:k, :k, 1, :n).to_s
     assert_equal "n/6 + n**2/2 + n**3/3", RCAS.sum(:k**2, :k, 1, :n).to_s
