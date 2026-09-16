@@ -3798,7 +3798,8 @@ its first character and then by whether it is Ruby:
 Tab completes command names, variables and common method names; the input
 history is kept in `~/.rcas/history`. A spinner turns while Ruby computes,
 while Claude thinks and while one of its calls runs; a result that took
-longer than a second or two is followed by its time.
+longer than a second or two is followed by its time, at the right edge of
+the terminal.
 
 ### Claude
 

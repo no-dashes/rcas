@@ -179,8 +179,14 @@ module RCAS
       end
 
       # Seconds a computation took, mentioned only when it was noticeable.
+      # At the right edge of the terminal, where it is out of the way of the
+      # result; piped output has no edge to hang it on, so there it is
+      # indented like any other aside.
       def took(seconds)
-        info("(#{seconds.round(1)}s)") if seconds >= 1.5
+        return if seconds < 1.5
+        text = "(#{seconds.round(1)}s)"
+        return info(text) unless tty?
+        puts Style.dim(text.rjust([columns - 1, text.size + 2].max))
       end
 
       # A dimmed replay of earlier turns when a session is resumed.

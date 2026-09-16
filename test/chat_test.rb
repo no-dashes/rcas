@@ -589,8 +589,24 @@ class ChatSpinnerTest < Minitest::Test
     ui.took(0.4)
     assert_equal "", out.string
     ui.took(3.26)
-    assert_equal "  (3.3s)\n", out.string
+    assert_equal "  (3.3s)\n", out.string, "piped output has no right edge to hang it on"
   end
+
+  def test_took_sits_at_the_right_edge_of_a_terminal
+    out = FakeTerminal.new(40)
+    ui = RCAS::Chat::UI.new(out: out, mode: :text)
+    ui.took(3.26)
+    line = out.string.chomp
+    assert_equal "(3.3s)", line.strip
+    assert_equal 39, line.size, "one column short of the edge, so nothing wraps"
+  end
+end
+
+# A StringIO that calls itself a terminal, so that the UI measures a width.
+class FakeTerminal < StringIO
+  def initialize(columns) = (super(); @columns = columns)
+  def tty? = true
+  def winsize = [24, @columns]
 end
 
 class ChatUsageTest < Minitest::Test

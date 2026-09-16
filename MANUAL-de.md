@@ -3903,7 +3903,8 @@ Die Tabulatortaste vervollständigt Befehlsnamen, Variablen und häufige
 Methodennamen; der Eingabeverlauf liegt in `~/.rcas/history`. Ein Rädchen
 dreht sich, während Ruby rechnet, während Claude nachdenkt und während
 einer seiner Aufrufe läuft; ein Ergebnis, das länger als ein, zwei Sekunden
-gebraucht hat, wird von seiner Zeit gefolgt.
+gebraucht hat, wird von seiner Zeit gefolgt, am rechten Rand des
+Terminals.
 
 ### Claude
 
