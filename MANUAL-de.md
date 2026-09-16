@@ -54,6 +54,7 @@ Namen, die unten benutzt werden.
     - [Formale Potenzreihen](#formale-potenzreihen)
     - [Grenzwerte](#grenzwerte)
     - [Abschnittsweise definierte Funktionen](#abschnittsweise-definierte-funktionen)
+    - [Fourier-Reihen](#fourier-reihen)
     - [Summen](#summen)
     - [Bestimmte Summen: kreatives Teleskopieren](#bestimmte-summen-kreatives-teleskopieren)
     - [Produkte](#produkte)
@@ -287,7 +288,8 @@ Weiterlesen: 1.3 Analysis, 1.4 Gleichungen und Lösen, 1.6 Polynomringe,
 ### Grundstudium
 
 Grenzwerte und Reihen (`fps` gibt den allgemeinen Koeffizienten, nicht nur
-die ersten Glieder), die Integrationstechniken, Differentialgleichungen,
+die ersten Glieder, und `fourier` tut dasselbe für eine Fourier-Reihe), die
+Integrationstechniken, Differentialgleichungen,
 Matrizen und ihre Eigenwerte, partielle Ableitungen sowie Statistik mit
 Tests und Konfidenzintervallen. Die klassischen orthogonalen Polynome -
 Legendre, Tschebyschow, Hermite, Laguerre - stehen in `Poly`. Wo es keine
@@ -1089,6 +1091,77 @@ rcas> integrate(fee, x)
 rcas> integrate(fee, x: 0..2)
 => 5/2
 ```
+
+#### Fourier-Reihen
+
+`fourier(f, x: a..b)` schreibt die periodische Funktion, die auf `[a, b]`
+mit `f` übereinstimmt, als Summe von Sinus und Kosinus. Mit `n:` kommt die
+Partialsumme mit so vielen Harmonischen zurück (voreingestellt vier), mit
+`formal: true` die ganze Reihe als `sum(...)`-Knoten mit dem allgemeinen
+Koeffizienten - dasselbe Paar, das `series` und `fps` für Potenzreihen
+bilden.
+
+```
+rcas> fourier(x, x: -pi..pi, formal: true)
+=> sum(-2*(-1)**k*sin(k*x)/k, k, 1, oo)
+rcas> fourier(x, x: -pi..pi)
+=> -sin(2*x) + 2*sin(3*x)/3 - sin(4*x)/2 + 2*sin(x)
+rcas> fourier(x**2, x: -pi..pi, formal: true)
+=> pi**2/3 + sum(4*(-1)**k*cos(k*x)/k**2, k, 1, oo)
+```
+
+Die Koeffizienten sind die Integrale `(2/T)*integral(f*cos(k*omega*x))`
+und dasselbe mit `sin`, und sie ergeben sich in geschlossener Form, weil
+der Index während ihrer Berechnung eine ganze Zahl ist: `sin(k*pi)` ist
+dann `0` und `cos(k*pi)` ist `(-1)**k`. (`assume(k: ZZ)` liefert diese
+beiden Identitäten auch sonst überall.)
+
+Eine abschnittsweise definierte Funktion ist erlaubt, und die
+Rechteckschwingung ist der Klassiker: nur die ungeraden Harmonischen
+überleben, und die Partialsumme schießt an der Sprungstelle über das Ziel
+hinaus, gleich wie viele Glieder man nimmt - das Gibbssche Phänomen.
+
+```
+rcas> wave = piecewise(x < 0 => -1, :else => 1)
+=> piecewise(x < 0 => -1, :else => 1)
+rcas> fourier(wave, x: -pi..pi, formal: true)
+=> sum(sin(k*x)*(2/k - 2*(-1)**k/k)/pi, k, 1, oo)
+rcas> fourier(wave, x: -pi..pi, n: 3)
+=> 4*sin(3*x)/(3*pi) + 4*sin(x)/pi
+rcas> plot(fourier(wave, x: -pi..pi, n: 9), x: -pi..pi, height: 12, title: "nine harmonics")
+=> nine harmonics
+    1.301 ┤⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠅⠀⣠⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⡤⣄⠀⠀
+          │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠅⢰⠁⠀⠳⣄⣠⠔⠋⠙⠢⢄⡤⠖⠋⠓⠢⢄⡤⠖⠉⠙⢦⣀⣠⠊⠀⠸⡀⠀
+          │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠅⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢣⠀
+          │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢵⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⡄
+          │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡝⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇
+          │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢱
+          │⢣⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⢰⠅⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀
+          │⢸⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡸⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+          │⠈⡆⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠇⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+          │⠀⢣⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⠀⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+          │⠀⠈⡆⠀⡠⠋⠉⠳⣄⣀⠴⠚⠑⠢⢤⣠⠴⠚⠑⠢⣄⣠⠔⠋⠙⢦⠀⢀⠇⠀⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   -1.301 ┤⠀⠀⠙⠚⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⠋⠀⠀⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+          └────────────────────────────────────────────────────────────
+           -3.142                                                 3.142
+```
+
+Auf einem halben Intervall entwickeln `kind: :sine` und `kind: :cosine`
+die ungerade und die gerade Fortsetzung von `f`, die beiden Reihen, die
+ein Randwertproblem mit festen oder mit isolierten Enden lösen. Jedes
+Intervall ist zulässig; die Periode ist seine Länge.
+
+```
+rcas> fourier(x, x: 0..1, kind: :sine, formal: true)
+=> sum(-2*(-1)**k*sin(pi*k*x)/(pi*k), k, 1, oo)
+rcas> fourier(x, x: 0..2, n: 2)
+=> 1 - sin(2*pi*x)/pi - 2*sin(pi*x)/pi
+```
+
+Die Konvergenz wird nicht geprüft: die Reihe wird formal hingeschrieben,
+wie es eine Tabelle auch tut. An einer Sprungstelle konvergiert sie gegen
+das Mittel der beiden einseitigen Werte, was die Zeichnung oben bei `0`
+zeigt.
 
 #### Summen
 
@@ -2850,7 +2923,7 @@ Funktionen der obersten Ebene (bloß in `bin/rcas`, sonst `RCAS.name`):
 | benannte Polynome | `Poly.chebyshev_t Poly.chebyshev_u Poly.legendre Poly.hermite Poly.hermite_prob Poly.laguerre Poly.gegenbauer Poly.jacobi Poly.bernoulli Poly.euler Poly.cyclotomic Poly.swinnerton_dyer Poly.abel Poly.fibonacci Poly.lucas Poly.bell` (ein Namensraum, keine bloßen Namen) |
 | Konstanten | `PI E I oo` (bloß `pi`, `π`, `oo`, `∞`) |
 | Auswerten | `subs evalf` |
-| Analysis | `integrate diff series taylor fps limit sum product` |
+| Analysis | `integrate diff series taylor fps fourier limit sum product` |
 | abschnittsweise | `piecewise discontinuities kinks` |
 | hypergeometrische Summation | `sumrecursion sumcertificate hyper` |
 | q-Analoga | `qbracket qfactorial qbinomial qpochhammer qgosper qsum qsumrecursion qsumcertificate qsolve qhyper` |
@@ -2906,6 +2979,7 @@ lib/rcas/integrate.rb       rules, rational functions, Risch-Norman heuristic
 lib/rcas/integrate_substitutions.rb  rationalizing substitutions (roots, exp, sin/cos)
 lib/rcas/series.rb          Puiseux series, limits
 lib/rcas/piecewise.rb       functions defined case by case
+lib/rcas/fourier.rb         Fourier series
 lib/rcas/summation.rb       Faulhaber, Gosper, zeta
 lib/rcas/poly_recurrence.rb polynomial solutions of a linear recurrence
 lib/rcas/petkovsek.rb       hypergeometric solutions of a recurrence
@@ -2985,6 +3059,7 @@ Literaturangaben stehen in der Sprache der Werke.
 | Puiseux-Reihen mit Logarithmustermen, Grenzwerte über den führenden Term | series.rb | Potenzreihenarithmetik wie in [Knu98, §4.7]; die Grenzwertstrategie ist die des Lehrbuchs, nicht Gruntz' MRV-Algorithmus [Gru96] |
 | Einschnürungssatz für einen beschränkten mal einen Nullfaktor | series.rb | [Rud76, th. 3.19] |
 | Abschnittsweise Funktionen: Zweigwahl, stetige Stammfunktion | piecewise.rb | [Spi08, ch. 13] |
+| Fourier-Reihen und halbseitige Entwicklungen | fourier.rb | [Spi08, ch. 13]; die Koeffizienten sind rcas' eigene Integrale |
 | Faulhaber-Summen durch Newton-Interpolation, Bernoulli-Zahlen, zeta(2m) | summation.rb | [GKP94, §6.5]; Euler-Maclaurin-Rest [GKP94, §9.5] |
 | Gospers Algorithmus mit der Gradschranke für den Polynomansatz | summation.rb | [Gos78]; [PWZ96, ch. 5] |
 | Produkte: Fakultäts- und Gammaquotienten bei linearen Faktoren, exp von Summen | product.rb | [GKP94, §5.5] |

@@ -62,6 +62,17 @@ module RCAS
       Functions.formal_series(f, x, a)
     end
 
+    # fourier(x, x: -pi..pi, n: 4): the Fourier partial sum; formal: true gives
+    # the general coefficient, kind: :sine or :cosine the half-range expansion
+    def fourier(f, x = nil, from = nil, to = nil, **opts)
+      n = opts.delete(:n) || Fourier::DEFAULT_TERMS
+      kind = opts.delete(:kind) || :full
+      formal = opts.delete(:formal) || false
+      index = opts.delete(:k)
+      x, from, to = Functions.range_arguments(x, from, to, opts, "fourier", discrete: false)
+      Fourier.series(f, x, from, to, n: n, kind: kind, formal: formal, index: index)
+    end
+
     # taylor(exp(x), x, 0, 5): the series without the O term
     def taylor(f, x = nil, a = 0, n = 6, **opts)
       x, a, n = Functions.point_arguments(x, a, n, opts, "taylor")
@@ -573,6 +584,9 @@ module RCAS
     def self.exact_value(name, arg)
       case name
       when :sin, :cos, :tan
+        if (n = Trig.integer_pi_multiple(arg))
+          return name == :cos ? Pow.new(Num.new(-1), n) : Num.new(0)
+        end
         r = Trig.pi_multiple(arg) or return nil
         Trig.public_send(:"#{name}_pi", r)
       when :exp
@@ -599,8 +613,11 @@ module RCAS
         d = arg.domain
         d && d <= NN ? arg : nil
       when :sign
-        return nil unless arg.is_a?(Num) && arg.value.real?
-        Num.new(arg.value <=> 0)
+        return Num.new(arg.value <=> 0) if arg.is_a?(Num) && arg.value.real?
+        case RCAS.sign_of(arg)
+        when :positive then Num.new(1)
+        when :negative then Num.new(-1)
+        end
       when :factorial then arg.is_a?(Num) ? Combinatorics.factorial_value(arg.value) : nil
       when :gamma then arg.is_a?(Num) ? Combinatorics.gamma_value(arg.value) : nil
       when :zeta

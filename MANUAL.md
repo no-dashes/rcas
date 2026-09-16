@@ -49,6 +49,7 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
     - [Formal power series](#formal-power-series)
     - [Limits](#limits)
     - [Functions defined case by case](#functions-defined-case-by-case)
+    - [Fourier series](#fourier-series)
     - [Sums](#sums)
     - [Definite sums: creative telescoping](#definite-sums-creative-telescoping)
     - [Products](#products)
@@ -273,7 +274,8 @@ Read on: 1.3 Calculus, 1.4 Equations and solving, 1.6 Polynomial rings,
 ### College
 
 Limits and series (`fps` gives the general coefficient, not only the first
-terms), the techniques of integration, differential equations, matrices and
+terms, and `fourier` does the same for a Fourier series), the techniques of
+integration, differential equations, matrices and
 their eigenvalues, partial derivatives, and statistics with tests and
 confidence intervals. The classical orthogonal polynomials - Legendre,
 Chebyshev, Hermite, Laguerre - are in `Poly`. When a symbolic answer does
@@ -1053,6 +1055,74 @@ rcas> integrate(fee, x)
 rcas> integrate(fee, x: 0..2)
 => 5/2
 ```
+
+#### Fourier series
+
+`fourier(f, x: a..b)` writes the periodic function that agrees with `f` on
+`[a, b]` as a sum of sines and cosines. With `n:` it returns the partial
+sum with that many harmonics (four by default), with `formal: true` the
+whole series as a `sum(...)` node with the general coefficient - the same
+pair `series`/`fps` makes for power series.
+
+```
+rcas> fourier(x, x: -pi..pi, formal: true)
+=> sum(-2*(-1)**k*sin(k*x)/k, k, 1, oo)
+rcas> fourier(x, x: -pi..pi)
+=> -sin(2*x) + 2*sin(3*x)/3 - sin(4*x)/2 + 2*sin(x)
+rcas> fourier(x**2, x: -pi..pi, formal: true)
+=> pi**2/3 + sum(4*(-1)**k*cos(k*x)/k**2, k, 1, oo)
+```
+
+The coefficients are the integrals `(2/T)*integral(f*cos(k*omega*x))` and
+the same with `sin`, and they come out in closed form because the index is
+an integer while they are computed: `sin(k*pi)` is then `0` and
+`cos(k*pi)` is `(-1)**k`. (`assume(k: ZZ)` gives you those two identities
+anywhere else.)
+
+A function defined case by case is fair game, and the square wave is the
+classic: only odd harmonics survive, and the partial sum overshoots at the
+jump however many terms are taken - Gibbs' phenomenon.
+
+```
+rcas> wave = piecewise(x < 0 => -1, :else => 1)
+=> piecewise(x < 0 => -1, :else => 1)
+rcas> fourier(wave, x: -pi..pi, formal: true)
+=> sum(sin(k*x)*(2/k - 2*(-1)**k/k)/pi, k, 1, oo)
+rcas> fourier(wave, x: -pi..pi, n: 3)
+=> 4*sin(3*x)/(3*pi) + 4*sin(x)/pi
+rcas> plot(fourier(wave, x: -pi..pi, n: 9), x: -pi..pi, height: 12, title: "nine harmonics")
+=> nine harmonics
+    1.301 ┤⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠅⠀⣠⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⡤⣄⠀⠀
+          │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠅⢰⠁⠀⠳⣄⣠⠔⠋⠙⠢⢄⡤⠖⠋⠓⠢⢄⡤⠖⠉⠙⢦⣀⣠⠊⠀⠸⡀⠀
+          │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠅⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢣⠀
+          │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢵⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⡄
+          │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡝⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇
+          │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢱
+          │⢣⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⢰⠅⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀
+          │⢸⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡸⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+          │⠈⡆⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠇⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+          │⠀⢣⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⠀⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+          │⠀⠈⡆⠀⡠⠋⠉⠳⣄⣀⠴⠚⠑⠢⢤⣠⠴⠚⠑⠢⣄⣠⠔⠋⠙⢦⠀⢀⠇⠀⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   -1.301 ┤⠀⠀⠙⠚⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⠋⠀⠀⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+          └────────────────────────────────────────────────────────────
+           -3.142                                                 3.142
+```
+
+On a half interval `kind: :sine` and `kind: :cosine` expand the odd and
+the even extension of `f`, the two series that solve a boundary value
+problem with fixed or with insulated ends. Any interval works; the period
+is its length.
+
+```
+rcas> fourier(x, x: 0..1, kind: :sine, formal: true)
+=> sum(-2*(-1)**k*sin(pi*k*x)/(pi*k), k, 1, oo)
+rcas> fourier(x, x: 0..2, n: 2)
+=> 1 - sin(2*pi*x)/pi - 2*sin(pi*x)/pi
+```
+
+Convergence is not checked: the series is written down formally, the way a
+table does. At a jump it converges to the mean of the two one-sided
+values, which is what the plot above shows at `0`.
 
 #### Sums
 
@@ -2773,7 +2843,7 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | named polynomials | `Poly.chebyshev_t Poly.chebyshev_u Poly.legendre Poly.hermite Poly.hermite_prob Poly.laguerre Poly.gegenbauer Poly.jacobi Poly.bernoulli Poly.euler Poly.cyclotomic Poly.swinnerton_dyer Poly.abel Poly.fibonacci Poly.lucas Poly.bell` (a namespace, not bare names) |
 | constants | `PI E I oo` (bare `pi`, `π`, `oo`, `∞`) |
 | evaluation | `subs evalf` |
-| calculus | `integrate diff series taylor fps limit sum product` |
+| calculus | `integrate diff series taylor fps fourier limit sum product` |
 | case by case | `piecewise discontinuities kinks` |
 | hypergeometric summation | `sumrecursion sumcertificate hyper` |
 | q-analogues | `qbracket qfactorial qbinomial qpochhammer qgosper qsum qsumrecursion qsumcertificate qsolve qhyper` |
@@ -2828,6 +2898,7 @@ lib/rcas/integrate.rb       rules, rational functions, Risch-Norman heuristic
 lib/rcas/integrate_substitutions.rb  rationalizing substitutions (roots, exp, sin/cos)
 lib/rcas/series.rb          Puiseux series, limits
 lib/rcas/piecewise.rb       functions defined case by case
+lib/rcas/fourier.rb         Fourier series
 lib/rcas/summation.rb       Faulhaber, Gosper, zeta
 lib/rcas/poly_recurrence.rb polynomial solutions of a linear recurrence
 lib/rcas/petkovsek.rb       hypergeometric solutions of a recurrence
@@ -2906,6 +2977,7 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | Puiseux series with log terms, limits by the leading term | series.rb | power series arithmetic as in [Knu98, §4.7]; the limit strategy is the textbook one, not Gruntz's MRV algorithm [Gru96] |
 | squeeze rule for a bounded factor times a null factor | series.rb | [Rud76, th. 3.19] |
 | piecewise functions: branch selection, continuous antiderivative | piecewise.rb | [Spi08, ch. 13] |
+| Fourier series and half-range expansions | fourier.rb | [Spi08, ch. 13]; the coefficients are rcas's own integrals |
 | Faulhaber sums by Newton interpolation, Bernoulli numbers, zeta(2m) | summation.rb | [GKP94, §6.5]; Euler-Maclaurin tail [GKP94, §9.5] |
 | Gosper's algorithm with the degree bound for the polynomial ansatz | summation.rb | [Gos78]; [PWZ96, ch. 5] |
 | products: factorial and gamma ratios for linear factors, exp of sums | product.rb | [GKP94, §5.5] |

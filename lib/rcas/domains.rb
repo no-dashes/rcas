@@ -218,6 +218,7 @@ module RCAS
       when Symbol then @signs[expr]
       when Var then @signs[expr.name] || (assumption(expr.name)&.<=(NN) ? :nonnegative : nil)
       when Num then numeric_sign(expr.value)
+      when Const then numeric_sign(expr.value) # pi and oo are positive
       when Expression then expression_sign(expr)
       end
     end

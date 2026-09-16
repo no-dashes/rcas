@@ -87,6 +87,10 @@ module RCAS
         method: "Series arithmetic on {exponent => coefficient} maps, with composition for the elementary functions [Knu98, §4.7]. taylor is the same without the O term."
       },
       taylor: :series,
+      fourier: {
+        maths: "The Fourier series of a periodic function: a sum of sines and cosines with the coefficients a_k = (2/T)*integral(f*cos(k*omega*x)) and b_k the same with sin. Where f jumps, the series converges to the mean of the two sides, and the partial sums overshoot however many terms are taken (Gibbs' phenomenon).",
+        method: "The coefficients are the definite integrals, computed with the index assumed to be an integer, which is what turns sin(k*pi) into 0 and cos(k*pi) into (-1)**k and so gives the general coefficient in closed form. The half-range forms expand the odd or the even extension on [0, L]. Convergence is not checked [Spi08, ch. 13]."
+      },
       fps: {
         maths: "The formal power series of a function: the general coefficient in closed form, sum(x**k/k!, k, 0, oo) for exp(x), rather than the first few terms of the expansion.",
         method: "Koepf's FPS algorithm [Koe92], [Koe14, ch. 10]: a homogeneous differential equation with polynomial coefficients is found for f with undetermined coefficients, its coefficient recurrence is read off, and the two-term case - the one an m-fold symmetric hypergeometric coefficient satisfies - is solved by multiplying up the ratio. Gauss's multiplication formula [AS64, §6.1] turns the gammas back into factorials."
@@ -453,6 +457,7 @@ module RCAS
       discontinuities: ["Classification of discontinuities", "Continuous function"],
       kinks: ["Differentiable function", "Semi-differentiability"],
       series: ["Taylor series", "Puiseux series"],
+      fourier: ["Fourier series", "Gibbs phenomenon", "Joseph Fourier"],
       fps: ["Formal power series", "Holonomic function", "Binomial series"],
       sum: ["Summation", "Faulhaber's formula", "Gosper's algorithm", "Hypergeometric identity"],
       sumrecursion: ["Wilf-Zeilberger pair", "Hypergeometric identity", "Doron Zeilberger"],

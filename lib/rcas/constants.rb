@@ -43,6 +43,20 @@ module RCAS
       coeff.is_a?(Integer) || coeff.is_a?(Rational) ? Rational(coeff) : nil
     end
 
+    # arg == n*pi with n an integer-valued expression (an indeterminate
+    # assumed in ZZ, for instance)?  => n or nil. This is what makes
+    # sin(k*pi) zero and cos(k*pi) (-1)**k, the two identities every
+    # Fourier coefficient needs.
+    def integer_pi_multiple(arg)
+      coeff, factors = Simplify.factorize(arg)
+      return nil unless factors[PI] == 1 && coeff.is_a?(Integer)
+      rest = factors.reject { |base, _| base == PI }
+      return nil if rest.empty?
+      n = Simplify.rebuild_product(coeff, rest)
+      domain = Infer.domain(n)
+      domain && domain <= ZZ ? n : nil
+    end
+
     # arg == r * i * pi?  => r or nil
     def imaginary_pi_multiple(arg)
       coeff, factors = Simplify.factorize(arg)
