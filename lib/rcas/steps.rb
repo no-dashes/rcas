@@ -49,6 +49,7 @@ module RCAS
   #   steps { diff(x**2*sin(x), x) }     the rules, named, as they are used
   #   steps { integrate(x*exp(x), x) }   substitution and parts spelled out
   #   steps(x**2 - 5*x + 6, :solve)      the quadratic formula with its numbers
+  #   steps(x**3 - 5*x + 6, :factor)     common factors, then the roots
   #   steps(1/(x**2 - 1), :apart)        the partial-fraction ansatz
   #   steps(m, :rref)                    the row operations, one at a time
   #   steps(1071, 462, :gcd)             Euclid's algorithm
@@ -69,7 +70,7 @@ module RCAS
       how = args.last.is_a?(Symbol) ? args.pop : nil
       target = args.first
       raise ArgumentError, "steps: nothing to work through" if target.nil?
-      how ||= default_for(target)
+      how ||= default_for(target, args)
       case how
       when :diff      then derivative(target)
       when :integrate then antiderivative(target)
@@ -77,18 +78,19 @@ module RCAS
       when :apart     then fractions(target, args[1])
       when :rref      then elimination(target)
       when :gcd       then euclid(target, args[1])
+      when :factor    then factorization(target, args[1])
       else raise ArgumentError, "steps: don't know how to work through #{how || target.class}"
       end
     end
 
-    def default_for(target)
+    def default_for(target, rest = [])
       case target
       when Derivative then :diff
       when Integral   then :integrate
       when Equation   then :solve
       when Matrix     then :rref
       when Expression then :solve
-      when Integer    then :gcd
+      when Integer    then rest.size > 1 ? :gcd : :factor
       end
     end
 
@@ -521,6 +523,148 @@ module RCAS
         break if Coefficients.degree(b, var).zero?
       end
       line(out, 0, "the last remainder that is not zero is the gcd, up to a constant factor")
+    end
+
+    # ---- factorization -------------------------------------------------------
+
+    def factorization(target, var = nil)
+      value = target.is_a?(Num) ? target.value : target
+      return integer_factors(value) if value.is_a?(Integer)
+      polynomial_factors(Expression.lift(value), var)
+    end
+
+    TRIAL_LIMIT = 10_000
+
+    # Trial division by the primes, one at a time, which is how it is first
+    # taught and what rcas itself does until the numbers get large.
+    def integer_factors(n)
+      out = []
+      rest = n.abs
+      line(out, 0, "a minus sign comes out in front") if n.negative?
+      if rest < 2
+        line(out, 0, "#{n} has no prime factorization of its own")
+        return Derivation.new(Fn.new(:factor, [Num.new(n)]), out, NumberTheory.factor(n))
+      end
+      prime = 2
+      while rest > 1 && prime <= TRIAL_LIMIT && prime * prime <= rest
+        break if NumberTheory.prime?(rest)
+        if (rest % prime).zero?
+          line(out, 0, "#{rest} = #{prime}*#{rest / prime}")
+          rest /= prime
+        else
+          prime = NumberTheory.nextprime(prime)
+        end
+      end
+      if rest > 1 && NumberTheory.prime?(rest)
+        line(out, 0, "#{rest} is prime, and the trial division stops there")
+      elsif rest > 1
+        line(out, 0, "#{rest} is left, too big to divide through by hand; rcas finishes it with Pollard's rho")
+      end
+      Derivation.new(Fn.new(:factor, [Num.new(n)]), out, NumberTheory.factor(n))
+    end
+
+    def polynomial_factors(f, var)
+      out = []
+      result = f.factor
+      var = Expression.lift(var) if var
+      var ||= f.variables.size == 1 ? Var.new(f.variables.first) : nil
+      coefficients = var && Solve.polynomial_coefficients(f.expand, var)
+      if coefficients.nil?
+        line(out, 0, "several variables, so rcas factors this its own way: squarefree decomposition, " \
+                     "factoring modulo a prime, Hensel lifting and recombination")
+        return Derivation.new(Fn.new(:factor, [f]), out, result)
+      end
+      rest = common_factor(coefficients, var, out)
+      roots(rest, var, out)
+      Derivation.new(Fn.new(:factor, [f]), out, result)
+    end
+
+    # The content and the lowest power of the variable.
+    def common_factor(coefficients, var, out)
+      numbers = coefficients.map { |c| c.is_a?(Num) ? c.value : nil }
+      content = numbers.all? { |c| c.is_a?(Integer) } ? numbers.reduce(0) { |a, b| a.gcd(b) } : 1
+      low = coefficients.index { |c| !Scalar.zero?(c) }
+      polynomial = rebuild(coefficients, var)
+      if content > 1 || low.positive?
+        factor = Simplify.rebuild_product(content, low.positive? ? { var => low } : {})
+        polynomial = rebuild(coefficients.drop(low).map { |c| (c / content).simplify }, var)
+        line(out, 0, "every term has #{factor} in it, so it comes out: #{Mul.new(factor, polynomial)}")
+      end
+      polynomial
+    end
+
+    def rebuild(coefficients, var)
+      coefficients.each_with_index.map { |c, k| c * var**k }.reduce(:+).simplify
+    end
+
+    # The rational root theorem, then division, until a quadratic is left.
+    def roots(f, var, out, depth = 0)
+      coefficients = Solve.polynomial_coefficients(f.expand, var)
+      degree = coefficients ? coefficients.size - 1 : 0
+      return line(out, depth, "#{f} is linear, so there is nothing left to do") if degree <= 1
+      return difference_of_squares(coefficients, var, out, depth) if squares?(coefficients)
+      return quadratic_factor(coefficients, f, var, out, depth) if degree == 2
+
+      root = rational_root(coefficients, var, out, depth)
+      unless root
+        line(out, depth, "no rational root, so #{f} needs the modular algorithm rcas uses for the general case")
+        return
+      end
+      quotient = RationalFunction.quo(f, var - root, var).simplify
+      line(out, depth, "#{f} = (#{(var - root).simplify})*(#{quotient})")
+      roots(quotient, var, out, depth)
+    end
+
+    # p/q with p dividing the constant term and q the leading coefficient.
+    def rational_root(coefficients, var, out, depth)
+      constant = coefficients.first
+      leading = coefficients.last
+      return nil unless constant.is_a?(Num) && leading.is_a?(Num) &&
+                        constant.value.is_a?(Integer) && leading.value.is_a?(Integer) && !constant.value.zero?
+      tops = NumberTheory.divisors(constant.value)
+      bottoms = NumberTheory.divisors(leading.value)
+      candidates = tops.product(bottoms).flat_map { |a, b| [Rational(a, b), Rational(-a, b)] }.uniq.sort
+      line(out, depth, "a rational root p/q has p dividing #{constant} and q dividing #{leading}: " \
+                       "try #{candidates.first(8).map { |c| Num.new(Simplify.normalize_number(c)) }.join(', ')}#{' and so on' if candidates.size > 8}")
+      f = rebuild(coefficients, var)
+      found = candidates.find { |c| Scalar.zero?(f.subs(var => Num.new(Simplify.normalize_number(c))).simplify) }
+      return nil if found.nil?
+      value = Num.new(Simplify.normalize_number(found))
+      line(out, depth, "f(#{value}) = 0, so #{(var - value).simplify} divides it")
+      value
+    end
+
+    def quadratic_factor(coefficients, f, var, out, depth)
+      c, b, a = coefficients
+      discriminant = (b**2 - 4 * a * c).simplify
+      line(out, depth, "the quadratic #{f}: its discriminant is #{discriminant}", discriminant)
+      if Scalar.zero?(discriminant)
+        line(out, depth, "zero, so it is a square: (#{(var + b / (2 * a)).simplify})**2 times #{a}")
+      elsif square_number?(discriminant)
+        root = Pow.new(discriminant, Num.new(Rational(1, 2))).simplify
+        line(out, depth, "#{root}**2, a square, so the roots (#{(-b).simplify} +- #{root})/#{(2 * a).simplify} are rational and it factors")
+      else
+        line(out, depth, "not a square, so it does not factor over the rationals")
+      end
+    end
+
+    # a*x**2 - c with both a and c square numbers.
+    def squares?(coefficients)
+      return false unless coefficients.size == 3 && Scalar.zero?(coefficients[1])
+      a = coefficients[2]
+      c = coefficients[0]
+      square_number?(a) && a.is_a?(Num) && c.is_a?(Num) && c.value.negative? && square_number?(Num.new(-c.value))
+    end
+
+    def difference_of_squares(coefficients, var, out, depth)
+      a = Pow.new(coefficients[2], Num.new(Rational(1, 2))).simplify
+      b = Pow.new(Num.new(-coefficients[0].value), Num.new(Rational(1, 2))).simplify
+      line(out, depth, "a difference of squares: u**2 - v**2 = (u - v)*(u + v) with u = #{(a * var).simplify} and v = #{b}")
+    end
+
+    def square_number?(value)
+      value.is_a?(Num) && value.value.is_a?(Integer) && !value.value.negative? &&
+        Integer.sqrt(value.value)**2 == value.value
     end
   end
 end

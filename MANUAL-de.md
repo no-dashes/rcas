@@ -3144,6 +3144,42 @@ rcas> steps(1071, 462, :gcd)
    = 21
 ```
 
+Faktorisiert wird so, wie es unterrichtet wird: ausklammern, was in jedem
+Term steckt, eine Differenz von Quadraten erkennen, eine rationale
+Nullstelle p/q suchen, bei der p das Absolutglied und q den Leitkoeffizienten
+teilt, sie herausdividieren und mit dem Rest weitermachen. Eine
+quadratische Gleichung endet bei ihrer Diskriminante - ist sie eine
+Quadratzahl, zerfällt das Polynom über den rationalen Zahlen, sonst nicht.
+Eine Zahl wird der Reihe nach durch die Primzahlen geteilt.
+
+```
+rcas> steps(x**3 - 2*x**2 - 5*x + 6, :factor)
+=> factor(x**3 - 2*x**2 - 5*x + 6)
+     a rational root p/q has p dividing 6 and q dividing 1: try -6, -3, -2, -1, 1, 2, 3, 6
+     f(-2) = 0, so 2 + x divides it
+     6 - 5*x - 2*x**2 + x**3 = (2 + x)*(3 - 4*x + x**2)
+     the quadratic 3 - 4*x + x**2: its discriminant is 4
+     2**2, a square, so the roots (4 +- 2)/2 are rational and it factors
+   = (-1 + x)*(-3 + x)*(2 + x)
+rcas> steps(x**2 - 9, :factor)
+=> factor(x**2 - 9)
+     a difference of squares: u**2 - v**2 = (u - v)*(u + v) with u = x and v = 3
+   = (-3 + x)*(3 + x)
+rcas> steps(360, :factor)
+=> factor(360)
+     360 = 2*180
+     180 = 2*90
+     90 = 2*45
+     45 = 3*15
+     15 = 3*5
+     5 is prime, and the trial division stops there
+   = 2**3*3**2*5
+```
+
+Gibt es keine rationale Nullstelle (`x**4 + 1`) oder mehrere Variablen,
+sagt die Zeile, auf welchen Algorithmus rcas zurückfällt, statt ein
+Handverfahren vorzutäuschen.
+
 Dasselbe für die Algebra einer ersten Vorlesung über lineare Algebra, eine
 Zeilenumformung nach der anderen:
 
@@ -3170,7 +3206,9 @@ rcas> steps(matrix([[2, 1, 5], [1, -1, 1]]), :rref)
 Abgedeckt ist, was eine Vorlesung verlangt: Summen-, Produkt-, Quotienten-,
 Potenz- und Kettenregel; die Potenzregel, die Tabelle mit linearem
 Argument, Substitution und partielle Integration; lineare und quadratische
-Gleichungen mit ausgeschriebener Diskriminante und Lösungsformel; der
+Gleichungen mit ausgeschriebener Diskriminante und Lösungsformel;
+Faktorisieren über Ausklammern, Quadratdifferenz und rationale
+Nullstellen, und eine Zahl über Probedivision; der
 Partialbruchansatz samt aufgelösten Unbekannten; der Gauß-Algorithmus; und
 der euklidische Algorithmus für Zahlen und für Polynome. Das Ergebnis ist
 eine `Derivation`, die sich wie oben ausgibt und in `rcas-chat` als
@@ -3240,7 +3278,7 @@ Funktionen der obersten Ebene (bloß in `bin/rcas`, sonst `RCAS.name`):
 | Bereiche | `NN ZZ QQ RR CC` (auch `ℕ ℤ ℚ ℝ ℂ`), `GF assume forget assumptions` |
 | lineare Algebra | `vector matrix gram_schmidt least_squares project orthogonal? lu qr cholesky diagonalize jordan` |
 | Festhalten | `hold evaluate` |
-| Rechenwege | `steps` (ein Block, oder `:solve :apart :rref :gcd`) |
+| Rechenwege | `steps` (ein Block, oder `:solve :factor :apart :rref :gcd`) |
 | Hilfe | `doc` (`/help NAME` in rcas-chat) |
 | Sitzung | `In`, `Out` (die nummerierten Zeilen), `_` (irbs letzter Wert) |
 

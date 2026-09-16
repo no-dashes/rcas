@@ -56,7 +56,7 @@ module RCAS
       },
       steps: {
         maths: "The working, not only the answer: which rule applies, what its pieces are, and what they give. A student who is learning the mathematics needs the derivation; someone who only wants the number has diff, integrate and solve already.",
-        method: "One narrator per topic decides which rule applies and then asks the library for the piece it names, so the working cannot end anywhere other than the ordinary answer. Covered: the rules of differentiation; the power rule, the table, substitution and parts; linear and quadratic equations; the partial-fraction ansatz; Gaussian elimination; and Euclid's algorithm [Spi08], [Knu98, §4.5.2]. Where no textbook rule fits, the line says so."
+        method: "One narrator per topic decides which rule applies and then asks the library for the piece it names, so the working cannot end anywhere other than the ordinary answer. Covered: the rules of differentiation; the power rule, the table, substitution and parts; linear and quadratic equations; factoring by common factors, difference of squares and rational roots, and integers by trial division; the partial-fraction ansatz; Gaussian elimination; and Euclid's algorithm [Spi08], [Knu98, §4.5.2]. Where no textbook rule fits, the line says so."
       },
       hold: {
         maths: "An unevaluated expression, MuPAD's hold: the notation itself, not its value. evaluate (also doit) computes it later.",

@@ -118,6 +118,44 @@ class StepsTest < Minitest::Test
     assert_equal RCAS.gcd(X**4 - 1, X**2 - 1), polynomials.result
   end
 
+  def test_factoring_a_polynomial_hunts_for_roots
+    d = RCAS.steps(X**3 - 2 * X**2 - 5 * X + 6, :factor)
+    assert_includes text_of(d), "a rational root p/q has p dividing 6 and q dividing 1"
+    assert_includes text_of(d), "f(-2) = 0, so 2 + x divides it"
+    assert_includes text_of(d), "the quadratic 3 - 4*x + x**2"
+    assert_equal (X**3 - 2 * X**2 - 5 * X + 6).factor, d.result
+  end
+
+  def test_the_shapes_that_have_their_own_name
+    assert_includes text_of(RCAS.steps(X**2 - 9, :factor)), "a difference of squares"
+    assert_includes text_of(RCAS.steps(3 * X**2 - 27, :factor)), "every term has 3 in it"
+    assert_includes text_of(RCAS.steps(2 * X**3 + 4 * X**2, :factor)), "every term has 2*x**2 in it"
+    assert_includes text_of(RCAS.steps(X**2 + X + 1, :factor)), "does not factor over the rationals"
+    assert_includes text_of(RCAS.steps(X**4 + 1, :factor)), "no rational root"
+    assert_includes text_of(RCAS.steps(X**2 - 2 * X * RCAS::Var.new(:y) + RCAS::Var.new(:y)**2, :factor)), "several variables"
+  end
+
+  def test_every_factorization_agrees_with_factor
+    [X**2 - 9, X**3 - 1, 3 * X**2 - 27, 2 * X**3 + 4 * X**2, X**2 + X + 1, X**4 + 1,
+     6 * X**2 - 5 * X + 1, X**4 - 1, X**3 - 2 * X**2 - 5 * X + 6].each do |f|
+      assert_equal f.factor, RCAS.steps(f, :factor).result, "the working for #{f} ends somewhere else"
+    end
+  end
+
+  def test_factoring_a_number_divides_by_the_primes
+    d = RCAS.steps(360, :factor)
+    assert_includes text_of(d), "360 = 2*180"
+    assert_includes text_of(d), "45 = 3*15"
+    assert_equal RCAS.factor(360), d.result
+    assert_includes text_of(RCAS.steps(97, :factor)), "97 is prime"
+    assert_includes text_of(RCAS.steps(-12, :factor)), "a minus sign comes out in front"
+    assert_equal RCAS.factor(-12), RCAS.steps(-12, :factor).result
+    # what trial division cannot finish says so, and rcas finishes it
+    big = RCAS.steps(1_000_003 * 1_000_033, :factor)
+    assert_includes text_of(big), "Pollard"
+    assert_equal RCAS.factor(1_000_003 * 1_000_033), big.result
+  end
+
   def test_the_block_form_and_printing
     d = RCAS.steps { RCAS.diff(:x**2, :x) }
     assert_equal "D(x**2, x)", d.problem.to_s

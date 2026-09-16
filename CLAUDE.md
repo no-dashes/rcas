@@ -125,7 +125,7 @@ lib/rcas/matrix.rb          MatrixSpace (QQ**[2,3]), Matrix, Elimination (rref, 
 lib/rcas/poly_matrix.rb     PolyDet/RatDet/PolyLinearSolve/nullspace (Horn 2008 ch. 6): degree bound, rational evaluation, Newton interpolation; Matrix falls back to Elimination when it returns nil
 lib/rcas/scalar.rb          entry arithmetic with Num fast paths; zero? (exact via Algebraic, then numeric)
 lib/rcas/hold.rb            hold { } via RubyVM::AbstractSyntaxTree; sets RubyVM.keep_script_lines = true; a qualified RCAS.integrate(...) call inside the block is treated like the bare one
-lib/rcas/steps.rb           Step/Derivation and Steps: worked solutions (diff, integrate, solve, apart, rref, gcd). Each narrator names the rule and asks the library for the piece, so the working cannot disagree with the answer; the fallback line says no textbook rule applies
+lib/rcas/steps.rb           Step/Derivation and Steps: worked solutions (diff, integrate, solve, factor, apart, rref, gcd). Each narrator names the rule and asks the library for the piece, so the working cannot disagree with the answer; the fallback line says no textbook rule applies
 lib/rcas/functions.rb       the top-level functions (bare in irb, RCAS.x elsewhere); Functions.fold
 lib/rcas/core_ext.rb        Symbol/Numeric operators, Symbol#in/eq/< ...
 lib/rcas/irb.rb             bin/rcas setup (AutoSymbol, includes, prompt, In/Out hooks)

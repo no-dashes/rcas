@@ -3061,6 +3061,41 @@ rcas> steps(1071, 462, :gcd)
    = 21
 ```
 
+Factoring is worked the way it is taught: pull out what every term has in
+common, recognise a difference of squares, hunt for a rational root p/q
+with p dividing the constant term and q the leading coefficient, divide it
+out and go on with what is left. A quadratic ends at its discriminant -
+a square means it factors over the rationals, anything else means it does
+not. A number is divided by the primes in turn.
+
+```
+rcas> steps(x**3 - 2*x**2 - 5*x + 6, :factor)
+=> factor(x**3 - 2*x**2 - 5*x + 6)
+     a rational root p/q has p dividing 6 and q dividing 1: try -6, -3, -2, -1, 1, 2, 3, 6
+     f(-2) = 0, so 2 + x divides it
+     6 - 5*x - 2*x**2 + x**3 = (2 + x)*(3 - 4*x + x**2)
+     the quadratic 3 - 4*x + x**2: its discriminant is 4
+     2**2, a square, so the roots (4 +- 2)/2 are rational and it factors
+   = (-1 + x)*(-3 + x)*(2 + x)
+rcas> steps(x**2 - 9, :factor)
+=> factor(x**2 - 9)
+     a difference of squares: u**2 - v**2 = (u - v)*(u + v) with u = x and v = 3
+   = (-3 + x)*(3 + x)
+rcas> steps(360, :factor)
+=> factor(360)
+     360 = 2*180
+     180 = 2*90
+     90 = 2*45
+     45 = 3*15
+     15 = 3*5
+     5 is prime, and the trial division stops there
+   = 2**3*3**2*5
+```
+
+When no rational root exists (`x**4 + 1`) or there are several variables,
+the line says which algorithm rcas falls back on instead of pretending
+there was a hand method.
+
 The same for the algebra of a first linear algebra course, one row
 operation at a time:
 
@@ -3087,7 +3122,9 @@ rcas> steps(matrix([[2, 1, 5], [1, -1, 1]]), :rref)
 What is covered is what a course asks for: the sum, product, quotient,
 power and chain rules; the power rule, the table with a linear argument,
 substitution and integration by parts; linear and quadratic equations with
-the discriminant and the formula spelled out; the partial-fraction ansatz
+the discriminant and the formula spelled out; factoring by common factors,
+difference of squares and rational roots, and a number by trial division;
+the partial-fraction ansatz
 with its unknowns solved for; Gaussian elimination; and Euclid's algorithm
 for numbers and for polynomials. The result is a `Derivation`, which
 prints as above and typesets as an aligned block in `rcas-chat`.
@@ -3153,7 +3190,7 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | domains | `NN ZZ QQ RR CC` (also `ℕ ℤ ℚ ℝ ℂ`), `GF assume forget assumptions` |
 | linear algebra | `vector matrix gram_schmidt least_squares project orthogonal? lu qr cholesky diagonalize jordan` |
 | holding | `hold evaluate` |
-| worked solutions | `steps` (a block, or `:solve :apart :rref :gcd`) |
+| worked solutions | `steps` (a block, or `:solve :factor :apart :rref :gcd`) |
 | help | `doc` (`/help NAME` in rcas-chat) |
 | session | `In`, `Out` (the numbered lines), `_` (irb's last value) |
 
