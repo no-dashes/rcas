@@ -91,6 +91,7 @@ module RCAS
       when Integral   then :integrate
       when Equation   then :solve
       when Matrix     then :rref
+      when Fn         then target.name == :discuss ? :discuss : :solve
       when Expression then :solve
       when Integer    then rest.size > 1 ? :gcd : :factor
       end
@@ -112,6 +113,11 @@ module RCAS
     # rcas cannot decide is said out loud rather than left out.
     def discussion(target, var)
       f = Expression.lift(target)
+      if f.is_a?(Fn) && f.name == :discuss
+        # steps { discuss(f, x) }: hold kept the call, so unpack it.
+        var ||= f.args[1]
+        f = f.args.first
+      end
       x = Expression.lift(var || Solve.variable(f, nil))
       report = Discussion.discuss(f, x)
       out = []

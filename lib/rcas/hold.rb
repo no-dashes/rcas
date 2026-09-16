@@ -21,7 +21,7 @@ module RCAS
     OPERATORS = { :+ => Add, :- => Sub, :* => Mul, :/ => Div, :** => Pow }.freeze
     LITERALS = %i[LIT INTEGER FLOAT RATIONAL IMAGINARY SYM].freeze
     # Calls kept as formal nodes instead of being evaluated; see Expression#evaluate.
-    FORMAL = %i[integrate diff sum product limit].freeze
+    FORMAL = %i[integrate diff sum product limit discuss].freeze
 
     module_function
 
@@ -149,7 +149,8 @@ module RCAS
       end
 
       # integrate(f, x) / integrate(f, x: 0..1), diff(f, x, n), sum(f, k, a, b) /
-      # sum(f, k: 1..n), limit(f, x, a) / limit(f, x: 0) as unevaluated nodes.
+      # sum(f, k: 1..n), limit(f, x, a) / limit(f, x: 0), discuss(f, x) as
+      # unevaluated nodes.
       def formal(name, args)
         opts = args.last.is_a?(Hash) ? args.pop : {}
         f = Expression.lift(args.shift)
@@ -169,6 +170,10 @@ module RCAS
           opts.delete(:dir)
           var, point, = Functions.point_arguments(args[0], args[1], nil, opts, "limit")
           Limit.new(f, Expression.lift(var), Expression.lift(point))
+        when :discuss
+          # A curve discussion has no node of its own: it is a question,
+          # not a value, and steps { discuss(f, x) } is what holds it.
+          Fn.new(:discuss, args.first ? [f, Expression.lift(args.first)] : [f])
         end
       end
 

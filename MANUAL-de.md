@@ -1117,7 +1117,9 @@ rcas> discuss(sin(x), x)
 
 Mit `steps` werden dieselben Fragen der Reihe nach durchgearbeitet, so wie
 man die Lösung abgeben würde, und der Bericht ist die Zusammenfassung am
-Schluss:
+Schluss. Beide Schreibweisen tun es: `steps(f, x, :discuss)` oder die
+Blockform `steps { discuss(f, x) }`, denn `hold` hält eine
+Kurvendiskussion ebenso unausgewertet fest wie ein Integral:
 
 ```
 rcas> steps(x**3 - 3*x, x, :discuss)
@@ -1560,9 +1562,9 @@ rcas> product(factorial(k), k: 1..n)
 
 Ruby fasst `1 + 2` zusammen, bevor rcas es sieht. `hold { ... }` liest
 stattdessen den Quelltext des Blocks und behält ihn, wie er geschrieben
-wurde. Innerhalb des Blocks bleiben `integrate`, `diff`, `sum` und `limit`
-formal; `evaluate` (auch `unhold`, `doit`) rechnet sie aus, wie MuPADs
-`eval`. Alles andere arbeitet auf festgehaltenen Ausdrücken wie gewohnt.
+wurde. Innerhalb des Blocks bleiben `integrate`, `diff`, `sum`, `limit`
+und `discuss` formal; `evaluate` (auch `unhold`, `doit`) rechnet sie aus,
+wie MuPADs `eval`. Alles andere arbeitet auf festgehaltenen Ausdrücken wie gewohnt.
 
 ```
 rcas> hold { 1 + 2 }
@@ -3259,7 +3261,8 @@ rcas> qhyper(eq(u(q**2*x), u(q*x) + x*u(x)), u, x, q)
 `steps { diff(f, x) }`, den `hold` unausgewertet festhält - oder die Sache
 zusammen mit dem, was damit zu tun ist: `steps(f, :solve)`,
 `steps(f, :apart)`, `steps(m, :rref)`, `steps(a, b, :gcd)`,
-`steps(f, x, :discuss)`.
+`steps(f, x, :discuss)` - was auch `steps { discuss(f, x) }` tut, denn
+`hold` hält auch eine Kurvendiskussion fest.
 
 ```
 rcas> steps { diff(x**2*sin(x), x) }

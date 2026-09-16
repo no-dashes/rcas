@@ -184,6 +184,9 @@ module RCAS
       when Sum then Summation.sum(e.term, e.var, e.from, e.to)
       when Product then Products.product(e.term, e.var, e.from, e.to)
       when Limit then Limits.limit(e.expr, e.var, e.point)
+      # hold keeps discuss(f, x) as a call; doit answers it with the report
+      # (not an Expression - a discussion is an answer, not a value).
+      when Fn then e.name == :discuss ? Discussion.discuss(*e.args) : e
       else e
       end
     end

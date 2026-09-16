@@ -177,6 +177,17 @@ class DiscussionTest < Minitest::Test
     assert_includes text, "rcas cannot solve f(x) = 0"
   end
 
+  def test_steps_take_the_block_form_too
+    held = RCAS.hold { RCAS.discuss(X**2 - 1) }
+    assert_equal "discuss(x**2 - 1)", held.to_s, "hold keeps a discussion as a call"
+    assert_equal discuss(X**2 - 1).to_s, held.doit.to_s, "and doit answers it"
+    worked = RCAS.steps { RCAS.discuss(2 * X**2 - 4 * X - 2) }
+    assert_equal "discuss(2*x**2 - 4*x - 2, x)", worked.problem.to_s
+    assert_equal discuss(2 * X**2 - 4 * X - 2).to_s, worked.result.to_s
+    assert_includes worked.to_s, "f''(1) = 4 > 0: a minimum at (1, -4)"
+    assert_equal "discuss(t**2 - 1, t)", RCAS.steps { RCAS.discuss(T**2 - 1, T) }.problem.to_s
+  end
+
   def test_steps_infer_the_indeterminate
     assert_equal "discuss(t**2 - 1, t)", RCAS.steps(T**2 - 1, :discuss).problem.to_s
   end
