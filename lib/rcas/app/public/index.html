@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>rcas</title>
+<link rel="stylesheet" href="/katex/katex.min.css">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header class="titlebar">
+    <img src="/api/logo" alt="" class="logo" onerror="this.remove()">
+    <h1>rcas</h1>
+    <span class="version" id="version"></span>
+    <div class="spacer"></div>
+    <nav class="modes" id="modes" aria-label="output mode"></nav>
+    <button type="button" class="ghost" id="help-button" title="/help">?</button>
+  </header>
+
+  <main class="worksheet" id="worksheet" tabindex="-1">
+    <section class="greeting" id="greeting">
+      <p>Symbols are the indeterminates and Ruby operators build the expressions.</p>
+      <ul class="examples">
+        <li><button type="button">e = (x + 1) * (1 - x)</button></li>
+        <li><button type="button">e.expand</button></li>
+        <li><button type="button">integrate(1/(x**2 + 1), x)</button></li>
+        <li><button type="button">ZZ[x].(x**6 - 1).factor</button></li>
+        <li><button type="button">plot(sin(x), x: -PI..PI)</button></li>
+      </ul>
+      <p class="dim">Enter evaluates, Shift-Enter starts a line, Tab completes, <code>/help</code> explains.</p>
+    </section>
+  </main>
+
+  <footer class="composer">
+    <div class="completions" id="completions" hidden></div>
+    <div class="prompt-row">
+      <label class="prompt" id="prompt" for="input">In[1]</label>
+      <textarea id="input" rows="1" spellcheck="false" autocapitalize="off" autocomplete="off"
+                autocorrect="off" placeholder="an expression, or /help"></textarea>
+    </div>
+  </footer>
+
+  <script src="/katex/katex.min.js" onerror="window.katexMissing = true"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

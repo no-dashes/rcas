@@ -132,8 +132,15 @@ lib/rcas/core_ext.rb        Symbol/Numeric operators, Symbol#in/eq/< ...
 lib/rcas/irb.rb             bin/rcas setup (AutoSymbol, includes, prompt, In/Out hooks)
 lib/rcas/results.rb         In/Out: every input line and its result, numbered (RCAS.numbered puts the number in the prompt)
 lib/rcas/latex.rb, render.rb, chat.rb, chat/*   typesetting and the chat front end (see below)
-bin/rcas, bin/rcas-chat
+lib/rcas/app.rb             rcas-app: the window front end. A stdlib TCPServer on 127.0.0.1 serves one page and a few JSON routes; App::Window opens a Chromium-family browser with `--app=URL` (borrowed engine, not a bundled one), so closing the window ends the program
+lib/rcas/app/worksheet.rb   the session behind the window: Chat::Workspace + Results, every answer a plain Hash cell { n:, input:, kind:, text:, latex:, svg:, stdout:, hint: }; it borrows Chat::UI#text_of/#typesettable? and Chat::Usage.hint rather than restating those rules
+lib/rcas/app/server.rb      the HTTP server: loopback only, a per-run token in the X-RCAS-Token header, and a Host check against DNS rebinding. Static assets are free, every added route needs the token
+lib/rcas/app/window.rb      finding the browser (Render::KaTeX::CHROME_CANDIDATES plus the Windows paths) and the --app/--user-data-dir flags
+lib/rcas/app/launcher.rb    --install/--uninstall: .app bundle (macOS), .desktop (Linux), Start-menu shortcut (Windows)
+lib/rcas/app/public/        index.html, app.css, app.js: the worksheet
+bin/rcas, bin/rcas-chat, bin/rcas-app
 test/*_test.rb              minitest; test/manual_test.rb runs every `rcas>` transcript in MANUAL.md
+test/app_test.rb            the window front end: worksheet cells, the server (including the token, Host and traversal guards), the browser flags, the desktop entries
 MANUAL.md                   the user manual (usage); MANUAL-de.md (German, kept in step by test/manual_de_test.rb); README.md (setup only); assets/ (logo)
 ```
 
@@ -244,7 +251,8 @@ Grundstudium, Bachelorstudium.
 - Regenerate the manual TOC after adding sections: `ruby -S rake toc`
   (markers `<!-- toc -->` / `<!-- /toc -->`). Numbering: `## 1.
   Mathematics` with `### 1.n ...` and `#### ...` beneath; then Reference,
-  Files, License, Appendix A (typeset output), Appendix B (rcas-chat).
+  Files, License, Appendix A (typeset output), Appendix B (rcas-chat),
+  Appendix C (rcas-app).
 - README is *setup only* (requirements, running, library use, files and
   settings, tests, pointers). Usage goes in MANUAL. Logo at the top of
   both with the "This logo was AI generated" hint; `assets/rcas-logo.jpeg`
@@ -252,6 +260,12 @@ Grundstudium, Bachelorstudium.
 - Smoke-test interactively with piped input:
   `printf 'x + 1\n' | ruby bin/rcas` (no `=> ` prefix without a tty) or
   `printf '/settings\n' | RCAS_HOME=/tmp/h ruby bin/rcas-chat`.
+- The window front end is smoke-tested without a window:
+  `ruby bin/rcas-app --no-window` prints the address, and a headless
+  screenshot of that URL (the `--screenshot` flag of the same Chrome
+  render.rb uses) shows the page as it really renders. `--install` writes
+  to the real desktop, so test `Launcher.install_bundle` into a tmpdir
+  instead.
 - Scratch files go in the session scratchpad directory, not the repo.
 
 ## Adding a feature: checklist
@@ -301,6 +315,14 @@ keeping anyway, because they are what makes new node classes cheap.)
   *Expression* class does need a case in `LaTeX.print` - keep it to the
   dispatch line plus a helper, and let the helper delegate the details
   back to the module that owns the node (`Piecewises.condition_latex`).
+- The output mode `:tex` was renamed `:typeset` (Sept 2026, the user's
+  ask) and is now the *default* in both the window and the chat (the chat
+  only where inline pictures work; elsewhere `:text` as before).
+  `Chat::UI::MODES` is the list, `Chat::UI.mode_for` is the only way to
+  turn a name into a mode: it keeps the old spelling `tex` working, which
+  a `~/.rcas/settings.json` and a saved session written before the rename
+  still contain. Never test a mode name against `MODES` directly - that
+  was the bug the rename introduced in `REPL#resume`.
 - `chat/workspace.rb` mirrors `RCAS.unknown_function` (`undefined_calls?`),
   `chat/repl.rb` routes prose with undefined calls to Claude before
   evaluating and hides `/ask /model /fallbacks /cost /compact`, the `?`

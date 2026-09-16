@@ -114,6 +114,16 @@ Namen, die unten benutzt werden.
   - [Befehle](#befehle)
   - [Optionen und Umgebung](#optionen-und-umgebung)
   - [Dateien](#dateien)
+- [Anhang C. rcas-app](#anhang-c-rcas-app)
+  - [Wie es gebaut ist](#wie-es-gebaut-ist)
+  - [Starten](#starten)
+  - [Eingabe](#eingabe)
+  - [Ausgabe](#ausgabe)
+  - [Befehle](#befehle)
+  - [Im Dock, im Startmenü, in der Programmliste](#im-dock-im-startmenü-in-der-programmliste)
+  - [Wer die Sitzung erreicht, und wer nicht](#wer-die-sitzung-erreicht-und-wer-nicht)
+  - [Optionen und Umgebung](#optionen-und-umgebung)
+  - [Dateien](#dateien)
 <!-- /toc -->
 
 ## Sitzungen und Einrichtung
@@ -3543,10 +3553,14 @@ lib/rcas/latex.rb           to_latex, line breaking (Appendix A)
 lib/rcas/render.rb          pictures from LaTeX, inline images (Appendix A)
 lib/rcas/chat.rb            rcas-chat front end (Appendix B)
 lib/rcas/chat/*.rb
+lib/rcas/app.rb             rcas-app window front end (Appendix C)
+lib/rcas/app/*.rb           worksheet, HTTP server, browser window, desktop entries
+lib/rcas/app/public/        the page the window shows
 assets/rcas-logo.jpeg       the logo (960 px, used in the documents)
 assets/rcas-logo-full.jpeg  the logo at full resolution
 bin/rcas                    irb launcher
 bin/rcas-chat               rcas-chat launcher
+bin/rcas-app                rcas-app launcher
 package.json                KaTeX for the typesetting
 ```
 
@@ -3574,6 +3588,7 @@ Literaturangaben stehen in der Sprache der Werke.
 | Puiseux-Reihen mit Logarithmustermen, Grenzwerte über den führenden Term | series.rb | Potenzreihenarithmetik wie in [Knu98, §4.7]; die Grenzwertstrategie ist die des Lehrbuchs, nicht Gruntz' MRV-Algorithmus [Gru96] |
 | Einschnürungssatz für einen beschränkten mal einen Nullfaktor | series.rb | [Rud76, th. 3.19] |
 | Abschnittsweise Funktionen: Zweigwahl, stetige Stammfunktion | piecewise.rb | [Spi08, ch. 13] |
+| Das Fenster: HTTP-Nachrichtenformat, der Host-Kopf gegen DNS-Rebinding, die Desktop-Datei | app/server.rb, app/launcher.rb | [RFC9112]; [RFC9110, sec. 7.2]; [FDO14] |
 | Fourier-Reihen und halbseitige Entwicklungen | fourier.rb | [Spi08, ch. 13]; die Koeffizienten sind rcas' eigene Integrale |
 | Ei, Si, Ci, li: Reihen und Kettenbrüche | integral_functions.rb | [AS64, §5.1, §5.2]; [PTVF07, §6.3]; Lentz [Len76] |
 | evalf mit beliebiger Genauigkeit über BigDecimal, Nullstellen mit Newton | precision.rb | [AS64, §4.1, §4.3]; [PTVF07, §9.4] |
@@ -3650,6 +3665,8 @@ Literaturangaben stehen in der Sprache der Werke.
   GTM 138, Springer 1993.
 - [CZ81] D. G. Cantor, H. Zassenhaus, A new algorithm for factoring
   polynomials over finite fields, *Math. Comp.* 36 (1981), 587-592.
+- [FDO14] freedesktop.org, *Desktop Entry Specification*, version 1.1
+  (2014), https://specifications.freedesktop.org/desktop-entry-spec/
 - [GCL92] K. O. Geddes, S. R. Czapor, G. Labahn, *Algorithms for Computer
   Algebra*, Kluwer 1992.
 - [GKP94] R. L. Graham, D. E. Knuth, O. Patashnik, *Concrete Mathematics*,
@@ -3722,6 +3739,10 @@ Literaturangaben stehen in der Sprache der Werke.
   Number Theory* 12 (1980), 128-138.
 - [Ros14] S. M. Ross, *A First Course in Probability*, 9th ed., Pearson
   2014.
+- [RFC9110] R. Fielding, M. Nottingham, J. Reschke (eds.), *HTTP
+  Semantics*, RFC 9110, IETF 2022.
+- [RFC9112] R. Fielding, M. Nottingham, J. Reschke (eds.), *HTTP/1.1*,
+  RFC 9112, IETF 2022.
 - [RT76] M. Rothstein, *Aspects of Symbolic Integration and Simplification
   of Exponential and Primitive Functions*, PhD thesis, University of
   Wisconsin-Madison 1976; B. M. Trager, Algebraic factoring and rational
@@ -3852,14 +3873,14 @@ auch als Umgebungsvariable:
 
 `bin/rcas-chat` ist eine zweite Oberfläche: eine Terminalsitzung mit
 Eingabeaufforderung, Verlauf, gespeicherten Sitzungen und typografischem
-Satz. Sie tippen Ruby und bekommen das Ergebnis als Text und, in iTerm2,
-als gesetztes Bild.
+Satz. Sie tippen Ruby und bekommen das Ergebnis in iTerm2 gesetzt und
+sonst als Text; `/output both` zeigt zusätzlich den Text.
 
 ```
 $ bin/rcas-chat
 ╭─────────────────────────────────────────────────────────────╮
 │ ✻ rcas 0.1.0 - symbols are indeterminates; type Ruby        │
-│   output   both via katex                                   │
+│   output   typeset via katex                                │
 │   session  20260912-143012-a1b2                             │
 │                                                             │
 │   try      e = (x + 1) * (1 - x)                            │
@@ -3868,8 +3889,13 @@ $ bin/rcas-chat
 ╰─────────────────────────────────────────────────────────────╯
 ──────────────────────────────────────────────────────────────
 ❯ e = (x + 1) * (1 - x)
-=> (x + 1)*(1 - x)
    [picture]
+──────────────────────────────────────────────────────────────
+❯ ZZ[x].(x**6 - 1).factor
+   [picture]
+──────────────────────────────────────────────────────────────
+❯ /output both
+  output both (katex, scale 1.0, theme dark)
 ──────────────────────────────────────────────────────────────
 ❯ ZZ[x].(x**6 - 1).factor
 => (-1 + x)*(1 + x)*(1 + x + x**2)*(1 - x + x**2)
@@ -3947,8 +3973,8 @@ für Claudes Aufrufe:
 | Modus | zeigt |
 |---|---|
 | `text` | nur den einfachen rcas-Text (die Voreinstellung außerhalb von iTerm2) |
-| `tex` | nur das gesetzte Bild, Text, wenn ein Wert keine LaTeX-Form hat |
-| `both` | Text, dann das Bild (die Voreinstellung in iTerm2) |
+| `typeset` | nur das gesetzte Bild, Text, wenn ein Wert keine LaTeX-Form hat (die Voreinstellung in iTerm2) |
+| `both` | Text, dann das Bild |
 | `latex` | Text, dann den LaTeX-Quelltext |
 
 Grafiken sind in jedem Modus voreingestellt Braille-Kunst. `/plotstyle image`
@@ -4041,29 +4067,29 @@ Aufrufe eingeschlossen.
 ### Befehle
 
 ```
-/help [NAME]                      these commands, or what one name does
-/output [text|tex|both|latex]     how results are shown
-/backend [katex|latex]            typesetting backend
-/scale N                          zoom factor for pictures
-/theme dark|light                 colour of the pictures
-/plotstyle [text|image]           how plots are shown
-/unicode [on|off]                 print ℤ, π and ∞ instead of ZZ, pi and oo
-/numbered [on|off]                number the session's lines in the prompt (on)
+/help [NAME]                        these commands, or what one name does
+/output [text|typeset|both|latex]   how results are shown
+/backend [katex|latex]              typesetting backend
+/scale N                            zoom factor for pictures
+/theme dark|light                   colour of the pictures
+/plotstyle [text|image]             how plots are shown
+/unicode [on|off]                   print ℤ, π and ∞ instead of ZZ, pi and oo
+/numbered [on|off]                  number the session's lines in the prompt (on)
 /latex EXPR   /show EXPR   /png EXPR FILE
-/ask TEXT                         ask Claude (also: ? TEXT)        [with Claude configured]
-/vars                             the session's variables
-/assumptions   /forget [x ...]    variable domains
+/ask TEXT                           ask Claude (also: ? TEXT)        [with Claude configured]
+/vars                               the session's variables
+/assumptions   /forget [x ...]      variable domains
 /model [ID]   /fallbacks [on|off]   /cost   /compact   [with Claude configured]
 /sessions   /resume [NAME|ID|N]   /rename NAME   /reset   /save [FILE]
-/clear   /exit                    (Ctrl-D also leaves)
-!CMD                              run a shell command
+/clear   /exit                      (Ctrl-D also leaves)
+!CMD                                run a shell command
 ```
 
 ### Optionen und Umgebung
 
 ```
 rcas-chat [-c|--continue] [-r|--resume [NAME|ID]] [--model ID]
-          [--output=MODE] [--tex|--no-tex] [--backend=katex|latex] [--no-color]
+          [--output=MODE] [--typeset|--text] [--backend=katex|latex] [--no-color]
 ```
 
 | Variable | Bedeutung |
@@ -4089,4 +4115,201 @@ lib/rcas/chat/repl.rb         the loop, commands, options
 lib/rcas/chat/style.rb        colours
 bin/rcas-chat                 launcher
 test/chat_test.rb             tests, with a fake Claude
+```
+
+## Anhang C. rcas-app
+
+`bin/rcas-app` ist die dritte Bedienoberfläche: ein Fenster. Es zeigt die
+Sitzung als Arbeitsblatt aus nummerierten `In`/`Out`-Zellen, setzt jedes
+Ergebnis, das eine LaTeX-Form hat, typografisch und zeichnet Grafiken als
+Bilder statt als Braille-Kunst.
+
+```
+┌────────────────────────────────────────────── rcas 0.1.0 ── text tex both latex ── ? ─┐
+│                                                                                      │
+│   In[1]   f = x**3 - 3*x                                                             │
+│   Out[1]  x**3 - 3*x                                                                 │
+│           x³ − 3x                                                                    │
+│                                                                                      │
+│   In[2]   diff(f, x)                                                                 │
+│   Out[2]  -3 + 3*x**2                                                                │
+│           −3 + 3x²                                                                   │
+│                                                                                      │
+│   In[3]   solve(f, x)                                                                │
+│   Out[3]  [0, -3**(1/2), 3**(1/2)]                                                   │
+│           [0, −√3, √3]                                                               │
+│                                                                                      │
+├──────────────────────────────────────────────────────────────────────────────────────┤
+│   In[4]   ▏                                                                          │
+└──────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+Die gesetzten Zeilen sind KaTeX, also echter mathematischer Satz und nicht
+die Näherung, die diese ASCII-Skizze zeigen kann.
+
+### Wie es gebaut ist
+
+Das Fenster ist ein Browser der Chromium-Familie, gestartet mit
+`--app=URL`. Dieser Schalter zeichnet ein einzelnes Fenster ohne Tabs,
+ohne Adresszeile und ohne Lesezeichen: die Browser-Maschine ohne den
+Browser darum herum. Den Schalter gibt es unter macOS, Windows und Linux,
+ein Starter genügt also für alle drei.
+
+Die Maschine ist *geliehen, nicht mitgeliefert*. Eine Anwendung, wie man
+sie üblicherweise baut, mit Electron, trägt ihre eigene Kopie von Chromium
+und wiegt mehrere hundert Megabyte; dies hier sind die Bibliothek, eine
+HTML-Seite und vier kleine Ruby-Dateien. Der Preis ist, dass ein solcher
+Browser installiert sein muss - was rcas ohnehin verlangt, wenn es mit dem
+`:katex`-Backend setzt (Anhang A). Chrome, Chromium, Brave und Microsoft
+Edge gehen alle; `RCAS_BROWSER` benennt einen anderen.
+
+Alles Mathematische geschieht in Ruby, in demselben Sitzungsobjekt, das
+auch `bin/rcas` und `bin/rcas-chat` benutzen (`Chat::Workspace`). Bloße
+Namen sind also Unbestimmte, und die Nummerierung von `In` und `Out`
+bedeutet dasselbe wie überall sonst. Die Seite schickt eine Eingabezeile
+und zeichnet die Antwort; sie rechnet nichts selbst.
+
+### Starten
+
+```
+$ bin/rcas-app
+rcas 0.1.0 - Google Chrome window on 127.0.0.1:61319
+```
+
+Das Programm endet, wenn das Fenster geschlossen wird. `--no-window`
+startet nur den Server und gibt eine Adresse aus, die man von Hand öffnet:
+
+```
+$ bin/rcas-app --no-window
+rcas 0.1.0 - open http://127.0.0.1:61319/?token=fYLNZmCEvkvO3B6hP3u-7ea1K5y3lDro
+```
+
+### Eingabe
+
+Enter wertet die Zeile aus, Shift-Enter beginnt eine neue. Eine Zeile, die
+noch nicht fertig ist - ein offener Block, eine offene Zeichenkette oder
+Klammer -, wird von Enter ebenfalls nicht abgeschickt: gefragt wird Rubys
+eigener Parser, `def f(x)` wartet also auf sein `end`.
+
+Tab vervollständigt das Wort unter dem Cursor aus den Variablen der
+Sitzung, den Funktionen der obersten Ebene und den Zahlbereichen; teilen
+sich mehrere Namen einen Anfang, wird der gemeinsame Teil eingesetzt und
+die Kandidaten werden unter der Eingabe angeboten. Pfeil hoch und runter
+gehen durch die bereits getippten Zeilen, und ein Klick auf eine
+`In`-Zeile im Arbeitsblatt holt sie zurück in die Eingabe.
+
+### Ausgabe
+
+Die vier Modi von `rcas-chat` stehen in der Titelzeile, und `/output`
+stellt sie über die Tastatur ein:
+
+| Modus | was ein Ergebnis zeigt |
+|---|---|
+| `text` | nur die rcas-Textform; Grafiken sind Braille-Kunst |
+| `typeset` | nur die gesetzte Form (die Voreinstellung) |
+| `both` | Text und gesetzte Form |
+| `latex` | die Textform und ihren LaTeX-Quelltext |
+
+`typeset` ist der Name, den das Fenster dem Modus gibt, den `rcas-chat`
+und `~/.rcas/settings.json` `tex` nennen; `/output` nimmt beide
+Schreibweisen. Ein Wert ohne LaTeX-Form fällt in diesem Modus auf seinen
+Text zurück, es wird also nie etwas verborgen.
+
+Grafiken sind SVG-Bilder, von `Plot#to_svg` in den Farben des Fensters
+gezeichnet. `/theme dark`, `/theme light` und `/theme auto` (die
+Voreinstellung, die dem Schreibtisch folgt) entscheiden über diese Farben.
+
+`/help NAME` zeigt, was `doc(name)` weiß - die Signatur, den
+Kommentarblock, Mathematik und Methode hinter dem Namen, seine Quellen und
+seine Wikipedia-Artikel, letztere als Links, die sich im gewöhnlichen
+Browser öffnen.
+
+### Befehle
+
+| Befehl | Bedeutung |
+|---|---|
+| `/help [NAME]` | die Befehle, oder was eine Funktion, Menge oder Klasse tut |
+| `/output [text\|typeset\|both\|latex]` | wie Ergebnisse gezeigt werden |
+| `/theme [dark\|light\|auto]` | das Farbschema des Fensters |
+| `/unicode [on\|off]` | ℤ, π und ∞ statt ZZ, pi und oo ausgeben |
+| `/numbered [on\|off]` | die Zeilen der Sitzung nummerieren |
+| `/latex EXPR` | der LaTeX-Quelltext eines Ruby-Ausdrucks |
+| `/vars` | die Variablen der Sitzung |
+| `/assumptions` | erklärte Bereiche von Unbestimmten |
+| `/forget [x ...]` | Bereichsannahmen vergessen |
+| `/save [FILE]` | ein Markdown-Protokoll speichern |
+| `/reset` | von vorn: Variablen, Annahmen und Nummerierung |
+| `/clear` | das Arbeitsblatt leeren, die Variablen behalten |
+| `/exit` | das Fenster schließen |
+
+Alles andere ist Ruby. Das Fenster spricht nicht mit Claude; Fragen in
+natürlicher Sprache sind Sache von `rcas-chat` (Anhang B).
+
+### Im Dock, im Startmenü, in der Programmliste
+
+```
+$ bin/rcas-app --install
+rcas: installed /Users/you/Applications/rcas.app
+```
+
+`--install` schreibt den Eintrag, den der Schreibtisch erwartet, und
+`--uninstall` entfernt ihn wieder: ein Programmbündel in `~/Applications`
+unter macOS, mit dem Logo, das macOS' eigene Werkzeuge `sips` und
+`iconutil` in ein Symbol verwandeln; eine `.desktop`-Datei in
+`~/.local/share/applications` unter Linux; eine Verknüpfung im Startmenü
+unter Windows. Jeder Eintrag startet dieses Arbeitsverzeichnis mit diesem
+Ruby, das Programm braucht also kein Terminal.
+
+### Wer die Sitzung erreicht, und wer nicht
+
+Fenster und Programm reden über HTTP auf der Loopback-Schnittstelle
+miteinander. Das heißt, der Auswertungsendpunkt führt beliebiges Ruby aus
+und muss deshalb für alles andere auf dem Rechner unerreichbar sein. Drei
+Dinge halten ihn dort:
+
+* Der Socket hängt an `127.0.0.1`, von außerhalb des Rechners kommt also
+  überhaupt keine Verbindung zustande.
+* Für jeden Lauf wird ein zufälliges Token erzeugt; es steht in der URL
+  des Fensters und kommt in einem Kopffeld jedes Aufrufs zurück. Eine
+  Seite anderer Herkunft kann es weder raten noch dieses Kopffeld setzen,
+  weil der Server keinen CORS-Preflight beantwortet.
+* Das `Host`-Kopffeld muss die Loopback-Adresse nennen. Das verhindert,
+  dass ein öffentlicher Name, der auf `127.0.0.1` zeigt, die Sitzung
+  erreicht (DNS-Rebinding).
+
+Das Fenster hält sein eigenes Browser-Profil in `~/.rcas/app`; es ist also
+ein anderer Prozess als das eigene Surfen und übernimmt nichts aus jener
+Sitzung.
+
+### Optionen und Umgebung
+
+| Option | Bedeutung |
+|---|---|
+| `--port N` | auf diesem Port lauschen (Voreinstellung: irgendein freier) |
+| `--output MODUS` | `text`, `typeset`, `both` oder `latex` |
+| `--theme NAME` | `dark`, `light` oder `auto` |
+| `--no-window` | nur den Server starten und die Adresse ausgeben |
+| `--install`, `--uninstall` | den Schreibtisch-Eintrag anlegen oder entfernen |
+| `--version`, `--help` | Version, Aufruf |
+
+| Variable | Bedeutung |
+|---|---|
+| `RCAS_BROWSER` | der Browser, der das Fenster zeichnet |
+| `RCAS_HOME` | wo Profil und Einstellungen liegen (Voreinstellung `~/.rcas`) |
+| `RCAS_KATEX_DIR` | die KaTeX-Distribution, mit der gesetzt wird |
+
+Ausgabemodus und Farbschema kommen auch aus `~/.rcas/settings.json`, der
+Datei, die `rcas-chat` mit `/settings save` schreibt.
+
+### Dateien
+
+```
+lib/rcas/app.rb               entry point, the routes, the options
+lib/rcas/app/worksheet.rb     the session: a line of input becomes a cell
+lib/rcas/app/server.rb        the HTTP server (socket, loopback, token)
+lib/rcas/app/window.rb        finding a browser and opening the window
+lib/rcas/app/launcher.rb      the desktop entries for the three platforms
+lib/rcas/app/public/          the page: index.html, app.css, app.js
+bin/rcas-app                  launcher
+test/app_test.rb              tests
 ```

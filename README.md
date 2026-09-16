@@ -42,6 +42,11 @@ Optional, only for the typeset output and the chat front end:
 
 - Plots need nothing: `plot(sin(x))` draws in any terminal, and `save("f.svg")`
   writes a picture. `plot(...).to_png` and `show` use the same Chrome as below.
+- The window front end `bin/rcas-app` borrows a browser engine instead of
+  shipping one: it needs a Google Chrome, Chromium, Brave or Microsoft Edge
+  on the machine (`RCAS_BROWSER` names another), and `npm install` for the
+  KaTeX it typesets with. Nothing is bundled and nothing goes over the
+  network; see MANUAL.md, Appendix C.
 - Typeset pictures (`show`, `to_png`, and `bin/rcas-chat`): either `node`
   plus `npm install` in the project directory (fetches KaTeX, see
   `package.json`) and a local Google Chrome / Chromium, or a TeX
@@ -57,6 +62,7 @@ Optional, only for the typeset output and the chat front end:
 $ git clone <this repository> rcas && cd rcas
 $ bin/rcas          # irb with rcas loaded: bare names are variables
 $ bin/rcas-chat     # terminal front end with typeset output
+$ bin/rcas-app      # a window: a worksheet of In/Out cells (--install for the Dock)
 ```
 
 Inside `bin/rcas`, an undefined bare name such as `x` (or `α`, `β₁`: any
@@ -88,14 +94,15 @@ include RCAS::Constants          # PI E I OO
 
 ## Files and settings
 
-rcas itself keeps no state. `bin/rcas-chat` writes to `~/.rcas` (another
-directory with `RCAS_HOME`):
+rcas itself keeps no state. `bin/rcas-chat` and `bin/rcas-app` write to
+`~/.rcas` (another directory with `RCAS_HOME`):
 
 | path | contents |
 |---|---|
 | `~/.rcas/settings.json` | your defaults: output mode, backend, scale, theme, wrap width, model, fallbacks |
 | `~/.rcas/sessions/*.json` | one file per chat session: transcript, conversation with Claude and the session's settings, saved after every input (`RCAS_SESSION_DIR` moves the directory) |
 | `~/.rcas/history` | the input history of the chat prompt |
+| `~/.rcas/app/` | the browser profile of the `bin/rcas-app` window, so that it is a separate process from your browsing |
 | `/tmp/rcas/` | pictures of typeset output while a session runs; a session deletes the pictures it created when it ends (`RCAS_CACHE_DIR` moves the directory) |
 
 Defaults are changed in four ways, in increasing precedence:
@@ -153,6 +160,18 @@ runs the whole suite, including `test/manual_test.rb`, which executes every
 
 - [MANUAL.md](MANUAL.md): the user manual, with a table of contents,
   worked examples for every feature, a reference of functions, and
-  appendices on typeset output and `rcas-chat`. `MANUAL-de.md` is the same
-  manual in German.
+  appendices on typeset output, `rcas-chat` and `rcas-app`. `MANUAL-de.md`
+  is the same manual in German.
 - `LICENSE`: MIT.
+
+## How and why?
+
+I did some research in computer algebra, using MuPAD mostly. Since I left
+university I always missed the topic, but never had the time to dig into
+it again. And since I use ruby all the time, I considered implementing a
+CAS core in ruby, but never got past the playing around stage.
+
+With Claude, I now was able to outsource the nitty gritty details and only
+focus on my ideas on *how* such a thing could be built. So this project is
+mainly Claude-generated, I don't claim too much props, but I still hope
+that it could be useful or fun for others.

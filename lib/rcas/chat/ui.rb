@@ -6,11 +6,14 @@ module RCAS
     # banner, Claude's streamed text and its tool calls.
     class UI
       # How results are displayed:
-      #   :text  - plain rcas text only
-      #   :tex   - typeset picture only (text when the value has no LaTeX form)
-      #   :both  - text, then the picture
-      #   :latex - text, then the LaTeX source
-      MODES = %i[text tex both latex].freeze
+      #   :text    - plain rcas text only
+      #   :typeset - typeset picture only (text when the value has no LaTeX form)
+      #   :both    - text, then the picture
+      #   :latex   - text, then the LaTeX source
+      MODES = %i[text typeset both latex].freeze
+      # :tex was this mode's name until Sept 2026; a settings.json written
+      # before then, and the habit, still say it.
+      ALIASES = { tex: :typeset }.freeze
 
       attr_reader :out, :mode
 
@@ -20,16 +23,24 @@ module RCAS
       end
 
       def default_mode
-        Render.inline?(@out) && Render.available? ? :both : :text
+        Render.inline?(@out) && Render.available? ? :typeset : :text
       end
 
       def mode=(value)
-        value = value.to_sym
-        raise Error, "output mode must be one of #{MODES.join(', ')}" unless MODES.include?(value)
+        value = self.class.mode_for(value)
+        raise Error, "output mode must be one of #{MODES.join(', ')}" if value.nil?
         @mode = value
       end
 
-      def tex? = %i[tex both].include?(@mode)
+      # The mode +name+ stands for, or nil for a name that is none.
+      def self.mode_for(name)
+        return nil if name.nil? || name.to_s.empty?
+        name = name.to_sym
+        name = ALIASES.fetch(name, name)
+        MODES.include?(name) ? name : nil
+      end
+
+      def typeset? = %i[typeset both].include?(@mode)
 
       def io = @out
       def puts(text = "") = @out.puts(text)
@@ -46,7 +57,7 @@ module RCAS
           ""
         ]
         lines << "  #{Style.dim('model')}    #{model}" if assistant
-        lines << "  #{Style.dim('output')}   #{@mode}#{tex? ? Style.dim(" via #{backend}") : ''}"
+        lines << "  #{Style.dim('output')}   #{@mode}#{typeset? ? Style.dim(" via #{backend}") : ''}"
         lines << "  #{Style.dim('help')}     /help   #{Style.dim('quit')} /exit or Ctrl-D"
         lines << "  #{Style.dim('session')}  #{session}" if session
         lines << ""
@@ -100,7 +111,7 @@ module RCAS
       def result(value)
         Results.record(value) # `Out[3]` reaches the result of the session's third line
         return if value.is_a?(Plot) && plot_picture(value)
-        show_text = @mode != :tex || !typesettable?(value) || !Render.inline?(@out)
+        show_text = @mode != :typeset || !typesettable?(value) || !Render.inline?(@out)
         if show_text
           lines = text_of(value).lines.map(&:chomp)
           mark = Results.mark
@@ -109,7 +120,7 @@ module RCAS
           lines.drop(1).each { |l| puts "#{indent}#{Style.green(l)}" }
         end
         case @mode
-        when :tex, :both then typeset(value)
+        when :typeset, :both then typeset(value)
         when :latex then puts "   #{Style.dim(LaTeX.of(value))}" if typesettable?(value)
         end
       end
@@ -122,7 +133,7 @@ module RCAS
       def typeset(value, force: false)
         return unless typesettable?(value)
         return puts("   #{LaTeX.of(value)}") unless Render.inline?(@out) && Render.available?
-        return unless force || tex?
+        return unless force || typeset?
         print "   "
         Render.show(value, io: @out)
       rescue Render::Error => e

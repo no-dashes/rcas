@@ -1,0 +1,9 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# A desktop window for rcas: a worksheet of numbered In/Out cells, typeset
+# results and inline plots, in a borrowed browser engine. `rcas-app --help`.
+$LOAD_PATH.unshift File.expand_path("../lib", __dir__)
+require "rcas/app"
+
+exit RCAS::App.start(ARGV).to_i

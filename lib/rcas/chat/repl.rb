@@ -15,7 +15,7 @@ module RCAS
 
       COMMANDS = {
         "/help [NAME]" => "these commands, or what one function, set or class does",
-        "/output [text|tex|both|latex]" => "how results are shown: ASCII, typeset picture, both, or text + LaTeX source",
+        "/output [text|typeset|both|latex]" => "how results are shown: ASCII, typeset picture, both, or text + LaTeX source",
         "/backend [katex|latex]" => "typesetting backend (KaTeX + Chrome, or a TeX installation)",
         "/scale N" => "zoom factor for typeset output (1 = natural size)",
         "/theme [dark|light]" => "colour of typeset output for your terminal background",
@@ -231,7 +231,9 @@ module RCAS
         @assistant.on_tool_call = ->(code, result) { @session.transcript << [:tool, code, result] }
         @assistant.messages = symbolize(session.messages)
         session.usage.each { |k, v| @assistant.usage[k.to_sym] = v }
-        @ui.mode = session.mode if session.mode && UI::MODES.include?(session.mode)
+        # UI.mode_for, not MODES: a session saved before :tex was renamed
+        # to :typeset still says "tex", and it still means this mode.
+        @ui.mode = UI.mode_for(session.mode) || @ui.mode
         @session = session
         session
       end
@@ -391,16 +393,16 @@ module RCAS
       def output(arg)
         case arg
         when "" then nil
-        when "on" then @ui.mode = :both
+        when "on" then @ui.mode = :typeset
         when "off" then @ui.mode = :text
         else @ui.mode = arg
         end
-        if @ui.tex? && !Render.inline?(@ui.out)
+        if @ui.typeset? && !Render.inline?(@ui.out)
           @ui.info("output #{@ui.mode}: inline pictures need iTerm2, so results stay text here; try /output latex")
-        elsif @ui.tex? && !Render.available?
+        elsif @ui.typeset? && !Render.available?
           @ui.info("output #{@ui.mode}: no typesetting backend found (npm install for KaTeX, or install LaTeX + dvipng)")
         else
-          @ui.info("output #{@ui.mode}#{@ui.tex? ? " (#{Render.selected.name}, scale #{Render.scale}, theme #{Render.theme})" : ''}")
+          @ui.info("output #{@ui.mode}#{@ui.typeset? ? " (#{Render.selected.name}, scale #{Render.scale}, theme #{Render.theme})" : ''}")
         end
       end
 
@@ -528,8 +530,8 @@ module RCAS
       }
       until argv.empty?
         case (arg = argv.shift)
-        when "--no-tex", "--text" then options[:mode] = :text
-        when "--tex" then options[:mode] = :both
+        when "--no-tex", "--no-typeset", "--text" then options[:mode] = :text
+        when "--tex", "--typeset" then options[:mode] = :typeset
         when /\A--output=(\w+)\z/ then options[:mode] = Regexp.last_match(1).to_sym
         when /\A--backend=(katex|latex)\z/ then Render.backend = Regexp.last_match(1).to_sym
         when "--model" then options[:model] = argv.shift
@@ -549,7 +551,7 @@ module RCAS
             usage: rcas-chat [options]
               -c, --continue          continue the most recent session
               -r, --resume [NAME|ID]  resume a session by name or id (pick from a list without an argument)
-            #{claude ? "  --model ID              Claude model (default #{Assistant::DEFAULT_MODEL}, or RCAS_MODEL)\n" : ''}  --output=MODE           text | tex | both | latex   (--tex, --no-tex for both / text)
+            #{claude ? "  --model ID              Claude model (default #{Assistant::DEFAULT_MODEL}, or RCAS_MODEL)\n" : ''}  --output=MODE           text | typeset | both | latex   (--typeset, --text for short)
               --backend=katex|latex   typesetting backend (or RCAS_TEX_BACKEND)
               --no-color
             #{claude ? 'Ruby is evaluated; anything else is a question for Claude.' : 'Ruby is evaluated and the results are typeset.'}

@@ -1,0 +1,401 @@
+/* The window: a worksheet of In/Out cells. Light and dark are the same
+   design with the palette swapped; the whole palette is defined on :root
+   so that either media query or [data-theme] can redefine it. */
+
+:root {
+  color-scheme: light dark;
+
+  --ground: #fbfbfa;
+  --panel: #ffffff;
+  --sunken: #f3f3f1;
+  --ink: #1c1b19;
+  --ink-dim: #6b6a66;
+  --ink-faint: #9b9a95;
+  --rule: #e4e3df;
+  --accent: #7c3a1d;
+  --accent-soft: #f0e6e0;
+  --result: #1f5c3d;
+  --danger: #a32020;
+  --link: #2b5fa8;
+
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+  --gutter: 20px;
+  --label: 4.5rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #17171a;
+    --panel: #1e1e22;
+    --sunken: #26262b;
+    --ink: #e8e7e3;
+    --ink-dim: #a3a29c;
+    --ink-faint: #74736e;
+    --rule: #32323a;
+    --accent: #e0a37a;
+    --accent-soft: #2c2520;
+    --result: #7fcfa3;
+    --danger: #ef8a8a;
+    --link: #8ab4f8;
+  }
+}
+
+:root[data-theme="dark"] {
+  --ground: #17171a;
+  --panel: #1e1e22;
+  --sunken: #26262b;
+  --ink: #e8e7e3;
+  --ink-dim: #a3a29c;
+  --ink-faint: #74736e;
+  --rule: #32323a;
+  --accent: #e0a37a;
+  --accent-soft: #2c2520;
+  --result: #7fcfa3;
+  --danger: #ef8a8a;
+  --link: #8ab4f8;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.55;
+  overflow: hidden;
+}
+
+/* ---- title bar ---------------------------------------------------------- */
+
+.titlebar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  padding: 10px var(--gutter);
+  padding-top: calc(10px + env(safe-area-inset-top, 0px));
+  border-bottom: 1px solid var(--rule);
+  background: var(--panel);
+  user-select: none;
+}
+
+.titlebar .logo {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  object-fit: cover;
+}
+
+.titlebar h1 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.titlebar .version { color: var(--ink-faint); font-size: 12px; }
+.titlebar .spacer { flex: 1; }
+
+.modes {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 7px;
+  background: var(--sunken);
+}
+
+.modes button {
+  padding: 3px 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink-dim);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.modes button[aria-pressed="true"] {
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
+}
+
+button.ghost {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--rule);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-dim);
+  font: inherit;
+  cursor: pointer;
+}
+
+button.ghost:hover, .modes button:hover { color: var(--ink); }
+
+/* ---- worksheet ---------------------------------------------------------- */
+
+.worksheet {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 18px var(--gutter) 8px;
+  outline: none;
+}
+
+.cell {
+  margin: 0 0 18px;
+  animation: rise 0.18s ease-out;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cell { animation: none; }
+}
+
+.line {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.line + .line { margin-top: 3px; }
+
+.tag {
+  flex: none;
+  width: var(--label);
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--ink-faint);
+  user-select: none;
+}
+
+.line.in .tag { color: var(--accent); }
+
+.body {
+  flex: 1;
+  min-width: 0;
+}
+
+.line.in .body {
+  font-family: var(--mono);
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  cursor: text;
+}
+
+.line.in .body:hover { color: var(--accent); }
+
+pre.text {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  white-space: pre;
+  overflow-x: auto;
+  color: var(--result);
+}
+
+pre.stdout {
+  margin: 0 0 4px;
+  font-family: var(--mono);
+  font-size: 13px;
+  white-space: pre;
+  overflow-x: auto;
+  color: var(--ink-dim);
+}
+
+.tex {
+  margin-top: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 0;
+}
+
+.tex .katex { font-size: 1.12em; }
+/* A worksheet reads down the left edge; display maths must not centre. */
+.tex .katex-display { margin: 0; text-align: left; }
+.tex .katex-display > .katex { text-align: left; }
+
+.source {
+  display: block;
+  margin-top: 6px;
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: var(--sunken);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-dim);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.plot { margin-top: 6px; }
+.plot svg { width: 100%; max-width: 560px; height: auto; border-radius: 8px; }
+
+.error { color: var(--danger); }
+.hint { margin-top: 3px; color: var(--ink-dim); font-family: var(--mono); font-size: 12px; }
+.hint span { display: block; }
+.hint span:first-child { color: var(--link); }
+.note { color: var(--ink-faint); font-size: 12px; }
+.took { color: var(--ink-faint); font-size: 11px; font-family: var(--mono); }
+
+/* ---- tables: /help, /vars, /assumptions ---------------------------------- */
+
+table.rows {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+table.rows td {
+  padding: 3px 12px 3px 0;
+  vertical-align: baseline;
+}
+
+table.rows td.name {
+  width: 1%;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--accent);
+}
+
+table.rows td.value { font-family: var(--mono); font-size: 12.5px; }
+
+.doc h2 {
+  margin: 0 0 4px;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.doc p { margin: 0 0 6px; max-width: 62ch; }
+.doc .field { margin-bottom: 6px; max-width: 72ch; }
+.doc .field > b { color: var(--link); font-weight: 600; }
+.doc a { color: var(--link); }
+.doc ul { margin: 0; padding-left: 18px; }
+
+/* ---- greeting ----------------------------------------------------------- */
+
+.greeting { max-width: 64ch; color: var(--ink-dim); }
+.greeting p { margin: 0 0 10px; }
+.greeting .dim { color: var(--ink-faint); font-size: 12.5px; }
+.greeting code { font-family: var(--mono); }
+
+.examples {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.examples button {
+  padding: 4px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--ink-dim);
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.examples button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* ---- composer ----------------------------------------------------------- */
+
+.composer {
+  flex: none;
+  border-top: 1px solid var(--rule);
+  background: var(--panel);
+  padding: 10px var(--gutter);
+  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+}
+
+.prompt-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.prompt {
+  flex: none;
+  width: var(--label);
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--accent);
+  user-select: none;
+}
+
+#input {
+  flex: 1;
+  min-width: 0;
+  max-height: 9.5em;
+  border: 0;
+  padding: 0;
+  resize: none;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 13.5px;
+  line-height: 1.5;
+  outline: none;
+  overflow-y: auto;
+}
+
+#input::placeholder { color: var(--ink-faint); }
+
+.completions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0 0 8px calc(var(--label) + 10px);
+}
+
+.completions button {
+  padding: 2px 8px;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  background: var(--sunken);
+  color: var(--ink-dim);
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.completions button[aria-selected="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* The window is narrow before it is anything else. */
+@media (max-width: 560px) {
+  :root { --gutter: 12px; --label: 3.2rem; }
+  .line { gap: 7px; }
+}

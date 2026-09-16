@@ -536,6 +536,41 @@ class ChatSessionTest < Minitest::Test
   end
 end
 
+# The output mode was called :tex until Sept 2026; settings files and saved
+# sessions written before then still say so.
+class ChatOutputModeTest < Minitest::Test
+  def ui(**options) = RCAS::Chat::UI.new(out: StringIO.new, **options)
+
+  def test_the_modes_are_named_for_what_they_do
+    assert_equal %i[text typeset both latex], RCAS::Chat::UI::MODES
+  end
+
+  def test_the_old_name_still_names_the_mode
+    assert_equal :typeset, RCAS::Chat::UI.mode_for("tex")
+    assert_equal :typeset, RCAS::Chat::UI.mode_for(:typeset)
+    assert_equal :both, RCAS::Chat::UI.mode_for("both")
+    assert_nil RCAS::Chat::UI.mode_for("sideways")
+    assert_nil RCAS::Chat::UI.mode_for(nil)
+  end
+
+  def test_a_mode_is_set_by_either_name
+    subject = ui(mode: :text)
+    subject.mode = "tex"
+    assert_equal :typeset, subject.mode
+    assert_predicate subject, :typeset?
+    assert_raises(RCAS::Chat::Error) { subject.mode = "sideways" }
+  end
+
+  def test_a_session_saved_under_the_old_name_is_restored
+    session = RCAS::Chat::Session.new
+    session.mode = :tex
+    out = StringIO.new
+    repl = RCAS::Chat::REPL.new(input: StringIO.new(""), output: out, persist: false, mode: :text)
+    repl.send(:resume, session)
+    assert_equal :typeset, repl.instance_variable_get(:@ui).mode
+  end
+end
+
 class ChatSpinnerTest < Minitest::Test
   # A StringIO that claims to be a terminal, so the spinner draws.
   class FakeTTY < StringIO
