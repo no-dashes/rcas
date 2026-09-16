@@ -337,6 +337,48 @@ module RCAS
     def cdf(dist, x) = dist.cdf(x)
     def probability(dist, event) = dist.probability(event)
 
+    # qpochhammer(a, q, n): (a; q)_n = (1 - a)(1 - a*q)...(1 - a*q**(n - 1))
+    def qpochhammer(a, q, n) = QFunctions.qpochhammer(a, q, n)
+    # qbracket(n, q): [n]_q = 1 + q + ... + q**(n - 1), the q-analogue of n
+    def qbracket(n, q) = QFunctions.qbracket(n, q)
+    # qfactorial(n, q): [n]_q! = [1]_q*[2]_q*...*[n]_q
+    def qfactorial(n, q) = QFunctions.qfactorial(n, q)
+    # qbinomial(n, k, q): the Gaussian binomial coefficient, a polynomial in q
+    def qbinomial(n, k, q) = QFunctions.qbinomial(n, k, q)
+
+    # qgosper(q**k, q, k): the q-antidifference S with S(k + 1) - S(k) = f(k), or nil
+    def qgosper(term, q, k) = QSummation.qgosper(term, Expression.lift(k), Expression.lift(q))
+
+    # qsum(q**k, q, k: 0..n-1): a definite q-hypergeometric sum, or the sum unevaluated
+    def qsum(term, q, k = nil, from = nil, to = nil, **range)
+      k, from, to = Functions.range_arguments(k, from, to, range, "qsum", discrete: true)
+      k = Expression.lift(k)
+      from = Expression.lift(from)
+      to = Expression.lift(to)
+      QSummation.qsum(term, k, from, to, Expression.lift(q)) || Sum.new(Expression.lift(term), k, from, to)
+    end
+
+    # sumrecursion(binomial(n, k)**2, k, S(n)): the recurrence a definite sum obeys (Zeilberger)
+    def sumrecursion(term, k, s, **opts) = Zeilberger.sumrecursion(term, k, s, **opts)
+
+    # sumcertificate(binomial(n, k)**2, k, S(n)): the rational certificate that proves it
+    def sumcertificate(term, k, s, **opts) = Zeilberger.sumcertificate(term, k, s, **opts)
+
+    # qsumrecursion(qbinomial(n, k, q), k, q, S(n)): the recurrence a definite q-sum obeys
+    def qsumrecursion(term, k, q, s, **opts) = QZeilberger.qsumrecursion(term, k, q, s, **opts)
+
+    # qsumcertificate(qbinomial(n, k, q), k, q, S(n)): the certificate that proves it
+    def qsumcertificate(term, k, q, s, **opts) = QZeilberger.qsumcertificate(term, k, q, s, **opts)
+
+    # qsolve(eq(f(q*x), (1 - a*x)*f(x)), f, x, q): a linear q-difference equation, at x = q**n
+    def qsolve(equation, f, x, q, **opts) = QDifference.qsolve(equation, f, x, q, **opts)
+
+    # qhyper(eq(f(q*x), (1 - a*x)*f(x)), f, x, q): the ratios f(q*x)/f(x) of its solutions
+    def qhyper(equation, f, x, q) = QDifference.qhyper(equation, f, x, q)
+
+    # hyper(eq(u(n + 1), n*u(n)), u, n): the hypergeometric solutions of a recurrence
+    def hyper(equation, u, n) = Recurrence.hyper(equation, u, n)
+
     # doc(:factor), doc("ZZ"), doc(:Matrix): what a name does, from the source
     def doc(name) = Docs.doc(name)
 
@@ -432,6 +474,10 @@ module RCAS
 
     # Constant folding for function applications; called by Simplify.
     def self.fold(fn)
+      if QFunctions::NAMES.include?(fn.name)
+        folded = QFunctions.fold(fn)
+        return folded if folded
+      end
       if fn.name == :binomial && fn.args.size == 2
         n, k = fn.args
         return Combinatorics.binomial_value(n, k) || fn

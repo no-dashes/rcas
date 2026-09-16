@@ -48,6 +48,7 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
     - [Series](#series)
     - [Limits](#limits)
     - [Sums](#sums)
+    - [Definite sums: creative telescoping](#definite-sums-creative-telescoping)
     - [Products](#products)
     - [hold and evaluate](#hold-and-evaluate)
     - [Factorials, binomials, gamma](#factorials-binomials-gamma)
@@ -77,7 +78,10 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
     - [Confidence intervals](#confidence-intervals)
   - [1.11 Plotting](#111-plotting)
     - [Statistical plots](#statistical-plots)
-  - [1.12 Performance notes](#112-performance-notes)
+  - [1.12 The q-analogues](#112-the-q-analogues)
+    - [q-summation](#q-summation)
+    - [q-difference equations](#q-difference-equations)
+  - [1.13 Performance notes](#113-performance-notes)
 - [2. Reference](#2-reference)
 - [3. Files](#3-files)
 - [4. Sources](#4-sources)
@@ -311,11 +315,15 @@ rcas> dsolve([eq(D(x, t), y), eq(D(y, t), -x)], [x, y], t)
 => [x = C1*sin(t) + C2*cos(t), y = C1*cos(t) - C2*sin(t)]
 rcas> [legendre(3, 7), order(3, 7)]
 => [-1, 6]
+rcas> sumrecursion(binomial(n, k)**2, k, s(n))
+=> s(n)*(-2 - 4*n) + s(1 + n)*(1 + n) = 0
+rcas> qsolve(eq(u(q*x), (1 - t*x)*u(x)), u, x, q)
+=> u(q**n) = C1*qpochhammer(t, q, n)
 ```
 
 Read on: 1.5 Domains and assumptions, 1.6 Polynomial rings, 1.8
-Differential equations and recurrences, and section 4, Sources, for the
-algorithms and where they come from.
+Differential equations and recurrences, 1.12 The q-analogues, and section
+4, Sources, for the algorithms and where they come from.
 
 Each name explains itself: `doc(:factor)` (or `/help factor` in the chat)
 gives the signature, what the operation is mathematically, how rcas
@@ -954,6 +962,65 @@ rcas> sum(1/k, k: 1..n)
 => harmonic(n)
 ```
 
+#### Definite sums: creative telescoping
+
+Gosper's algorithm answers the *indefinite* question, whether a term has an
+antidifference. For a definite sum such as `sum(binomial(n, k)**2, k: 0..n)`
+there is a second question, and Zeilberger's algorithm answers it: the sum
+obeys a linear recurrence in `n`, and the algorithm finds one together with
+a proof.
+
+`sumrecursion(F, k, s(n))` returns that recurrence for `S(n) = sum_k F(n, k)`
+in an unknown sequence you name, so that `rsolve` can take it from there.
+
+```
+rcas> sumrecursion(binomial(n, k)**2, k, s(n))
+=> s(n)*(-2 - 4*n) + s(1 + n)*(1 + n) = 0
+rcas> rsolve(Out[-1], s, n, init: {0 => 1})
+=> s(n) = 2**(2*n)*gamma(1/2 + n)/(pi**(1/2)*n!)
+```
+
+`sum` does the same by itself when nothing simpler works, so the closed
+form of a definite hypergeometric sum comes out in one step; here it is
+`binomial(2*n, n)` written with the gamma function (section 1.3,
+*Factorials, binomials, gamma*, says why products of linear factors come
+out this way).
+
+```
+rcas> sum(binomial(n, k)**2, k: 0..n)
+=> 2**(2*n)*gamma(1/2 + n)/(pi**(1/2)*n!)
+rcas> Out[-1].subs(n => 5).simplify
+=> 252
+```
+
+The order of the recurrence is whatever the sum needs. Three binomial
+coefficients need two, and then no hypergeometric closed form exists at
+all - the recurrence is all there is, and `sum` says so by staying
+unevaluated:
+
+```
+rcas> sumrecursion(binomial(n, k)**3, k, s(n))
+=> s(1 + n)*(-16 - 21*n - 7*n**2) + s(n)*(-8 - 16*n - 8*n**2) + s(2 + n)*(4 + 4*n + n**2) = 0
+rcas> sum(binomial(n, k)**3, k: 0..n)
+=> sum(binomial(n, k)**3, k, 0, oo)
+```
+
+`sumcertificate(F, k, s(n))` gives the rational function `R` behind it: with
+`G(k) = R*F(n, k)`, the identity `sum_j sigma_j*F(n + j, k) = G(k + 1) - G(k)`
+can be checked by hand, and summing it over `k` is the proof of the
+recurrence.
+
+```
+rcas> sumcertificate(binomial(n, k), k, s(n))
+=> k/(-1 + k - n)
+```
+
+That last step needs the boundary terms to vanish, that is `F(n, k) = 0`
+outside the range summed over. Binomial coefficients see to that
+themselves; a term such as `binomial(n, k)/(k + 1)`, with its pole at
+`k = -1`, does not, and rather than hand back a recurrence the sum does not
+obey, `sumrecursion` says what went wrong.
+
 #### Products
 
 `product(f, k, a, b)` or `product(f, k: a..b)`. Constants give powers,
@@ -1196,13 +1263,13 @@ Equation objects support sidewise arithmetic, `subs`, `swap`, `holds?`,
 `lhs`, `rhs` and `solve`.
 
 ```
-rcas> q = eq(x + 1, 3)
+rcas> eqn = eq(x + 1, 3)
 => x + 1 = 3
-rcas> (q - 1).simplify
+rcas> (eqn - 1).simplify
 => x = 2
-rcas> q.solve
+rcas> eqn.solve
 => [2]
-rcas> q.holds?(x: 2)
+rcas> eqn.holds?(x: 2)
 => true
 ```
 
@@ -1868,6 +1935,35 @@ rcas> rsolve(eq(u(n + 1), 3*u(n) + 2**n), u, n)
 => u(n) = -2**n + 3**n*C1
 ```
 
+**Polynomial coefficients.** When a coefficient depends on `n`, the
+characteristic polynomial has nothing to say and Petkovsek's algorithm
+takes over. It finds the *hypergeometric* solutions, the ones whose ratio
+`u(n + 1)/u(n)` is a rational function - which is what a factorial is:
+
+```
+rcas> rsolve(eq(u(n + 1), n*u(n)), u, n)
+=> u(n) = C1*(-1 + n)!
+rcas> rsolve(eq(u(n + 1), 2*(n + 1)*u(n)), u, n, init: {0 => 1})
+=> u(n) = 2**n*n!
+rcas> rsolve(eq((n + 2)*u(n + 1), u(n)), u, n)
+=> u(n) = C1/(1 + n)!
+```
+
+A recurrence of order `r` has an `r`-dimensional solution space, and only
+as many hypergeometric solutions as that span it. `hyper` lists what there
+is, and `rsolve` refuses to pass off a part of the solution space as the
+whole of it:
+
+```
+rcas> hyper(eq((n + 2)*u(n + 2), (2*n + 3)*u(n + 1) - (n + 1)*u(n)), u, n)
+=> [1]
+rcas> hyper(eq(u(n + 2), u(n + 1) + (n + 1)*u(n)), u, n)
+=> []
+```
+
+The first has the constant solution and a second one that is not
+hypergeometric, so `rsolve` reports one of two; the second has none at all.
+
 #### Systems
 
 `dsolve` takes a list of equations and a list of unknown functions. A
@@ -2267,7 +2363,111 @@ with 400 points, so a feature narrower than one pixel column can be missed;
 the y range is trimmed to the central 96 per cent of the sampled values
 when a pole would otherwise flatten the picture.
 
-### 1.12 Performance notes
+### 1.12 The q-analogues
+
+Replace the integer `n` by `[n]_q = 1 + q + ... + q**(n - 1)` and every
+formula of this chapter has a twin. As `q` approaches 1 the twin becomes
+the original again, and on the way it says more: the Gaussian binomial
+coefficient counts subspaces of a vector space over a field with `q`
+elements where the ordinary one counts subsets.
+
+```
+rcas> qbracket(5, q)
+=> 1 + q + q**2 + q**3 + q**4
+rcas> qbinomial(4, 2, q)
+=> 1 + q + 2*q**2 + q**3 + q**4
+rcas> qbinomial(4, 2, q).subs(q => 1).simplify
+=> 6
+rcas> qfactorial(3, q)
+=> 1 + 2*q + 2*q**2 + q**3
+```
+
+Everything is built on the q-Pochhammer symbol
+`(a; q)_n = (1 - a)(1 - a*q)...(1 - a*q**(n - 1))`, which plays the part
+the rising factorial plays for ordinary hypergeometric terms:
+`qfactorial(n, q)` is `(q; q)_n/(1 - q)**n` and `qbinomial(n, k, q)` is
+`(q; q)_n/((q; q)_k*(q; q)_(n - k))`. Integer arguments fold, symbolic ones
+stay as they are, and the algorithms expand them themselves.
+
+```
+rcas> qpochhammer(t, q, 3)
+=> (1 - q**2*t)*(1 - q*t)*(1 - t)
+```
+
+#### q-summation
+
+A term is *q-hypergeometric* when `t(k + 1)/t(k)` is a rational function of
+`q**k` rather than of `k`. Writing `x` for `q**k` turns the shift
+`k -> k + 1` into `x -> q*x`, and Gosper's algorithm goes through with that
+one change. `qgosper(f, q, k)` is the q-antidifference and
+`qsum(f, q, k: a..b)` the definite sum; the geometric series is the
+q-analogue of `sum(1, k: 0..n-1) = n`:
+
+```
+rcas> qgosper(q**k, q, k)
+=> q**k/(-1 + q)
+rcas> qsum(q**k, q, k: 0..n-1)
+=> -1/(-1 + q) + q**n/(-1 + q)
+```
+
+That answer is `[n]_q`. A sum with no q-antidifference stays unevaluated,
+as an ordinary one does:
+
+```
+rcas> qsum(qbinomial(n, k, q), q, k: 0..n)
+=> sum(qbinomial(n, k, q), k, 0, n)
+```
+
+`qsumrecursion(F, k, q, s(n))` is Zeilberger's algorithm in the q-world: it
+proves an identity by finding the recurrence both sides obey. Here is the
+q-binomial theorem, whose sum is `(-z; q)_n`:
+
+```
+rcas> qsumrecursion(qbinomial(n, k, q)*q**(k*(k - 1)/2)*z**k, k, q, s(n))
+=> s(1 + n) + s(n)*(-1 - q**n*z) = 0
+```
+
+and the last sum, of all the Gaussian binomial coefficients of one row (the
+Galois numbers), which satisfies a second-order recurrence:
+
+```
+rcas> qsumrecursion(qbinomial(n, k, q), k, q, s(n))
+=> -2*s(1 + n) + s(2 + n) + s(n)*(1 - q**(1 + n)) = 0
+```
+
+#### q-difference equations
+
+A q-difference equation relates `f(x)`, `f(q*x)`, `f(q**2*x)`, ... the way
+a recurrence relates `u(n)`, `u(n + 1)`, `u(n + 2)`. Substituting
+`x = q**n` turns one into the other, which is why `qsolve` reports its
+answers at `x = q**n`: there a q-hypergeometric solution is a product of
+q-Pochhammer symbols and powers.
+
+`qsolve(equation, f, x, q)` finds the q-hypergeometric solutions with
+Petkovsek's algorithm, with `x -> q*x` in place of `n -> n + 1`. The
+q-Pochhammer symbol solves its own equation, and the recurrence the
+q-binomial theorem gave above is exactly of that kind:
+
+```
+rcas> qsolve(eq(u(q*x), (1 - t*x)*u(x)), u, x, q)
+=> u(q**n) = C1*qpochhammer(t, q, n)
+rcas> qsolve(eq(u(q*x), (1 + z*x)*u(x)), u, x, q)
+=> u(q**n) = C1*qpochhammer(-z, q, n)
+rcas> qsolve(eq((1 - x)*u(q*x), u(x)), u, x, q)
+=> u(q**n) = C1/qpochhammer(q, q, -1 + n)
+```
+
+The last one starts its product past the zero of `(1; q)_n`, the way
+`rsolve` answers `u(n + 1) = n*u(n)` with `(n - 1)!`. `qhyper` lists the
+ratios `f(q*x)/f(x)` themselves, and is empty when there is nothing
+q-hypergeometric to find - the q-Airy equation, for one:
+
+```
+rcas> qhyper(eq(u(q**2*x), u(q*x) + x*u(x)), u, x, q)
+=> []
+```
+
+### 1.13 Performance notes
 
 `expand` and polynomial conversion combine like terms while multiplying,
 so a product of many sums never materialises more terms than the result
@@ -2306,11 +2506,13 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | constants | `PI E I oo` (bare `pi`, `π`, `oo`, `∞`) |
 | evaluation | `subs evalf` |
 | calculus | `integrate diff series taylor limit sum product` |
+| hypergeometric summation | `sumrecursion sumcertificate hyper` |
+| q-analogues | `qbracket qfactorial qbinomial qpochhammer qgosper qsum qsumrecursion qsumcertificate qsolve qhyper` |
 | numerics | `nsolve nintegrate` |
 | curve sketching | `critical_points extrema inflections asymptotes tangent normal real_domain` |
 | several variables | `gradient hessian jacobian divergence curl laplacian lagrange` |
 | algebra | `solve eq factor groebner reduce interval` |
-| differential equations, recurrences | `D dsolve rsolve laplace inverse_laplace` |
+| differential equations, recurrences | `D dsolve rsolve hyper laplace inverse_laplace` |
 | complex numbers | `re im conj arg` |
 | rounding | `floor ceil round mod` |
 | sequences | `bernoulli fibonacci harmonic` |
@@ -2337,7 +2539,10 @@ three-dimensional and parametric plots, geometry in space, Fourier
 transforms, group theory, differential equations with variable
 coefficients beyond first order, limits of bounded oscillation (`sin(x)/x` at infinity), inequalities beyond
 polynomial, rational and absolute-value ones, number fields with more than
-two generators, and Zeilberger's algorithm for definite hypergeometric sums.
+two generators, hypergeometric solutions of *inhomogeneous* recurrences
+with polynomial coefficients, Abramov's rational solutions, the
+Almkvist-Zeilberger algorithm for hyperexponential integrals, and
+multivariate (holonomic) summation.
 
 ## 3. Files
 
@@ -2352,6 +2557,13 @@ lib/rcas/integrate.rb       rules, rational functions, Risch-Norman heuristic
 lib/rcas/integrate_substitutions.rb  rationalizing substitutions (roots, exp, sin/cos)
 lib/rcas/series.rb          Puiseux series, limits
 lib/rcas/summation.rb       Faulhaber, Gosper, zeta
+lib/rcas/poly_recurrence.rb polynomial solutions of a linear recurrence
+lib/rcas/petkovsek.rb       hypergeometric solutions of a recurrence
+lib/rcas/zeilberger.rb      creative telescoping for definite sums
+lib/rcas/q_functions.rb     q-Pochhammer, q-bracket, q-factorial, Gaussian binomials
+lib/rcas/q_summation.rb     q-Gosper: q-antidifferences and q-sums
+lib/rcas/q_zeilberger.rb    creative telescoping in the q-world
+lib/rcas/q_difference.rb    q-difference equations (q-Petkovsek)
 lib/rcas/product.rb         symbolic products; Product node
 lib/rcas/recurrence.rb      rsolve: linear recurrences with constant coefficients
 lib/rcas/complex_parts.rb   re, im, conj, arg
@@ -2423,6 +2635,9 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | Gosper's algorithm with the degree bound for the polynomial ansatz | summation.rb | [Gos78]; [PWZ96, ch. 5] |
 | products: factorial and gamma ratios for linear factors, exp of sums | product.rb | [GKP94, §5.5] |
 | recurrences: characteristic roots, undetermined coefficients, initial values | recurrence.rb | [GKP94, §7.3] |
+| hypergeometric solutions of a recurrence with polynomial coefficients (Petkovsek), polynomial solutions with Abramov's degree bound | petkovsek.rb, poly_recurrence.rb | [Pet92]; [Koe14, ch. 9]; [PWZ96, ch. 8] |
+| definite hypergeometric sums by creative telescoping (Zeilberger), with the rational certificate | zeilberger.rb | [Zei91]; [Koe14, ch. 7]; [PWZ96, ch. 6] |
+| q-analogues: q-Pochhammer and Gaussian binomials, q-Gosper, q-Zeilberger, q-Petkovsek for q-difference equations | q_functions.rb, q_summation.rb, q_zeilberger.rb, q_difference.rb | [Koo93]; [Koe14, ch. 10-12]; [APP98]; [GR04] |
 | descriptive statistics, sample quantiles (definition 7), least squares line | statistics.rb | [HF96]; [Ros14, ch. 7] |
 | distributions: densities, CDFs, moments; normal CDF by erf, quantile by bisection and Newton | distributions.rb | [Ros14, ch. 4-5]; [AS64, §7.1] |
 | incomplete gamma and beta by series and continued fractions (Lentz) | special.rb | [AS64, §6.5, §26.5]; [PTVF07, §6.2, §6.4]; [Len76] |
@@ -2454,6 +2669,8 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | systems of differential equations by eigenvalues, with Jordan chains when defective | ode.rb | [BD12, ch. 7] |
 | congruences, Legendre and Jacobi symbols, multiplicative order, continued fractions | number_theory.rb | [Coh93, §1.4]; [Knu98, §4.5.3]; [HW08, ch. 10] |
 
+- [APP98] S. A. Abramov, P. Paule, M. Petkovšek, q-Hypergeometric
+  solutions of q-difference equations, *Discrete Math.* 180 (1998), 3-22.
 - [AS64] M. Abramowitz, I. A. Stegun (eds.), *Handbook of Mathematical
   Functions*, National Bureau of Standards 1964, ch. 7 (error function).
 - [BD12] W. E. Boyce, R. C. DiPrima, *Elementary Differential Equations and
@@ -2482,6 +2699,9 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   2nd ed., Addison-Wesley 1994.
 - [Gos78] R. W. Gosper, Decision procedure for indefinite hypergeometric
   summation, *Proc. Natl. Acad. Sci. USA* 75 (1978), 40-42.
+- [GR04] G. Gasper, M. Rahman, *Basic Hypergeometric Series*, 2nd ed.,
+  Encyclopedia of Mathematics and its Applications 96, Cambridge University
+  Press 2004.
 - [Gru96] D. Gruntz, *On Computing Limits in a Symbolic Manipulation
   System*, Diss. ETH Zürich 1996.
 - [GS89] K. O. Geddes, L. Y. Stefanus, On the Risch-Norman integration
@@ -2505,6 +2725,11 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 - [Len76] W. J. Lentz, Generating Bessel functions in Mie scattering
   calculations using continued fractions, *Applied Optics* 15 (1976),
   668-671.
+- [Koe14] W. Koepf, *Hypergeometric Summation: An Algorithmic Approach to
+  Summation and Special Function Identities*, 2nd ed., Universitext,
+  Springer 2014.
+- [Koo93] T. H. Koornwinder, On Zeilberger's algorithm and its q-analogue,
+  *J. Comput. Appl. Math.* 48 (1993), 91-111.
 - [Loo83] R. Loos, Computing in algebraic extensions, in: B. Buchberger,
   G. E. Collins, R. Loos (eds.), *Computer Algebra: Symbolic and Algebraic
   Computation*, 2nd ed., Springer 1983, 173-187.
@@ -2524,6 +2749,8 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   Methods in Theoretical Physics*, Marseille 1977, 99-110.
 - [Pol75] J. M. Pollard, A Monte Carlo method for factorization, *BIT* 15
   (1975), 331-334.
+- [Pet92] M. Petkovšek, Hypergeometric solutions of linear recurrences
+  with polynomial coefficients, *J. Symbolic Comput.* 14 (1992), 243-264.
 - [PTVF07] W. H. Press, S. A. Teukolsky, W. T. Vetterling, B. P. Flannery,
   *Numerical Recipes*, 3rd ed., Cambridge University Press 2007.
 - [PWZ96] M. Petkovšek, H. S. Wilf, D. Zeilberger, *A = B*, A K Peters
@@ -2561,6 +2788,8 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   SYMSAC '76*, ACM 1976, 26-35.
 - [Zas69] H. Zassenhaus, On Hensel factorization I, *J. Number Theory* 1
   (1969), 291-311.
+- [Zei91] D. Zeilberger, The method of creative telescoping, *J. Symbolic
+  Comput.* 11 (1991), 195-204.
 - [Zor15] V. A. Zorich, *Mathematical Analysis I*, 2nd ed., Universitext,
   Springer 2015, §5.7 (primitives of rational functions of x and a root,
   of exp, and of sin and cos).

@@ -1,24 +1,53 @@
 # frozen_string_literal: true
 
 module RCAS
-  # Linear recurrences with constant coefficients.
+  # Linear recurrences.
   #
   #   rsolve(eq(u(n + 2), u(n + 1) + u(n)), u, n)                       # general solution
   #   rsolve(eq(u(n + 2), u(n + 1) + u(n)), u, n, init: {0 => 0, 1 => 1})  # Fibonacci
   #   rsolve(eq(u(n + 1), 2*u(n) + 1), u, n, init: {0 => 0})            # => -1 + 2**n
+  #   rsolve(eq(u(n + 1), n*u(n)), u, n)                                # => C1*(n - 1)!
   #
   # In bin/rcas an undefined name applied to arguments, u(n + 1), is the
-  # unknown sequence. The homogeneous solution comes from the characteristic
-  # roots (multiplicities give n, n**2, ... factors); a forcing term that is
-  # a sum of polynomials times b**n goes through undetermined coefficients;
-  # initial values fix the constants through a linear system.
+  # unknown sequence. With constant coefficients the homogeneous solution
+  # comes from the characteristic roots (multiplicities give n, n**2, ...
+  # factors) and a forcing term that is a sum of polynomials times b**n goes
+  # through undetermined coefficients; with coefficients that depend on n,
+  # Petkovsek's algorithm gives the hypergeometric solutions, and rsolve
+  # writes down the general solution only when there are as many of them as
+  # the order of the recurrence (`hyper` lists them either way). Initial
+  # values fix the constants through a linear system.
   #
-  # Sources (keys: MANUAL.md, Sources): [GKP94, §7.3]; the method is the
-  # discrete twin of ode.rb's.
+  # Sources (keys: MANUAL.md, Sources): [GKP94, §7.3]; the constant-coefficient
+  # method is the discrete twin of ode.rb's; [Pet92] and [Koe14, ch. 9] for
+  # the rest (petkovsek.rb).
   module Recurrence
     module_function
 
     def rsolve(equation, u, n, init: {})
+      name, n, coeffs, forcing = normalize(equation, u, n)
+      constants = []
+      general =
+        if coeffs.any? { |c| c.variables.include?(n.name) }
+          hypergeometric_solution(coeffs, forcing, n, constants)
+        else
+          constant_coefficient_solution(coeffs, forcing, n, constants)
+        end
+      general = initial_values(general, init, n, constants) unless init.empty?
+      Equation.new(Fn.new(name, [n]), general)
+    end
+
+    # Petkovsek's `Hyper`: the hypergeometric solutions of a homogeneous
+    # recurrence, as terms, without the constants rsolve puts in front.
+    def hyper(equation, u, n)
+      _, n, coeffs, forcing = normalize(equation, u, n)
+      raise NotImplementedError, "hyper: #{equation} is not homogeneous" unless Scalar.zero?(forcing)
+      Petkovsek.solutions(coeffs, n)
+    end
+
+    # [name, index, [p_0, ..., p_r], forcing] of the equation read as
+    # sum_j p_j(n)*u(n + j) = forcing(n).
+    def normalize(equation, u, n)
       n = Expression.lift(n)
       raise ArgumentError, "rsolve: the index must be a symbol, got #{n}" unless n.is_a?(Var)
       name = sequence_name(u)
@@ -37,18 +66,60 @@ module RCAS
       g = f.subs(shifts.to_h { |t, k| [t, ds[k]] })
       raise NotImplementedError, "only linear recurrences are supported" unless Solve.linear_in?(g, ds)
       coeffs = ds.map { |d| Solve.polynomial_coefficients(g, d)[1] || Num.new(0) }
-      coeffs.each do |c|
-        raise NotImplementedError, "coefficient #{c} depends on #{n}; only constant coefficients are supported" if c.variables.include?(n.name)
-      end
       forcing = Simplify.negate(g.subs(ds.to_h { |d| [d, Num.new(0)] })).simplify
+      coeffs, forcing = clear_denominators(coeffs, forcing, n)
+      [name, n, coeffs, forcing]
+    end
 
+    # u(n + 1) = (2*n + 3)*u(n)/(n + 2) is the same recurrence as
+    # (n + 2)*u(n + 1) - (2*n + 3)*u(n) = 0, and Petkovsek needs the second
+    # form: multiply through by the common denominator.
+    def clear_denominators(coeffs, forcing, n)
+      parts = coeffs + [forcing]
+      return [coeffs, forcing] if parts.all? { |c| Solve.polynomial_coefficients(c, n) }
+      vars = parts.flat_map { |c| c.variables.to_a }.uniq | [n.name]
+      ring = QQ[*vars]
+      common = ring.one
+      parts.each do |c|
+        pair = Fraction.as_fraction(c, vars) or return [coeffs, forcing]
+        common = common.lcm(pair.last)
+      end
+      return [coeffs, forcing] if common.constant?
+      factor = common.to_expr
+      [coeffs.map { |c| (c * factor).cancel.expand }, (forcing * factor).cancel.expand]
+    rescue DomainError, NotImplementedError, ZeroDivisionError
+      [coeffs, forcing]
+    end
+
+    # Constant coefficients: characteristic roots and undetermined
+    # coefficients, the discrete twin of dsolve's.
+    def constant_coefficient_solution(coeffs, forcing, n, constants)
       roots = Solve.polynomial_roots(coeffs).map(&:simplify)
-      constants = []
       homogeneous = homogeneous_solution(roots, n, constants)
       particular = Scalar.zero?(forcing) ? Num.new(0) : (undetermined_coefficients(coeffs, forcing, roots, n) || raise(NotImplementedError, "no method for the forcing term #{forcing}"))
-      general = (homogeneous + particular).simplify
-      general = initial_values(general, init, n, constants) unless init.empty?
-      Equation.new(Fn.new(name, [n]), general)
+      (homogeneous + particular).simplify
+    end
+
+    # Coefficients that depend on n: Petkovsek's algorithm. As many
+    # independent hypergeometric solutions as the order of the recurrence
+    # span its solution space; with fewer, the missing ones are not
+    # hypergeometric and the general solution cannot be written down, so we
+    # say so rather than pass off a part of it as the whole.
+    def hypergeometric_solution(coeffs, forcing, n, constants)
+      unless Scalar.zero?(forcing)
+        raise NotImplementedError, "rsolve: polynomial coefficients with the forcing term #{forcing} are not supported"
+      end
+      order = coeffs.size - 1
+      found = Petkovsek.solutions(coeffs, n)
+      raise NotImplementedError, "rsolve: no hypergeometric solutions (see hyper)" if found.empty?
+      if found.size < order
+        raise NotImplementedError, "rsolve: only #{found.size} of #{order} solutions are hypergeometric: " \
+                                   "#{found.map(&:to_s).join(', ')} (see hyper)"
+      end
+      found.map do |t|
+        constants << Var.new(:"C#{constants.size + 1}")
+        constants.last * t
+      end.reduce(:+).simplify
     end
 
     def sequence_name(u)

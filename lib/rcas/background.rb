@@ -77,12 +77,44 @@ module RCAS
       taylor: :series,
       sum: {
         maths: "A closed form for a finite or infinite sum, so that sum(k**2, k: 1..n) becomes a polynomial in n rather than a loop.",
-        method: "Polynomials by Faulhaber's formula through Newton interpolation [GKP94]; hypergeometric terms by Gosper's algorithm, which decides whether an antidifference exists [Gos78]; 1/n**s by the zeta function; classical power series recognised from the ratio of consecutive terms."
+        method: "Polynomials by Faulhaber's formula through Newton interpolation [GKP94]; hypergeometric terms by Gosper's algorithm, which decides whether an antidifference exists [Gos78]; 1/n**s by the zeta function; classical power series recognised from the ratio of consecutive terms; a definite sum in one other variable by creative telescoping, whose recurrence is then solved [Zei91]."
       },
       product: {
         maths: "The product analogue of sum: prod(k, k: 1..n) is n!, and a polynomial factor gives ratios of gamma values since prod(k + r) = gamma(b + r + 1)/gamma(a + r).",
         method: "The term is split into factors: constants give powers, a**u(k) gives a**sum(u), and a polynomial is factored into linear factors over QQ [GKP94, §5.5]."
       },
+
+      sumrecursion: {
+        maths: "Zeilberger's algorithm, creative telescoping: a definite hypergeometric sum such as sum_k binomial(n, k)**2 satisfies a linear recurrence in n, and that recurrence is what a computer can find and prove even when the sum itself has no closed form.",
+        method: "Gosper's algorithm applied to a whole pencil sum_j sigma_j*F(n + j, k) at once: dividing by F(n, k) leaves rational functions, the sigmas sit linearly in the c part of the Gosper-Petkovsek normal form, and one null space gives the sigmas and the certificate together [Zei91], [Koe14, ch. 7]. Carrying the identity over to the sum needs the boundary terms to vanish, which is checked."
+      },
+      sumcertificate: :sumrecursion,
+      hyper: {
+        maths: "Petkovsek's algorithm: the hypergeometric solutions of a linear recurrence with polynomial coefficients, that is the solutions whose ratio u(n + 1)/u(n) is rational. As many of them as the order of the recurrence span its solution space; fewer means the rest are not hypergeometric.",
+        method: "Every such ratio is z*a(n)/b(n)*c(n + 1)/c(n) with a dividing p_0, b dividing p_r(n + r - 1) and gcd(a(n), b(n + h)) = 1 for h >= 0, so the monic divisors are run through, the possible z read off the leading coefficients, and the polynomial c found with a degree bound of Abramov's [Pet92], [Koe14, ch. 9], [PWZ96, ch. 8]."
+      },
+      qbinomial: {
+        maths: "The q-analogues: [n]_q = 1 + q + ... + q**(n - 1) becomes n as q approaches 1, and with it the q-factorial, the Gaussian binomial coefficient and the q-Pochhammer symbol (a; q)_n = (1 - a)(1 - a*q)...(1 - a*q**(n - 1)), which plays the part the rising factorial plays for ordinary hypergeometric terms.",
+        method: "Integer arguments fold to polynomials in q; symbolic ones stay as they are and the algorithms expand them into q-Pochhammer symbols themselves [Koe14, ch. 10], [GR04, ch. 1]."
+      },
+      qpochhammer: :qbinomial,
+      qfactorial: :qbinomial,
+      qbracket: :qbinomial,
+      qsum: {
+        maths: "The q-analogue of Gosper's algorithm: a term is q-hypergeometric when t(k + 1)/t(k) is a rational function of q**k, and the question is again whether it has an antidifference of the same kind.",
+        method: "With x = q**k the shift k -> k + 1 becomes x -> q*x, and Gosper's steps go through unchanged: the q-Gosper-Petkovsek normal form a(x)/b(x)*c(q*x)/c(x) with gcd(a(x), b(q**h*x)) = 1 for h >= 0, then a polynomial X with a(x)*X(q*x) - b(x/q)*X(x) = c(x) [Koo93], [Koe14, ch. 11]."
+      },
+      qgosper: :qsum,
+      qsumrecursion: {
+        maths: "Zeilberger's algorithm in the q-world: the recurrence a definite q-hypergeometric sum obeys, which is how identities such as the q-binomial theorem are proved.",
+        method: "q-Gosper applied to the pencil sum_j sigma_j*F(n + j, k), with x = q**k and y = q**n; the sigmas come out rational in q**n [Koe14, ch. 12], [Zei91]."
+      },
+      qsumcertificate: :qsumrecursion,
+      qsolve: {
+        maths: "Linear q-difference equations, p_0(x)*f(x) + ... + p_r(x)*f(q**r*x) = 0, and their q-hypergeometric solutions. At x = q**n such a solution is a product of q-Pochhammer symbols and powers, which is the form these answers are written in.",
+        method: "Petkovsek's algorithm with the shift x -> q*x: divisors of p_0 and of p_r(q**(r - 1)*x), the possible z from the leading coefficients, and a polynomial c whose degree is read off the roots of sum_j lc(Q_j)*(q**d)**j [APP98], [Koe14, ch. 12]."
+      },
+      qhyper: :qsolve,
 
       # ---- equations -------------------------------------------------------------
       solve: {
@@ -99,8 +131,8 @@ module RCAS
         method: "First order by separation of variables or the integrating factor; constant coefficients by the roots of the characteristic polynomial, with x**j factors for repeated roots; forcing terms by undetermined coefficients, otherwise variation of parameters [BD12]."
       },
       rsolve: {
-        maths: "The discrete twin of dsolve: a linear recurrence with constant coefficients, solved in closed form, so the Fibonacci rule gives Binet's formula.",
-        method: "Characteristic roots for the homogeneous part, undetermined coefficients for a polynomial times b**n, and initial values fixed by a linear system [GKP94, §7.3]."
+        maths: "The discrete twin of dsolve: a linear recurrence solved in closed form, so the Fibonacci rule gives Binet's formula and u(n + 1) = n*u(n) gives the factorial.",
+        method: "Constant coefficients: characteristic roots for the homogeneous part, undetermined coefficients for a polynomial times b**n, initial values fixed by a linear system [GKP94, §7.3]. Coefficients that depend on n: Petkovsek's algorithm for the hypergeometric solutions, and a general solution only when there are as many of them as the order of the recurrence [Pet92]."
       },
       interpolate: { maths: "The unique polynomial of degree below n through n points with distinct nodes.", method: "Newton's divided differences, in exact arithmetic, so rational or symbolic data gives an exact polynomial [Knu98, §4.6.4]." },
       resultant: {
@@ -333,7 +365,13 @@ module RCAS
       integrate: ["Symbolic integration", "Risch algorithm", "Integration by parts"],
       limit: ["Limit of a function"],
       series: ["Taylor series", "Puiseux series"],
-      sum: ["Summation", "Faulhaber's formula", "Gosper's algorithm"],
+      sum: ["Summation", "Faulhaber's formula", "Gosper's algorithm", "Hypergeometric identity"],
+      sumrecursion: ["Wilf-Zeilberger pair", "Hypergeometric identity", "Doron Zeilberger"],
+      hyper: ["Petkovsek's algorithm", "Recurrence relation", "Hypergeometric identity"],
+      qbinomial: ["Gaussian binomial coefficient", "Q-Pochhammer symbol", "Q-analog"],
+      qsum: ["Basic hypergeometric series", "Gosper's algorithm", "Quantum calculus"],
+      qsumrecursion: ["Basic hypergeometric series", "Wilf-Zeilberger pair"],
+      qsolve: ["Basic hypergeometric series", "Q-derivative", "Quantum calculus"],
       product: ["Factorial", "Gamma function"],
       solve: ["Algebraic equation", "System of polynomial equations"],
       groebner: ["Buchberger's algorithm", "Monomial order"],

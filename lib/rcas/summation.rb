@@ -27,7 +27,10 @@ module RCAS
   #
   # Polynomials in k get their closed form directly; other terms go through
   # Gosper's algorithm, which finds an antidifference whenever the term is
-  # hypergeometric and one exists. Anything else stays an unevaluated Sum.
+  # hypergeometric and one exists. A definite sum in one other variable is
+  # then tried with creative telescoping (zeilberger.rb): the recurrence it
+  # yields is solved and the answer checked against the sum itself. Anything
+  # else stays an unevaluated Sum.
   #
   # Sources (keys: MANUAL.md, Sources): power sums by Newton interpolation
   # and Bernoulli numbers, zeta(2m) [GKP94, §6.5]; Euler-Maclaurin tail for
@@ -51,6 +54,7 @@ module RCAS
       end
 
       # sum_{k=0}^{n} binomial(n, k) ... is the full series (terms vanish beyond n)
+      upper = to
       binomial_top = f.each_node.find { |e| e.is_a?(Fn) && e.name == :binomial && e.args.first == to && e.args.last == k }
       to = OO if binomial_top
 
@@ -62,10 +66,32 @@ module RCAS
       if to == OO && (known = classical_series(f, k, from))
         return known
       end
+      if (telescoped = creative_telescoping(f, k, from, upper))
+        return telescoped
+      end
       direct = direct_sum(f, k, from, to)
       return direct if direct
       return Fn.new(:harmonic, [to]) if from == Num.new(1) && !Limits.infinite?(to) && Scalar.one?((f * k).simplify) # sum 1/k = H_n
       Sum.new(f, k, from, to)
+    end
+
+    # A definite sum in one other variable, over bounds that make the terms
+    # outside them vanish: Zeilberger's algorithm gives a recurrence for the
+    # sum, and the recurrence is solved.
+    def creative_telescoping(f, k, from, to)
+      return nil unless from.is_a?(Num) && from.value.is_a?(Integer)
+      outer = (f.variables - [k.name]).to_a
+      return nil unless outer.size == 1
+      n = Var.new(outer.first)
+      return nil unless to == n || Limits.infinite?(to)
+      return nil unless term_ratio(f, k) && term_ratio(f, n)
+      # Order 1 only: a sum whose closed form is hypergeometric satisfies a
+      # first-order recurrence, and the higher orders are expensive on terms
+      # like binomial(n, k)**4 that have no closed form anyway. sumrecursion
+      # goes further when asked.
+      Zeilberger.closed_form(f, n, k, from, to == n ? to : n, max_order: 1)
+    rescue DomainError, NotImplementedError, ZeroDivisionError
+      nil
     end
 
     # Ratio of consecutive terms as a rational function of k (binomials and
@@ -193,14 +219,7 @@ module RCAS
       return nil unless ring.vars.include?(k.name)
       kn = k.name
 
-      a, b, c = p, q, ring.one
-      dispersion(a, b, kn).each do |h|
-        g = a.gcd(shift(b, k, h))
-        next if g.constant?
-        a = a.exact_div(g)
-        b = b.exact_div(shift(g, k, -h))
-        (1..h).each { |i| c *= shift(g, k, -i) }
-      end
+      a, b, c = normal_form(p, q, k)
 
       bm = shift(b, k, -1)
       d = degree_bound(a, bm, c, kn) or return nil
@@ -215,6 +234,21 @@ module RCAS
       Scalar.zero?(check) || numerically_zero?(check, k) ? g : nil
     rescue DomainError, NotImplementedError, ZeroDivisionError
       nil
+    end
+
+    # Gosper-Petkovsek normal form of a term ratio: polynomials a, b, c with
+    # p(k)/q(k) = a(k)/b(k) * c(k + 1)/c(k) and gcd(a(k), b(k + h)) = 1 for
+    # every integer h >= 0. Zeilberger's algorithm uses it too.
+    def normal_form(p, q, k)
+      a, b, c = p, q, p.ring.one
+      dispersion(a, b, k.name).each do |h|
+        g = a.gcd(shift(b, k, h))
+        next if g.constant?
+        a = a.exact_div(g)
+        b = b.exact_div(shift(g, k, -h))
+        (1..h).each { |i| c *= shift(g, k, -i) }
+      end
+      [a, b, c]
     end
 
     def shift(poly, k, h) = poly.ring.call(poly.to_expr.subs(k => k + h))

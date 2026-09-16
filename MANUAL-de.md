@@ -53,6 +53,7 @@ Namen, die unten benutzt werden.
     - [Reihen](#reihen)
     - [Grenzwerte](#grenzwerte)
     - [Summen](#summen)
+    - [Bestimmte Summen: kreatives Teleskopieren](#bestimmte-summen-kreatives-teleskopieren)
     - [Produkte](#produkte)
     - [hold und evaluate](#hold-und-evaluate)
     - [Fakultäten, Binomialkoeffizienten, Gamma](#fakultäten-binomialkoeffizienten-gamma)
@@ -82,7 +83,10 @@ Namen, die unten benutzt werden.
     - [Konfidenzintervalle](#konfidenzintervalle)
   - [1.11 Grafik](#111-grafik)
     - [Statistische Grafiken](#statistische-grafiken)
-  - [1.12 Hinweise zur Geschwindigkeit](#112-hinweise-zur-geschwindigkeit)
+  - [1.12 Die q-Analoga](#112-die-q-analoga)
+    - [q-Summation](#q-summation)
+    - [q-Differenzengleichungen](#q-differenzengleichungen)
+  - [1.13 Hinweise zur Geschwindigkeit](#113-hinweise-zur-geschwindigkeit)
 - [2. Referenz](#2-referenz)
 - [3. Dateien](#3-dateien)
 - [4. Quellen](#4-quellen)
@@ -325,11 +329,15 @@ rcas> dsolve([eq(D(x, t), y), eq(D(y, t), -x)], [x, y], t)
 => [x = C1*sin(t) + C2*cos(t), y = C1*cos(t) - C2*sin(t)]
 rcas> [legendre(3, 7), order(3, 7)]
 => [-1, 6]
+rcas> sumrecursion(binomial(n, k)**2, k, s(n))
+=> s(n)*(-2 - 4*n) + s(1 + n)*(1 + n) = 0
+rcas> qsolve(eq(u(q*x), (1 - t*x)*u(x)), u, x, q)
+=> u(q**n) = C1*qpochhammer(t, q, n)
 ```
 
 Weiterlesen: 1.5 Bereiche und Annahmen, 1.6 Polynomringe,
-1.8 Differentialgleichungen und Rekursionen, und Abschnitt 4, Quellen, für
-die Algorithmen und ihre Herkunft.
+1.8 Differentialgleichungen und Rekursionen, 1.12 Die q-Analoga, und
+Abschnitt 4, Quellen, für die Algorithmen und ihre Herkunft.
 
 Jeder Name erklärt sich selbst: `doc(:factor)` (oder `/help factor` im
 Chat) liefert die Signatur, was die Operation mathematisch ist, wie rcas
@@ -988,6 +996,66 @@ rcas> sum(1/k, k: 1..n)
 => harmonic(n)
 ```
 
+#### Bestimmte Summen: kreatives Teleskopieren
+
+Gospers Algorithmus beantwortet die *unbestimmte* Frage, ob ein Term eine
+Antidifferenz hat. Bei einer bestimmten Summe wie
+`sum(binomial(n, k)**2, k: 0..n)` steht eine zweite Frage im Raum, und
+Zeilbergers Algorithmus beantwortet sie: die Summe erfüllt eine lineare
+Rekursion in `n`, und der Algorithmus findet eine samt Beweis.
+
+`sumrecursion(F, k, s(n))` liefert diese Rekursion für
+`S(n) = sum_k F(n, k)` in einer Folge, die Sie benennen, so dass `rsolve`
+weitermachen kann.
+
+```
+rcas> sumrecursion(binomial(n, k)**2, k, s(n))
+=> s(n)*(-2 - 4*n) + s(1 + n)*(1 + n) = 0
+rcas> rsolve(Out[-1], s, n, init: {0 => 1})
+=> s(n) = 2**(2*n)*gamma(1/2 + n)/(pi**(1/2)*n!)
+```
+
+`sum` tut dasselbe von sich aus, wenn nichts Einfacheres greift; die
+geschlossene Form einer bestimmten hypergeometrischen Summe kommt also in
+einem Schritt. Hier ist sie `binomial(2*n, n)`, geschrieben mit der
+Gammafunktion (Abschnitt 1.3, *Fakultäten, Binomialkoeffizienten, Gamma*,
+sagt, warum Produkte linearer Faktoren so aussehen).
+
+```
+rcas> sum(binomial(n, k)**2, k: 0..n)
+=> 2**(2*n)*gamma(1/2 + n)/(pi**(1/2)*n!)
+rcas> Out[-1].subs(n => 5).simplify
+=> 252
+```
+
+Die Ordnung der Rekursion ist die, welche die Summe braucht. Drei
+Binomialkoeffizienten brauchen zwei, und dann gibt es überhaupt keine
+hypergeometrische geschlossene Form mehr - die Rekursion ist alles, was da
+ist, und `sum` sagt das, indem es unausgewertet bleibt:
+
+```
+rcas> sumrecursion(binomial(n, k)**3, k, s(n))
+=> s(1 + n)*(-16 - 21*n - 7*n**2) + s(n)*(-8 - 16*n - 8*n**2) + s(2 + n)*(4 + 4*n + n**2) = 0
+rcas> sum(binomial(n, k)**3, k: 0..n)
+=> sum(binomial(n, k)**3, k, 0, oo)
+```
+
+`sumcertificate(F, k, s(n))` gibt die rationale Funktion `R` dahinter: mit
+`G(k) = R*F(n, k)` lässt sich die Identität
+`sum_j sigma_j*F(n + j, k) = G(k + 1) - G(k)` von Hand nachrechnen, und ihre
+Summation über `k` ist der Beweis der Rekursion.
+
+```
+rcas> sumcertificate(binomial(n, k), k, s(n))
+=> k/(-1 + k - n)
+```
+
+Dieser letzte Schritt verlangt, dass die Randterme verschwinden, dass also
+`F(n, k) = 0` außerhalb des summierten Bereichs gilt. Binomialkoeffizienten
+sorgen selbst dafür; ein Term wie `binomial(n, k)/(k + 1)` mit seinem Pol
+bei `k = -1` nicht, und statt eine Rekursion zurückzugeben, der die Summe
+gar nicht genügt, sagt `sumrecursion`, woran es liegt.
+
 #### Produkte
 
 `product(f, k, a, b)` oder `product(f, k: a..b)`. Konstanten geben Potenzen,
@@ -1236,13 +1304,13 @@ Gleichungsobjekte beherrschen seitenweises Rechnen, `subs`, `swap`,
 `holds?`, `lhs`, `rhs` und `solve`.
 
 ```
-rcas> q = eq(x + 1, 3)
+rcas> eqn = eq(x + 1, 3)
 => x + 1 = 3
-rcas> (q - 1).simplify
+rcas> (eqn - 1).simplify
 => x = 2
-rcas> q.solve
+rcas> eqn.solve
 => [2]
-rcas> q.holds?(x: 2)
+rcas> eqn.holds?(x: 2)
 => true
 ```
 
@@ -1923,6 +1991,37 @@ rcas> rsolve(eq(u(n + 1), 3*u(n) + 2**n), u, n)
 => u(n) = -2**n + 3**n*C1
 ```
 
+**Polynomiale Koeffizienten.** Hängt ein Koeffizient von `n` ab, hat das
+charakteristische Polynom nichts mehr zu sagen und Petkovšeks Algorithmus
+übernimmt. Er findet die *hypergeometrischen* Lösungen, also die, deren
+Verhältnis `u(n + 1)/u(n)` eine rationale Funktion ist - genau das, was
+eine Fakultät ist:
+
+```
+rcas> rsolve(eq(u(n + 1), n*u(n)), u, n)
+=> u(n) = C1*(-1 + n)!
+rcas> rsolve(eq(u(n + 1), 2*(n + 1)*u(n)), u, n, init: {0 => 1})
+=> u(n) = 2**n*n!
+rcas> rsolve(eq((n + 2)*u(n + 1), u(n)), u, n)
+=> u(n) = C1/(1 + n)!
+```
+
+Eine Rekursion der Ordnung `r` hat einen `r`-dimensionalen Lösungsraum, und
+erst ebenso viele hypergeometrische Lösungen spannen ihn auf. `hyper`
+listet auf, was es gibt, und `rsolve` gibt einen Teil des Lösungsraums
+nicht als das Ganze aus:
+
+```
+rcas> hyper(eq((n + 2)*u(n + 2), (2*n + 3)*u(n + 1) - (n + 1)*u(n)), u, n)
+=> [1]
+rcas> hyper(eq(u(n + 2), u(n + 1) + (n + 1)*u(n)), u, n)
+=> []
+```
+
+Die erste hat die konstante Lösung und eine zweite, die nicht
+hypergeometrisch ist, weshalb `rsolve` eine von zwei meldet; die zweite hat
+gar keine.
+
 #### Systeme
 
 `dsolve` nimmt eine Liste von Gleichungen und eine Liste unbekannter
@@ -2333,7 +2432,111 @@ verloren gehen; der y-Bereich wird auf die mittleren 96 Prozent der
 abgetasteten Werte beschnitten, wenn eine Polstelle das Bild sonst
 plattdrücken würde.
 
-### 1.12 Hinweise zur Geschwindigkeit
+### 1.12 Die q-Analoga
+
+Ersetzt man die ganze Zahl `n` durch `[n]_q = 1 + q + ... + q**(n - 1)`,
+bekommt jede Formel dieses Kapitels einen Zwilling. Geht `q` gegen 1, wird
+aus dem Zwilling wieder das Original, und unterwegs sagt er mehr: der
+Gaußsche Binomialkoeffizient zählt Unterräume eines Vektorraums über einem
+Körper mit `q` Elementen, wo der gewöhnliche Teilmengen zählt.
+
+```
+rcas> qbracket(5, q)
+=> 1 + q + q**2 + q**3 + q**4
+rcas> qbinomial(4, 2, q)
+=> 1 + q + 2*q**2 + q**3 + q**4
+rcas> qbinomial(4, 2, q).subs(q => 1).simplify
+=> 6
+rcas> qfactorial(3, q)
+=> 1 + 2*q + 2*q**2 + q**3
+```
+
+Alles ruht auf dem q-Pochhammer-Symbol
+`(a; q)_n = (1 - a)(1 - a*q)...(1 - a*q**(n - 1))`, das die Rolle spielt,
+die bei gewöhnlichen hypergeometrischen Termen die steigende Fakultät hat:
+`qfactorial(n, q)` ist `(q; q)_n/(1 - q)**n` und `qbinomial(n, k, q)` ist
+`(q; q)_n/((q; q)_k*(q; q)_(n - k))`. Ganzzahlige Argumente rechnen sich
+aus, symbolische bleiben stehen, und die Algorithmen entfalten sie selbst.
+
+```
+rcas> qpochhammer(t, q, 3)
+=> (1 - q**2*t)*(1 - q*t)*(1 - t)
+```
+
+#### q-Summation
+
+Ein Term heißt *q-hypergeometrisch*, wenn `t(k + 1)/t(k)` eine rationale
+Funktion von `q**k` ist statt von `k`. Schreibt man `x` für `q**k`, wird aus
+der Verschiebung `k -> k + 1` die Streckung `x -> q*x`, und Gospers
+Algorithmus geht mit dieser einen Änderung durch. `qgosper(f, q, k)` ist die
+q-Antidifferenz, `qsum(f, q, k: a..b)` die bestimmte Summe; die geometrische
+Reihe ist das q-Analogon von `sum(1, k: 0..n-1) = n`:
+
+```
+rcas> qgosper(q**k, q, k)
+=> q**k/(-1 + q)
+rcas> qsum(q**k, q, k: 0..n-1)
+=> -1/(-1 + q) + q**n/(-1 + q)
+```
+
+Diese Antwort ist `[n]_q`. Eine Summe ohne q-Antidifferenz bleibt
+unausgewertet, wie eine gewöhnliche auch:
+
+```
+rcas> qsum(qbinomial(n, k, q), q, k: 0..n)
+=> sum(qbinomial(n, k, q), k, 0, n)
+```
+
+`qsumrecursion(F, k, q, s(n))` ist Zeilbergers Algorithmus in der q-Welt:
+er beweist eine Identität, indem er die Rekursion findet, der beide Seiten
+genügen. Hier der q-binomische Satz, dessen Summe `(-z; q)_n` ist:
+
+```
+rcas> qsumrecursion(qbinomial(n, k, q)*q**(k*(k - 1)/2)*z**k, k, q, s(n))
+=> s(1 + n) + s(n)*(-1 - q**n*z) = 0
+```
+
+und zuletzt die Summe aller Gaußschen Binomialkoeffizienten einer Zeile
+(die Galois-Zahlen), die eine Rekursion zweiter Ordnung erfüllt:
+
+```
+rcas> qsumrecursion(qbinomial(n, k, q), k, q, s(n))
+=> -2*s(1 + n) + s(2 + n) + s(n)*(1 - q**(1 + n)) = 0
+```
+
+#### q-Differenzengleichungen
+
+Eine q-Differenzengleichung verbindet `f(x)`, `f(q*x)`, `f(q**2*x)`, ... so
+wie eine Rekursion `u(n)`, `u(n + 1)`, `u(n + 2)` verbindet. Die Einsetzung
+`x = q**n` macht aus der einen die andere, und deshalb meldet `qsolve`
+seine Antworten bei `x = q**n`: dort ist eine q-hypergeometrische Lösung ein
+Produkt aus q-Pochhammer-Symbolen und Potenzen.
+
+`qsolve(equation, f, x, q)` findet die q-hypergeometrischen Lösungen mit
+Petkovšeks Algorithmus, mit `x -> q*x` anstelle von `n -> n + 1`. Das
+q-Pochhammer-Symbol löst seine eigene Gleichung, und die Rekursion, die der
+q-binomische Satz oben ergab, ist genau von dieser Art:
+
+```
+rcas> qsolve(eq(u(q*x), (1 - t*x)*u(x)), u, x, q)
+=> u(q**n) = C1*qpochhammer(t, q, n)
+rcas> qsolve(eq(u(q*x), (1 + z*x)*u(x)), u, x, q)
+=> u(q**n) = C1*qpochhammer(-z, q, n)
+rcas> qsolve(eq((1 - x)*u(q*x), u(x)), u, x, q)
+=> u(q**n) = C1/qpochhammer(q, q, -1 + n)
+```
+
+Die letzte beginnt ihr Produkt hinter der Nullstelle von `(1; q)_n`, so wie
+`rsolve` auf `u(n + 1) = n*u(n)` mit `(n - 1)!` antwortet. `qhyper` listet
+die Verhältnisse `f(q*x)/f(x)` selbst auf und ist leer, wenn es nichts
+q-Hypergeometrisches zu finden gibt - bei der q-Airy-Gleichung etwa:
+
+```
+rcas> qhyper(eq(u(q**2*x), u(q*x) + x*u(x)), u, x, q)
+=> []
+```
+
+### 1.13 Hinweise zur Geschwindigkeit
 
 `expand` und die Umwandlung in Polynome fassen gleiche Terme schon beim
 Multiplizieren zusammen, ein Produkt vieler Summen erzeugt also nie mehr
@@ -2375,11 +2578,13 @@ Funktionen der obersten Ebene (bloß in `bin/rcas`, sonst `RCAS.name`):
 | Konstanten | `PI E I oo` (bloß `pi`, `π`, `oo`, `∞`) |
 | Auswerten | `subs evalf` |
 | Analysis | `integrate diff series taylor limit sum product` |
+| hypergeometrische Summation | `sumrecursion sumcertificate hyper` |
+| q-Analoga | `qbracket qfactorial qbinomial qpochhammer qgosper qsum qsumrecursion qsumcertificate qsolve qhyper` |
 | Numerik | `nsolve nintegrate` |
 | Kurvendiskussion | `critical_points extrema inflections asymptotes tangent normal real_domain` |
 | mehrere Veränderliche | `gradient hessian jacobian divergence curl laplacian lagrange` |
 | Algebra | `solve eq factor groebner reduce interval` |
-| Differentialgleichungen, Rekursionen | `D dsolve rsolve laplace inverse_laplace` |
+| Differentialgleichungen, Rekursionen | `D dsolve rsolve hyper laplace inverse_laplace` |
 | komplexe Zahlen | `re im conj arg` |
 | Runden | `floor ceil round mod` |
 | Folgen | `bernoulli fibonacci harmonic` |
@@ -2408,8 +2613,10 @@ Fourier-Transformationen, Gruppentheorie, Differentialgleichungen mit
 variablen Koeffizienten jenseits der ersten Ordnung, Grenzwerte beschränkter
 Schwingungen (`sin(x)/x` im Unendlichen), Ungleichungen jenseits
 polynomialer, rationaler und Betragsungleichungen, Zahlkörper mit mehr als
-zwei Erzeugern und Zeilbergers Algorithmus für bestimmte hypergeometrische
-Summen.
+zwei Erzeugern, hypergeometrische Lösungen *inhomogener* Rekursionen mit
+polynomialen Koeffizienten, Abramovs rationale Lösungen, der
+Almkvist-Zeilberger-Algorithmus für hyperexponentielle Integrale und
+mehrdimensionale (holonome) Summation.
 
 ## 3. Dateien
 
@@ -2424,6 +2631,13 @@ lib/rcas/integrate.rb       rules, rational functions, Risch-Norman heuristic
 lib/rcas/integrate_substitutions.rb  rationalizing substitutions (roots, exp, sin/cos)
 lib/rcas/series.rb          Puiseux series, limits
 lib/rcas/summation.rb       Faulhaber, Gosper, zeta
+lib/rcas/poly_recurrence.rb polynomial solutions of a linear recurrence
+lib/rcas/petkovsek.rb       hypergeometric solutions of a recurrence
+lib/rcas/zeilberger.rb      creative telescoping for definite sums
+lib/rcas/q_functions.rb     q-Pochhammer, q-bracket, q-factorial, Gaussian binomials
+lib/rcas/q_summation.rb     q-Gosper: q-antidifferences and q-sums
+lib/rcas/q_zeilberger.rb    creative telescoping in the q-world
+lib/rcas/q_difference.rb    q-difference equations (q-Petkovsek)
 lib/rcas/product.rb         symbolic products; Product node
 lib/rcas/recurrence.rb      rsolve: linear recurrences with constant coefficients
 lib/rcas/complex_parts.rb   re, im, conj, arg
@@ -2496,6 +2710,9 @@ Literaturangaben stehen in der Sprache der Werke.
 | Gospers Algorithmus mit der Gradschranke für den Polynomansatz | summation.rb | [Gos78]; [PWZ96, ch. 5] |
 | Produkte: Fakultäts- und Gammaquotienten bei linearen Faktoren, exp von Summen | product.rb | [GKP94, §5.5] |
 | Rekursionen: charakteristische Wurzeln, unbestimmte Koeffizienten, Anfangswerte | recurrence.rb | [GKP94, §7.3] |
+| hypergeometrische Lösungen einer Rekursion mit polynomialen Koeffizienten (Petkovšek), polynomiale Lösungen mit Abramovs Gradschranke | petkovsek.rb, poly_recurrence.rb | [Pet92]; [Koe14, ch. 9]; [PWZ96, ch. 8] |
+| bestimmte hypergeometrische Summen durch kreatives Teleskopieren (Zeilberger), mit rationalem Zertifikat | zeilberger.rb | [Zei91]; [Koe14, ch. 7]; [PWZ96, ch. 6] |
+| q-Analoga: q-Pochhammer und Gaußsche Binomialkoeffizienten, q-Gosper, q-Zeilberger, q-Petkovšek für q-Differenzengleichungen | q_functions.rb, q_summation.rb, q_zeilberger.rb, q_difference.rb | [Koo93]; [Koe14, ch. 10-12]; [APP98]; [GR04] |
 | beschreibende Statistik, Stichprobenquantile (Definition 7), Ausgleichsgerade | statistics.rb | [HF96]; [Ros14, ch. 7] |
 | Verteilungen: Dichten, Verteilungsfunktionen, Momente; Normalverteilung über erf, Quantil durch Bisektion und Newton | distributions.rb | [Ros14, ch. 4-5]; [AS64, §7.1] |
 | unvollständige Gamma- und Betafunktion durch Reihen und Kettenbrüche (Lentz) | special.rb | [AS64, §6.5, §26.5]; [PTVF07, §6.2, §6.4]; [Len76] |
@@ -2527,6 +2744,8 @@ Literaturangaben stehen in der Sprache der Werke.
 | Systeme von Differentialgleichungen über Eigenwerte, mit Jordan-Ketten bei zu wenigen Eigenvektoren | ode.rb | [BD12, ch. 7] |
 | Kongruenzen, Legendre- und Jacobi-Symbol, multiplikative Ordnung, Kettenbrüche | number_theory.rb | [Coh93, §1.4]; [Knu98, §4.5.3]; [HW08, ch. 10] |
 
+- [APP98] S. A. Abramov, P. Paule, M. Petkovšek, q-Hypergeometric
+  solutions of q-difference equations, *Discrete Math.* 180 (1998), 3-22.
 - [AS64] M. Abramowitz, I. A. Stegun (eds.), *Handbook of Mathematical
   Functions*, National Bureau of Standards 1964, ch. 7 (error function).
 - [BD12] W. E. Boyce, R. C. DiPrima, *Elementary Differential Equations and
@@ -2555,6 +2774,9 @@ Literaturangaben stehen in der Sprache der Werke.
   2nd ed., Addison-Wesley 1994.
 - [Gos78] R. W. Gosper, Decision procedure for indefinite hypergeometric
   summation, *Proc. Natl. Acad. Sci. USA* 75 (1978), 40-42.
+- [GR04] G. Gasper, M. Rahman, *Basic Hypergeometric Series*, 2nd ed.,
+  Encyclopedia of Mathematics and its Applications 96, Cambridge University
+  Press 2004.
 - [Gru96] D. Gruntz, *On Computing Limits in a Symbolic Manipulation
   System*, Diss. ETH Zürich 1996.
 - [GS89] K. O. Geddes, L. Y. Stefanus, On the Risch-Norman integration
@@ -2578,6 +2800,11 @@ Literaturangaben stehen in der Sprache der Werke.
 - [Len76] W. J. Lentz, Generating Bessel functions in Mie scattering
   calculations using continued fractions, *Applied Optics* 15 (1976),
   668-671.
+- [Koe14] W. Koepf, *Hypergeometric Summation: An Algorithmic Approach to
+  Summation and Special Function Identities*, 2nd ed., Universitext,
+  Springer 2014.
+- [Koo93] T. H. Koornwinder, On Zeilberger's algorithm and its q-analogue,
+  *J. Comput. Appl. Math.* 48 (1993), 91-111.
 - [Loo83] R. Loos, Computing in algebraic extensions, in: B. Buchberger,
   G. E. Collins, R. Loos (eds.), *Computer Algebra: Symbolic and Algebraic
   Computation*, 2nd ed., Springer 1983, 173-187.
@@ -2597,6 +2824,8 @@ Literaturangaben stehen in der Sprache der Werke.
   Methods in Theoretical Physics*, Marseille 1977, 99-110.
 - [Pol75] J. M. Pollard, A Monte Carlo method for factorization, *BIT* 15
   (1975), 331-334.
+- [Pet92] M. Petkovšek, Hypergeometric solutions of linear recurrences
+  with polynomial coefficients, *J. Symbolic Comput.* 14 (1992), 243-264.
 - [PTVF07] W. H. Press, S. A. Teukolsky, W. T. Vetterling, B. P. Flannery,
   *Numerical Recipes*, 3rd ed., Cambridge University Press 2007.
 - [PWZ96] M. Petkovšek, H. S. Wilf, D. Zeilberger, *A = B*, A K Peters
@@ -2634,6 +2863,8 @@ Literaturangaben stehen in der Sprache der Werke.
   SYMSAC '76*, ACM 1976, 26-35.
 - [Zas69] H. Zassenhaus, On Hensel factorization I, *J. Number Theory* 1
   (1969), 291-311.
+- [Zei91] D. Zeilberger, The method of creative telescoping, *J. Symbolic
+  Comput.* 11 (1991), 195-204.
 - [Zor15] V. A. Zorich, *Mathematical Analysis I*, 2nd ed., Universitext,
   Springer 2015, §5.7 (primitives of rational functions of x and a root,
   of exp, and of sin and cos).

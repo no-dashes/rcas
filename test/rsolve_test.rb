@@ -56,10 +56,32 @@ class RsolveTest < Minitest::Test
     end
   end
 
+  # Polynomial coefficients go through Petkovsek's algorithm.
+  def test_polynomial_coefficients
+    assert_equal "u(n) = C1*(-1 + n)!", rsolve(u(N + 1), N * u(N)).to_s
+    assert_equal "u(n) = n!", rsolve(u(N + 1), (N + 1) * u(N), init: { 1 => 1 }).to_s
+    assert_equal "u(n) = C1/(1 + n)!", rsolve((N + 2) * u(N + 1), u(N)).to_s
+    assert_equal "u(n) = C1/n", rsolve(u(N + 1), N * u(N) / (N + 1)).to_s
+    # 2**n*n! : a power and a factorial together
+    assert_equal "u(n) = 2**n*C1*n!", rsolve(u(N + 1), 2 * (N + 1) * u(N)).to_s
+  end
+
+  def test_hypergeometric_solutions
+    hyper = ->(lhs, rhs) { RCAS.hyper(RCAS::Equation.new(lhs, rhs), :u, :n).map(&:to_s) }
+    assert_equal ["(-1 + n)!"], hyper.call(u(N + 1), N * u(N))
+    assert_equal ["(1/2 - 5**(1/2)/2)**n", "(1/2 + 5**(1/2)/2)**n"], hyper.call(u(N + 2), u(N + 1) + u(N))
+    assert_equal ["1"], hyper.call((N + 2) * u(N + 2), (2 * N + 3) * u(N + 1) - (N + 1) * u(N))
+    assert_empty hyper.call(u(N + 2), u(N + 1) + (N + 1) * u(N)), "no hypergeometric solution"
+  end
+
   def test_unsupported
-    assert_raises(NotImplementedError) { rsolve(u(N + 1), N * u(N)) }
     assert_raises(NotImplementedError) { rsolve(u(N + 1), u(N)**2) }
     assert_raises(ArgumentError) { rsolve(u(N), 3) }
     assert_raises(NotImplementedError) { rsolve(u(2 * N), u(N)) }
+    # one hypergeometric solution of two: the general solution is not ours to write
+    error = assert_raises(NotImplementedError) { rsolve((N + 2) * u(N + 2), (2 * N + 3) * u(N + 1) - (N + 1) * u(N)) }
+    assert_match(/only 1 of 2/, error.message)
+    # polynomial coefficients and a forcing term
+    assert_raises(NotImplementedError) { rsolve(u(N + 1), N * u(N) + 1) }
   end
 end
