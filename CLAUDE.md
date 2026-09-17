@@ -131,6 +131,10 @@ lib/rcas/functions.rb       the top-level functions (bare in irb, RCAS.x elsewhe
 lib/rcas/core_ext.rb        Symbol/Numeric operators, Symbol#in/eq/< ...
 lib/rcas/irb.rb             bin/rcas setup (AutoSymbol, includes, prompt, In/Out hooks)
 lib/rcas/results.rb         In/Out: every input line and its result, numbered (RCAS.numbered puts the number in the prompt)
+lib/rcas/openmath.rb        OpenMath: the entry points openmath/from_openmath, Expression#to_openmath
+lib/rcas/openmath/objects.rb the thirteen object classes of the standard. An OpenMath object is *not* XML; XML is one encoding of it. Four of the standard's names would shadow a Ruby class in the namespace (Integer Float String Object) and two more are taken (Binding, and Symbol means the indeterminate here), so those are Int Double Text Root Bind ContentSymbol. OpenMath::Error is a node (OME), not an exception
+lib/rcas/openmath/xml.rb     the XML encoding, written and read; the reader is hand-rolled over StringScanner because REXML is a bundled gem, not the stdlib
+lib/rcas/openmath/phrasebook.rb  the one table, both directions. No expression class carries a to_openmath of its own: one declaration list builds a decode index keyed by [cd, name] and an encode index keyed by node class / Fn name. Symbol names and argument orders were checked against the official CDs (piece1.piece is (value, condition), transc1.log is (base, x), limit1.limit is (point, direction, lambda)). A symbol with no row decodes to a held Fn named "cd.name", and such an Fn encodes back to the symbol, so an unknown document survives the round trip
 lib/rcas/latex.rb, render.rb, chat.rb, chat/*   typesetting and the chat front end (see below)
 lib/rcas/app.rb             rcas-app: the window front end. A stdlib TCPServer on 127.0.0.1 serves one page and a few JSON routes; App::Window opens a Chromium-family browser with `--app=URL` (borrowed engine, not a bundled one), so closing the window ends the program
 lib/rcas/app/worksheet.rb   the session behind the window: Chat::Workspace + Results, every answer a plain Hash cell { n:, input:, kind:, text:, latex:, svg:, stdout:, hint: }; it borrows Chat::UI#text_of/#typesettable? and Chat::Usage.hint rather than restating those rules
@@ -283,7 +287,10 @@ Grundstudium, Bachelorstudium.
 3. New node class? Add cases to Printer, `latex.rb` (theirs; small
    additive edits are fine, see below), Differentiate, `Infer.domain`,
    `Expression#evalf`, `Expression#evaluate`, and `Hold::FORMAL` if it
-   should stay formal inside `hold`.
+   should stay formal inside `hold`. Also a row in
+   `openmath/phrasebook.rb`: `test/openmath_test.rb` enumerates every
+   `Expression` subclass and fails when one has none (the audit
+   `LaTeX.print` went a year without).
 4. New value type inside `Num`? Check `Simplify.normalize_number`,
    `pow_number`, Printer.number/number_precedence (`printer_precedence`
    hook), `Scalar`, `NumberSet.of` / `Infer` (see `Num#finite_field?`).
@@ -615,6 +622,14 @@ in the repo.
 - Folding `Num` results back into a coefficient must skip the imaginary
   unit (`Simplify.imaginary_unit?`) or `i` disappears into a Complex
   coefficient and prints as `(1/2*i)`.
+- **Never `include RCAS::Functions` in a test class.** `Functions#diff`
+  overrides `Minitest::Assertions#diff`, so the *first failing assertion*
+  dies while formatting its message (a TypeError from `Expression.lift`)
+  and you debug the wrong thing. Write `RCAS.sin(x)` in tests instead.
+- `test/manual_de_test.rb` pairs code blocks with a regex that only sees a
+  bare ``` fence, so a fence carrying a language (```xml) is not read as an
+  opening fence and its *closing* fence pairs with the next block's opening
+  one. Every fence in the two manuals stays plain.
 - `assert_in_delta(exp, act, delta, msg)`: the third argument is the
   tolerance, not the message.
 - Every Expression class needs a case in `LaTeX.print`; `RootOf` had none
@@ -666,7 +681,11 @@ non-polynomial parts, number fields with more than two generators,
 infinite products, formal power series whose
 coefficients are not hypergeometric (`tan`, `exp(x)/(1 - x)`, Fibonacci
 generating functions: `fps` refuses rather than guesses). Conway polynomials
-for GF(p^n) (we take the lexicographically smallest irreducible). Of Koepf's
+for GF(p^n) (we take the lexicographically smallest irreducible). Of
+OpenMath: the binary encoding and strict content MathML (both are further
+*encodings* of the object model in openmath/objects.rb, not new
+phrasebooks), attributions for assumptions, and one-sided limits (rcas's
+Limit node carries no direction, so limit1.above/below stay held). Of Koepf's
 book (Sept 2026) what is left: Almkvist-Zeilberger (hyperexponential
 integration), Abramov's rational solutions, hypergeometric solutions of
 *inhomogeneous* recurrences, multivariate (holonomic) summation, and
@@ -699,7 +718,11 @@ in the global namespace"; the user chose `Poly.legendre(4, x)` over
 Koepf's *Hypergeometric Summation* (Sept 2026, "implement what's in the book"):
 Petkovsek, Zeilberger and the whole q-side, and `discuss` (16 Sept 2026,
 after asking whether the Kurvendiskussion is a German school thing: the
-ritual as one report, and `steps(f, x, :discuss)` for the whole write-up). ODEs with variable
+ritual as one report, and `steps(f, x, :discuss)` for the whole write-up), and
+OpenMath (17 Sept 2026: the user asked whether it was known and then set the
+design - an object model first, XML as one encoding of it, parsing that holds,
+"for '1+2' in OpenMath isn't 3, it's the formal addition expression", and the
+whole vocabulary in one place rather than a method per class). ODEs with variable
 coefficients (Bernoulli, Riccati, exact equations, Cauchy-Euler, and
 Frobenius series solutions, which are fps.rb run backwards) are the most
 requested-adjacent remaining item; a `steps`/`explain` layer that narrates

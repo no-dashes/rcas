@@ -119,6 +119,13 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
   - [Reaching the session, and nothing else](#reaching-the-session-and-nothing-else)
   - [Options and environment](#options-and-environment)
   - [Files](#files)
+- [Appendix D. OpenMath](#appendix-d-openmath)
+  - [Objects, not XML](#objects-not-xml)
+  - [What comes back is held](#what-comes-back-is-held)
+  - [What travels](#what-travels)
+  - [Nothing is lost in silence](#nothing-is-lost-in-silence)
+  - [What is not there](#what-is-not-there)
+  - [Files](#files)
 <!-- /toc -->
 
 ## Sessions and setup
@@ -3392,6 +3399,7 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | domains | `NN ZZ QQ RR CC` (also `ℕ ℤ ℚ ℝ ℂ`), `GF assume forget assumptions` |
 | linear algebra | `vector matrix gram_schmidt least_squares project orthogonal? lu qr cholesky diagonalize jordan` |
 | holding | `hold evaluate` |
+| interchange | `openmath from_openmath` (Appendix D) |
 | worked solutions | `steps` (a block, or `:solve :factor :apart :rref :gcd :discuss`) |
 | help | `doc` (`/help NAME` in rcas-chat) |
 | session | `In`, `Out` (the numbered lines), `_` (irb's last value) |
@@ -3413,7 +3421,8 @@ two generators, the associated Legendre functions and the multivariate
 with polynomial coefficients, Abramov's rational solutions, the
 Almkvist-Zeilberger algorithm for hyperexponential integrals,
 multivariate (holonomic) summation, and formal power series whose
-coefficients are not hypergeometric (`tan`, `exp(x)/(1 - x)`).
+coefficients are not hypergeometric (`tan`, `exp(x)/(1 - x)`), and of
+OpenMath the binary encoding and content MathML (Appendix D).
 
 ## 3. Files
 
@@ -3478,6 +3487,8 @@ lib/rcas/hold.rb            hold
 lib/rcas/functions.rb       the top-level functions
 lib/rcas/core_ext.rb        Symbol / Numeric extensions
 lib/rcas/irb.rb             irb setup
+lib/rcas/openmath.rb        OpenMath objects, the XML encoding, the phrasebook (Appendix D)
+lib/rcas/openmath/*.rb
 lib/rcas/latex.rb           to_latex, line breaking (Appendix A)
 lib/rcas/render.rb          pictures from LaTeX, inline images (Appendix A)
 lib/rcas/chat.rb            rcas-chat front end (Appendix B)
@@ -3517,6 +3528,7 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | squeeze rule for a bounded factor times a null factor | series.rb | [Rud76, th. 3.19] |
 | a sum that follows its dominant term (bounded rest, an oscillation of strictly smaller order, or a quotient that vanishes) | series.rb | [Rud76, th. 3.19] |
 | piecewise functions: branch selection, continuous antiderivative | piecewise.rb | [Spi08, ch. 13] |
+| OpenMath objects, the XML encoding, the content dictionaries of the phrasebook | openmath/objects.rb, openmath/xml.rb, openmath/phrasebook.rb | [OM19] |
 | the window: HTTP message format, the Host header against DNS rebinding, the desktop entry file | app/server.rb, app/launcher.rb | [RFC9112]; [RFC9110, sec. 7.2]; [FDO14] |
 | Fourier series and half-range expansions | fourier.rb | [Spi08, ch. 13]; the coefficients are rcas's own integrals |
 | Ei, Si, Ci, li: series and continued fractions | integral_functions.rb | [AS64, §5.1, §5.2]; [PTVF07, §6.3]; Lentz [Len76] |
@@ -3658,6 +3670,10 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   (1975), 331-334.
 - [Pet92] M. Petkovšek, Hypergeometric solutions of linear recurrences
   with polynomial coefficients, *J. Symbolic Comput.* 14 (1992), 243-264.
+- [OM19] S. Buswell, O. Caprotti, D. P. Carlisle, M. C. Dewar, M.
+  Gaetano, M. Kohlhase (eds.), *The OpenMath Standard, version 2.0*,
+  revision of 2019-07-01, The OpenMath Society, together with the
+  official content dictionaries at openmath.org/cd.
 - [PTVF07] W. H. Press, S. A. Teukolsky, W. T. Vetterling, B. P. Flannery,
   *Numerical Recipes*, 3rd ed., Cambridge University Press 2007.
 - [PWZ96] M. Petkovšek, H. S. Wilf, D. Zeilberger, *A = B*, A K Peters
@@ -4217,4 +4233,187 @@ lib/rcas/app/launcher.rb      the desktop entries for the three platforms
 lib/rcas/app/public/          the page: index.html, app.css, app.js
 bin/rcas-app                  launcher
 test/app_test.rb              tests
+```
+
+## Appendix D. OpenMath
+
+[OpenMath](https://openmath.org/) is a standard for the *meaning* of a
+mathematical object, with the notation left out. rcas speaks it, so an
+expression can leave the session and be understood by something else -
+and come back.
+
+### Objects, not XML
+
+The point of the standard is easy to miss: an OpenMath object is an
+abstract tree, and XML is one way of writing it down. rcas keeps the two
+apart. `openmath` builds the object, and the object prints as itself:
+
+```
+rcas> om = openmath(x + 1)
+=> arith1.plus(x, 1)
+```
+
+`arith1.plus` is the addition of the content dictionary `arith1`. A
+content dictionary is a small document that says what a symbol means, and
+it, not the spelling, is what two systems agree on. `to_xml` is then one
+encoding of that object:
+
+```
+rcas> om.to_xml
+=> "<OMOBJ xmlns=\"http://www.openmath.org/OpenMath\" version=\"2.0\"><OMA><OMS cd=\"arith1\" name=\"plus\"/><OMV name=\"x\"/><OMI>1</OMI></OMA></OMOBJ>"
+rcas> from_openmath(om.to_xml)
+=> x + 1
+```
+
+`to_xml(indent: 2)` writes the same object with a line per element, which
+is easier to read:
+
+```
+<OMOBJ xmlns="http://www.openmath.org/OpenMath" version="2.0">
+  <OMA>
+    <OMS cd="calculus1" name="defint"/>
+    <OMA>
+      <OMS cd="interval1" name="interval"/>
+      <OMI>0</OMI>
+      <OMS cd="nums1" name="pi"/>
+    </OMA>
+    <OMBIND>
+      <OMS cd="fns1" name="lambda"/>
+      <OMBVAR>
+        <OMV name="t"/>
+      </OMBVAR>
+      <OMA>
+        <OMS cd="transc1" name="sin"/>
+        <OMV name="t"/>
+      </OMA>
+    </OMBIND>
+  </OMA>
+</OMOBJ>
+```
+
+The objects are the thirteen classes of `RCAS::OpenMath`: `Int`, `Double`,
+`Text`, `Bytes`, `Variable`, `ContentSymbol`, `Application`, `Bind`,
+`BVar`, `Attribution`, `AttrPair`, `Error`, `Reference` and the wrapper
+`Root`. Four of the standard's own words (Integer, Float, String, Object)
+would shadow a Ruby class inside that namespace, and two more (Binding,
+Symbol) are taken - `Symbol` already means the indeterminate `:x` here -
+so those six carry the names above. `OpenMath::Error` is a *node*, the
+object a sender hands back for a symbol it could not deal with, and not an
+exception.
+
+### What comes back is held
+
+A document that says 1 + 2 says the sum, not the number, and that is what
+rcas gives back:
+
+```
+rcas> from_openmath('<OMOBJ><OMA><OMS cd="arith1" name="plus"/><OMI>1</OMI><OMI>2</OMI></OMA></OMOBJ>')
+=> 1 + 2
+rcas> from_openmath('<OMOBJ><OMA><OMS cd="arith1" name="plus"/><OMI>1</OMI><OMI>2</OMI></OMA></OMOBJ>').simplify
+=> 3
+```
+
+The same for an integral. It arrives as the integral it is, and `doit`
+answers it when you ask:
+
+```
+rcas> openmath(hold { integrate(sin(t), t, 0, PI) })
+=> calculus1.defint(interval1.interval(0, nums1.pi), fns1.lambda[t -> transc1.sin(t)])
+rcas> from_openmath(openmath(hold { integrate(sin(t), t, 0, PI) }).to_xml)
+=> integral(sin(t), t, 0, pi)
+rcas> from_openmath(openmath(hold { integrate(sin(t), t, 0, PI) }).to_xml).doit
+=> 2
+```
+
+A bound variable in rcas is `fns1.lambda` in OpenMath, for sums, limits
+and derivatives as well as integrals:
+
+```
+rcas> openmath(hold { sum(k**2, k, 1, n) })
+=> arith1.sum(interval1.integer_interval(1, n), fns1.lambda[k -> arith1.power(k, 2)])
+rcas> openmath(hold { limit(sin(t)/t, t, 0) })
+=> limit1.limit(0, limit1.both_sides, fns1.lambda[t -> arith1.divide(transc1.sin(t), t)])
+```
+
+### What travels
+
+Numbers keep their kind - a rational is an application of `nums1.rational`
+rather than a decimal - and equations, inequalities, intervals, number
+sets, matrices, vectors, arrays and piecewise functions travel as well as
+expressions:
+
+```
+rcas> openmath(1/2r)
+=> nums1.rational(1, 2)
+rcas> openmath(PI + I)
+=> arith1.plus(nums1.pi, nums1.i)
+rcas> openmath(eq(x**2, 4))
+=> relation1.eq(arith1.power(x, 2), 4)
+rcas> openmath(x < 3)
+=> relation1.lt(x, 3)
+rcas> openmath(ZZ)
+=> setname1.Z
+rcas> openmath(matrix([[1, 2], [3, 4]]))
+=> linalg2.matrix(linalg2.matrixrow(1, 2), linalg2.matrixrow(3, 4))
+rcas> openmath(piecewise(x < 0 => -x, :else => x))
+=> piece1.piecewise(piece1.piece(arith1.unary_minus(x), relation1.lt(x, 0)), piece1.otherwise(x))
+```
+
+The official dictionaries have no name for the gamma function, the zeta
+function, `erf`, the integral functions or `RootOf`, so those go into
+rcas's own content dictionary, which says so in the symbol:
+
+```
+rcas> openmath(gamma(z))
+=> rcas1.gamma(z)
+```
+
+### Nothing is lost in silence
+
+A symbol rcas has never heard of is not an error and is not guessed at. It
+comes back as an unknown function named after its dictionary - the same
+kind of node as the `u(n + 1)` of a recurrence - and it encodes back to
+exactly the symbol it came from:
+
+```
+rcas> from_openmath('<OMOBJ><OMA><OMS cd="arith5" name="frobnicate"/><OMV name="x"/></OMA></OMOBJ>')
+=> arith5.frobnicate(x)
+rcas> openmath(from_openmath('<OMOBJ><OMA><OMS cd="arith5" name="frobnicate"/><OMV name="x"/></OMA></OMOBJ>')).to_xml
+=> "<OMOBJ xmlns=\"http://www.openmath.org/OpenMath\" version=\"2.0\"><OMA><OMS cd=\"arith5\" name=\"frobnicate\"/><OMV name=\"x\"/></OMA></OMOBJ>"
+```
+
+Where the two systems really differ, the reading says so rather than
+pretending. `transc1.log` is the logarithm to a base, which rcas has no
+node for, so it arrives as the quotient it is:
+
+```
+rcas> from_openmath('<OMOBJ><OMA><OMS cd="transc1" name="log"/><OMI>2</OMI><OMV name="x"/></OMA></OMOBJ>')
+=> log(x)/log(2)
+```
+
+A one-sided limit (`limit1.above`, `limit1.below`) is the other case:
+rcas's limit node carries no direction, so such an object stays as it
+arrived instead of losing its side, and goes back out unchanged.
+
+### What is not there
+
+The binary encoding and strict content MathML are the other two ways of
+writing the same objects down, and neither is implemented; the object
+model is where they would attach, not the phrasebook. Presentation MathML
+is a different thing altogether - notation, the neighbour of Appendix A -
+and belongs with `to_latex` rather than here. Assumptions (`x.in(ZZ)`) are
+not attached to the objects, although OpenMath has attribution for exactly
+that purpose, and an attribution arriving from elsewhere is read for the
+object it wraps, with its attributes dropped. Finite field elements have no encoding. OpenMath's n-ary
+operators fold to the left on the way in, so `plus(x, y, z)` becomes
+`x + y + z` as a tree of two additions, and goes back out that way.
+
+### Files
+
+```
+lib/rcas/openmath.rb             the entry points, openmath and from_openmath
+lib/rcas/openmath/objects.rb     the thirteen classes
+lib/rcas/openmath/xml.rb         the XML encoding, written and read
+lib/rcas/openmath/phrasebook.rb  the one table, rcas <-> OpenMath
+test/openmath_test.rb            tests
 ```

@@ -64,6 +64,12 @@ module RCAS
       },
       evaluate: :hold,
 
+      openmath: {
+        maths: "OpenMath [OM19] writes down what a mathematical object *means*, with the notation left out. A symbol is a name in a content dictionary - arith1.plus is that dictionary's addition - so two systems agree on the mathematics rather than on the spelling. The object is an abstract tree; XML, the binary encoding and strict content MathML are ways of writing it down.",
+        method: "One table maps rcas's nodes to the symbols of the official dictionaries in both directions: applications for the operators and functions, fns1.lambda bindings for the bound variable of an integral, sum, limit or derivative, and rcas's own dictionary for the names OpenMath has none for. A symbol with no row stays as an unknown function named after its dictionary, so a document survives the round trip unchanged."
+      },
+      from_openmath: :openmath,
+
       # ---- calculus -------------------------------------------------------------
       diff: {
         maths: "The derivative: the limit of the difference quotient, computed by the rules rather than the limit.",
@@ -512,6 +518,7 @@ module RCAS
       evalf: ["Floating-point arithmetic", "Arbitrary-precision arithmetic", "Significant figures"],
       steps: ["Worked-example effect", "Quadratic formula", "Partial fraction decomposition", "Euclidean algorithm"],
       hold: ["Computer algebra"],
+      openmath: ["OpenMath", "MathML"],
       diff: ["Derivative", "Differentiation rules"],
       integrate: ["Symbolic integration", "Risch algorithm", "Integration by parts"],
       limit: ["Limit of a function", "Squeeze theorem"],
