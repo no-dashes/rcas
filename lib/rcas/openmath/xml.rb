@@ -43,7 +43,9 @@ module RCAS
         attrs = attrs.merge("id" => node.id) if node.id
         open = "#{pad}<#{tag}#{attributes(attrs)}"
 
-        if text.nil? && children.empty?
+        if node.is_a?(Foreign)
+          out << open << ">" << node.content << "</#{tag}>" << nl
+        elsif text.nil? && children.empty?
           out << open << "/>" << nl
         elsif children.empty?
           out << open << ">" << escape(text) << "</#{tag}>" << nl
@@ -72,13 +74,14 @@ module RCAS
         when AttrList      then ["OMATP", {}, nil, node.pairs.flat_map(&:children)]
         when Error         then ["OME", {}, nil, node.children]
         when Reference     then ["OMR", { "href" => node.href }, nil, []]
+        when Foreign       then ["OMFOREIGN", node.encoding ? { "encoding" => node.encoding } : {}, node.content, []]
         else raise EncodeError, "no XML encoding for #{node.class}"
         end
       end
 
       # The OMATP element: a flat list of key/value pairs inside an OMATTR.
       # It is not an object of its own in the standard, so it is not one of
-      # the thirteen classes - it exists only while encoding.
+      # the classes in objects.rb - it exists only while encoding.
       class AttrList < Node
         attr_reader :pairs
 
@@ -145,6 +148,7 @@ module RCAS
         attrs = read_attributes(scanner)
         return Element.new(local(name), attrs, [], "") if scanner.scan(%r{\s*/>})
         scanner.scan(/\s*>/) or raise ParseError, "unterminated <#{name}>"
+        return read_foreign(scanner, local(name), attrs) if local(name) == "OMFOREIGN"
         read_content(scanner, local(name), attrs)
       end
 
@@ -161,6 +165,35 @@ module RCAS
           attrs[local(key)] = unescape(value)
         end
         attrs
+      end
+
+      # OMFOREIGN holds data that is not OpenMath - a presentation-MathML or
+      # LaTeX rendering, an image, a comment - so its content is taken
+      # exactly as it stands, markup and all, and never parsed.
+      OPEN_FOREIGN  = %r{<\s*(?:[\w.-]+:)?OMFOREIGN\b[^>]*>}.freeze
+      CLOSE_FOREIGN = %r{</\s*(?:[\w.-]+:)?OMFOREIGN\s*>}.freeze
+
+      def read_foreign(scanner, name, attrs)
+        raw = +""
+        depth = 1
+        until scanner.eos?
+          chunk = scanner.scan(/[^<]+/)
+          raw << chunk if chunk
+          break if scanner.eos?
+
+          if (close = scanner.scan(CLOSE_FOREIGN))
+            depth -= 1
+            break if depth.zero?
+            raw << close
+          elsif (open_tag = scanner.scan(OPEN_FOREIGN))
+            depth += 1
+            raw << open_tag
+          else
+            raw << scanner.scan(/</)
+          end
+        end
+        raise ParseError, "unclosed <OMFOREIGN>" unless depth.zero?
+        Element.new(name, attrs, [], raw)
       end
 
       def read_content(scanner, name, attrs)
@@ -202,6 +235,7 @@ module RCAS
                when "OMATTR" then build_attribution(element)
                when "OME"    then build_error(element)
                when "OMR"    then Reference.new(attribute(element, "href"))
+               when "OMFOREIGN" then Foreign.new(element.text, encoding: element.attrs["encoding"])
                else raise ParseError, "unknown OpenMath element <#{element.name}>"
                end
         id = element.attrs["id"] || element.attrs["xml:id"]

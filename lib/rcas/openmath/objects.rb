@@ -11,11 +11,14 @@ module RCAS
   #   om.to_xml                       # => "<OMOBJ ...>...</OMOBJ>"
   #   RCAS.from_openmath(om.to_xml)   # => x**2 + 1, unevaluated
   #
-  # Thirteen classes for the standard's thirteen kinds of object. Six of the
-  # standard's own words would shadow something inside this module - Integer,
-  # Float, String and Object are Ruby's, Binding is Ruby's too, and Symbol
-  # already means the indeterminate :x in rcas - so those are Int, Double,
-  # Text, Root, Bind and ContentSymbol. The other seven keep their word.
+  # A class for each kind of object the standard defines: the six basic ones
+  # (Int, Double, Text, Bytes, ContentSymbol, Variable), the four compound
+  # ones (Application, Bind, Attribution, Error), the derived one (Foreign),
+  # and Reference, BVar, AttrPair and the wrapper Root, which the encodings
+  # need. Six of the standard's own words would shadow something inside this
+  # module - Integer, Float, String and Object are Ruby's, Binding is Ruby's
+  # too, and Symbol already means the indeterminate :x in rcas - so those are
+  # Int, Double, Text, Root, Bind and ContentSymbol.
   #
   # Note that OpenMath::Error is a *node*, not an exception: OME is the
   # object you get back for a symbol the sender could not evaluate. The
@@ -70,7 +73,17 @@ module RCAS
       alias eql? ==
       def hash = [self.class, *state].hash
 
+      # An OpenMath object proper. Foreign content is a *derived* object in
+      # the standard's words, "not an OpenMath object", and may stand only
+      # as the value of an attribution or an argument of an error.
+      def object? = true
+
       def to_xml(**opts) = XML.encode(self, **opts)
+
+      # The sugared notation a person would type; #to_s is the same notation
+      # with every symbol written out as cd.name.
+      def to_popcorn = Popcorn.render(self)
+      def to_s = Popcorn.render(self, sugar: false)
 
       # The rcas object this stands for (see Phrasebook).
       def to_expression = Phrasebook.to_expression(self)
@@ -92,8 +105,6 @@ module RCAS
         freeze
       end
 
-      def to_s = value.to_s
-
       protected
 
       def state = [value]
@@ -111,13 +122,11 @@ module RCAS
 
     # OMSTR: a string of Unicode characters.
     class Text < Value
-      def to_s = value.inspect
       private def convert(v) = v.to_s.dup.freeze
     end
 
     # OMB: a byte array.
     class Bytes < Value
-      def to_s = "bytes(#{value.bytesize})"
       private def convert(v) = v.to_s.b.freeze
     end
 
@@ -129,8 +138,6 @@ module RCAS
         @name = name.to_s.dup.freeze
         freeze
       end
-
-      def to_s = name
 
       protected
 
@@ -152,7 +159,6 @@ module RCAS
 
       def key = [cd, name]
       def official? = cdbase.nil? || cdbase == CDBASE
-      def to_s = "#{cd}.#{name}"
 
       protected
 
@@ -165,13 +171,12 @@ module RCAS
 
       def initialize(head, *args)
         args = args.first if args.size == 1 && args.first.is_a?(Array)
-        @head = OpenMath.lift(head)
-        @args = args.map { |a| OpenMath.lift(a) }.freeze
+        @head = OpenMath.object!(head, "the head of an application")
+        @args = args.map { |a| OpenMath.object!(a, "an argument of an application") }.freeze
         freeze
       end
 
       def children = [head, *args]
-      def to_s = "#{head}(#{args.join(', ')})"
     end
 
     # OMBVAR: the bound variables of a binding.
@@ -193,15 +198,14 @@ module RCAS
       attr_reader :binder, :bvar, :body
 
       def initialize(binder, bvar, body)
-        @binder = OpenMath.lift(binder)
+        @binder = OpenMath.object!(binder, "the binder of a binding")
         @bvar = bvar.is_a?(BVar) ? bvar : BVar.new(bvar)
-        @body = OpenMath.lift(body)
+        @body = OpenMath.object!(body, "the body of a binding")
         freeze
       end
 
       def vars = bvar.vars
       def children = [binder, bvar, body]
-      def to_s = "#{binder}[#{bvar} -> #{body}]"
     end
 
     # One key/value pair of an attribution.
@@ -209,13 +213,13 @@ module RCAS
       attr_reader :key, :value
 
       def initialize(key, value)
-        @key = OpenMath.lift(key)
-        @value = OpenMath.lift(value)
+        @key = OpenMath.object!(key, "the key of an attribution")
+        @value = OpenMath.lift(value) # a value may be foreign
         freeze
       end
 
       def children = [key, value]
-      def to_s = "#{key}: #{value}"
+      def to_s = "#{key} -> #{value}"
     end
 
     # OMATTR: an object with attributes attached.
@@ -229,7 +233,6 @@ module RCAS
       end
 
       def children = [*pairs, object]
-      def to_s = "#{object}{#{pairs.join(', ')}}"
     end
 
     # OME: an error object. Data, not an exception - it is what a sender
@@ -239,13 +242,12 @@ module RCAS
 
       def initialize(symbol, *args)
         args = args.first if args.size == 1 && args.first.is_a?(Array)
-        @symbol = OpenMath.lift(symbol)
-        @args = args.map { |a| OpenMath.lift(a) }.freeze
+        @symbol = OpenMath.object!(symbol, "the symbol of an error")
+        @args = args.map { |a| OpenMath.lift(a) }.freeze # an argument may be foreign
         freeze
       end
 
       def children = [symbol, *args]
-      def to_s = "error(#{[symbol, *args].join(', ')})"
     end
 
     # OMR: a reference to another object, by which a tree becomes a DAG.
@@ -257,11 +259,30 @@ module RCAS
         freeze
       end
 
-      def to_s = "&#{href}"
-
       protected
 
       def state = [href]
+    end
+
+    # OMFOREIGN: data that is not OpenMath - a presentation-MathML or LaTeX
+    # rendering of the object it is attached to, an image, a comment. The
+    # content is carried exactly as it came, markup and all, and never
+    # interpreted. A derived object: legal as the value of an attribution
+    # or an argument of an error, nowhere else.
+    class Foreign < Node
+      attr_reader :content, :encoding
+
+      def initialize(content, encoding: nil)
+        @content = content.to_s.dup.freeze
+        @encoding = encoding&.to_s&.dup&.freeze
+        freeze
+      end
+
+      def object? = false
+
+      protected
+
+      def state = [content, encoding]
     end
 
     # OMOBJ: the wrapper that says "what follows is an OpenMath object".
@@ -271,13 +292,12 @@ module RCAS
       attr_reader :object, :version
 
       def initialize(object, version: OBJECT_VERSION)
-        @object = OpenMath.lift(object)
+        @object = OpenMath.object!(object, "the content of an OpenMath object")
         @version = version.to_s.dup.freeze
         freeze
       end
 
       def children = [object]
-      def to_s = object.to_s
     end
 
     module_function
@@ -293,6 +313,13 @@ module RCAS
       when Symbol  then Variable.new(obj)
       else raise TypeError, "can't turn #{obj.class} into an OpenMath object"
       end
+    end
+
+    # An OpenMath object where one is required; foreign content is not one.
+    def object!(obj, where)
+      node = lift(obj)
+      raise TypeError, "foreign content may not be #{where}" unless node.object?
+      node
     end
 
     # The symbol +name+ of the content dictionary +cd+: sym("arith1", "plus")

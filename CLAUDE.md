@@ -134,6 +134,7 @@ lib/rcas/results.rb         In/Out: every input line and its result, numbered (R
 lib/rcas/openmath.rb        OpenMath: the entry points openmath/from_openmath, Expression#to_openmath
 lib/rcas/openmath/objects.rb the thirteen object classes of the standard. An OpenMath object is *not* XML; XML is one encoding of it. Four of the standard's names would shadow a Ruby class in the namespace (Integer Float String Object) and two more are taken (Binding, and Symbol means the indeterminate here), so those are Int Double Text Root Bind ContentSymbol. OpenMath::Error is a node (OME), not an exception
 lib/rcas/openmath/xml.rb     the XML encoding, written and read; the reader is hand-rolled over StringScanner because REXML is a bundled gem, not the stdlib
+lib/rcas/openmath/popcorn.rb the POPCORN notation [HR09], written and read: the third encoding of the same objects and the one a person types. `Node#to_s` is POPCORN with every symbol written out (arith1.plus($x, 1)), `to_popcorn` the sugared spelling ($x + 1); both parse. Variables carry `$` so a bare name can be short for a symbol - that is the whole trick. Watch the operators that are not ordinary notation: // is nums1.rational, | is complex1.complex_cartesian, .. is interval1.interval, ~ is relation2.approx (not relation1), `!(` builds an OME, and a minus in front of a literal belongs to the literal (-17 is Int(-17), never unary_minus(17)). The precedence *levels* are the published grammar's, but the bracketing follows the operators' association, because the reference implementation's own numbers (plus 70, minus 75) write plus($a, minus($b, $c)) as "$a + $b - $c", which reads back as a different tree
 lib/rcas/openmath/phrasebook.rb  the one table, both directions. No expression class carries a to_openmath of its own: one declaration list builds a decode index keyed by [cd, name] and an encode index keyed by node class / Fn name. Symbol names and argument orders were checked against the official CDs (piece1.piece is (value, condition), transc1.log is (base, x), limit1.limit is (point, direction, lambda)). A symbol with no row decodes to a held Fn named "cd.name", and such an Fn encodes back to the symbol, so an unknown document survives the round trip
 lib/rcas/latex.rb, render.rb, chat.rb, chat/*   typesetting and the chat front end (see below)
 lib/rcas/app.rb             rcas-app: the window front end. A stdlib TCPServer on 127.0.0.1 serves one page and a few JSON routes; App::Window opens a Chromium-family browser with `--app=URL` (borrowed engine, not a bundled one), so closing the window ends the program
@@ -290,7 +291,8 @@ Grundstudium, Bachelorstudium.
    should stay formal inside `hold`. Also a row in
    `openmath/phrasebook.rb`: `test/openmath_test.rb` enumerates every
    `Expression` subclass and fails when one has none (the audit
-   `LaTeX.print` went a year without).
+   `LaTeX.print` went a year without). A new *OpenMath* node class needs a
+   case in `XML.parts`, `XML.build`, `Popcorn.emit_bare` and the parser.
 4. New value type inside `Num`? Check `Simplify.normalize_number`,
    `pow_number`, Printer.number/number_precedence (`printer_precedence`
    hook), `Scalar`, `NumberSet.of` / `Infer` (see `Num#finite_field?`).
@@ -626,6 +628,13 @@ in the repo.
   overrides `Minitest::Assertions#diff`, so the *first failing assertion*
   dies while formatting its message (a TypeError from `Expression.lift`)
   and you debug the wrong thing. Write `RCAS.sin(x)` in tests instead.
+- OMFOREIGN is a *derived* object: the standard says in as many words that
+  derived objects "are not OpenMath objects", which is why the first cut of
+  openmath/ had no class for it and the reader raised on any document that
+  annotated a formula with presentation MathML - the commonest annotated
+  kind there is. It is legal as the value of an OMATTR and an argument of
+  an OME and nowhere else; `OpenMath.object!` is what enforces that, and
+  `Foreign#object?` is false.
 - `test/manual_de_test.rb` pairs code blocks with a regex that only sees a
   bare ``` fence, so a fence carrying a language (```xml) is not read as an
   opening fence and its *closing* fence pairs with the next block's opening
@@ -684,8 +693,9 @@ generating functions: `fps` refuses rather than guesses). Conway polynomials
 for GF(p^n) (we take the lexicographically smallest irreducible). Of
 OpenMath: the binary encoding and strict content MathML (both are further
 *encodings* of the object model in openmath/objects.rb, not new
-phrasebooks), attributions for assumptions, and one-sided limits (rcas's
-Limit node carries no direction, so limit1.above/below stay held). Of Koepf's
+phrasebooks), attributions for assumptions, one-sided limits (rcas's
+Limit node carries no direction, so limit1.above/below stay held), and of
+POPCORN the typed-expression form `a::b`. Of Koepf's
 book (Sept 2026) what is left: Almkvist-Zeilberger (hyperexponential
 integration), Abramov's rational solutions, hypergeometric solutions of
 *inhomogeneous* recurrences, multivariate (holonomic) summation, and
@@ -722,7 +732,11 @@ ritual as one report, and `steps(f, x, :discuss)` for the whole write-up), and
 OpenMath (17 Sept 2026: the user asked whether it was known and then set the
 design - an object model first, XML as one encoding of it, parsing that holds,
 "for '1+2' in OpenMath isn't 3, it's the formal addition expression", and the
-whole vocabulary in one place rather than a method per class). ODEs with variable
+whole vocabulary in one place rather than a method per class), and then
+POPCORN and OMFOREIGN (17 Sept 2026, after the user pointed at
+github.com/symcomp/org.symcomp.openmath - which is the user's own library:
+POPCORN is Horn & Roozemond, CICM 2009, so check the grammar there rather
+than guessing, and ask rather than reconstruct). ODEs with variable
 coefficients (Bernoulli, Riccati, exact equations, Cauchy-Euler, and
 Frobenius series solutions, which are fps.rb run backwards) are the most
 requested-adjacent remaining item; a `steps`/`explain` layer that narrates

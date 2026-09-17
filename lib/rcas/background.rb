@@ -70,6 +70,12 @@ module RCAS
       },
       from_openmath: :openmath,
 
+      popcorn: {
+        maths: "The same OpenMath objects [OM19] written down for a person instead of a machine: $x^2 + 1 rather than nine lines of XML. An indeterminate carries a $, which is what frees a bare name to stand for a symbol - sin for transc1.sin, + for arith1.plus - so the notation reads like mathematics and still means exactly one OpenMath object [HR09].",
+        method: "A recursive descent over the published grammar, one method per level of its precedence chain, and a writer that brackets by the association of the operators. Three operators build the objects that are applications rather than numbers: // is nums1.rational, | is complex1.complex_cartesian, .. is interval1.interval. A minus sign in front of a literal belongs to the literal. Symbols may be abbreviated to a bare name where the phrasebook knows them, never for rcas's own content dictionary."
+      },
+      from_popcorn: :popcorn,
+
       # ---- calculus -------------------------------------------------------------
       diff: {
         maths: "The derivative: the limit of the difference quotient, computed by the rules rather than the limit.",
@@ -519,6 +525,7 @@ module RCAS
       steps: ["Worked-example effect", "Quadratic formula", "Partial fraction decomposition", "Euclidean algorithm"],
       hold: ["Computer algebra"],
       openmath: ["OpenMath", "MathML"],
+      popcorn: ["OpenMath", "Recursive descent parser"],
       diff: ["Derivative", "Differentiation rules"],
       integrate: ["Symbolic integration", "Risch algorithm", "Integration by parts"],
       limit: ["Limit of a function", "Squeeze theorem"],

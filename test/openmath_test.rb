@@ -44,9 +44,9 @@ class OpenMathTest < Minitest::Test
   end
 
   def test_printing_is_not_xml
-    assert_equal "arith1.plus(x, 1)", om(X + 1).to_s
+    assert_equal "arith1.plus($x, 1)", om(X + 1).to_s
     assert_equal "arith1.plus", OM.sym("arith1", "plus").to_s
-    assert_equal "fns1.lambda[x -> x]", OM::Bind.new(OM.sym("fns1", "lambda"), OM::BVar.new(OM::Variable.new("x")), OM::Variable.new("x")).to_s
+    assert_equal "fns1.lambda[$x -> $x]", OM::Bind.new(OM.sym("fns1", "lambda"), OM::BVar.new(OM::Variable.new("x")), OM::Variable.new("x")).to_s
   end
 
   def test_lift_refuses_what_it_cannot_carry
@@ -128,10 +128,10 @@ class OpenMathTest < Minitest::Test
   # ---- the phrasebook, expression by expression ---------------------------
 
   def test_arithmetic_and_the_shape_of_the_tree
-    assert_equal "arith1.times(arith1.plus(x, 1), arith1.minus(1, x))", om((X + 1) * (1 - X)).to_s
+    assert_equal "arith1.times(arith1.plus($x, 1), arith1.minus(1, $x))", om((X + 1) * (1 - X)).to_s
     assert_equal "(x + 1)*(1 - x)", back(om((X + 1) * (1 - X)).to_xml).to_s,
                  "construction never rewrites: the tree comes back as it was written"
-    assert_equal "arith1.unary_minus(x)", om(-X).to_s
+    assert_equal "arith1.unary_minus($x)", om(-X).to_s
   end
 
   def test_an_n_ary_operator_folds_left_on_the_way_in
@@ -159,11 +159,11 @@ class OpenMathTest < Minitest::Test
   end
 
   def test_functions_both_ways
-    assert_equal "transc1.sin(x)", om(RCAS.sin(X)).to_s
-    assert_equal "transc1.ln(x)", om(RCAS.log(X)).to_s
-    assert_equal "integer1.factorial(n)", om(RCAS.factorial(N)).to_s
-    assert_equal "combinat1.binomial(n, k)", om(RCAS.binomial(N, K)).to_s
-    assert_equal "rounding1.floor(x)", om(RCAS.floor(X)).to_s
+    assert_equal "transc1.sin($x)", om(RCAS.sin(X)).to_s
+    assert_equal "transc1.ln($x)", om(RCAS.log(X)).to_s
+    assert_equal "integer1.factorial($n)", om(RCAS.factorial(N)).to_s
+    assert_equal "combinat1.binomial($n, $k)", om(RCAS.binomial(N, K)).to_s
+    assert_equal "rounding1.floor($x)", om(RCAS.floor(X)).to_s
     %w[sin cos tan exp].each do |name|
       assert_round_trip RCAS::Fn.new(name.to_sym, [X])
     end
@@ -195,8 +195,8 @@ class OpenMathTest < Minitest::Test
     assert_round_trip RCAS::Product.new(K, K, RCAS::Num.new(1), N)
     assert_round_trip RCAS::Derivative.new(RCAS::Fn.new(:y, [X]), X, 2)
     assert_round_trip RCAS::Limit.new(RCAS.sin(X) / X, X, RCAS::Num.new(0))
-    assert_equal "calculus1.int(fns1.lambda[x -> transc1.sin(x)])", om(RCAS.hold { integrate(sin(x), x) }).to_s
-    assert_equal "arith1.sum(interval1.integer_interval(1, n), fns1.lambda[k -> arith1.power(k, 2)])",
+    assert_equal "calculus1.int(fns1.lambda[$x -> transc1.sin($x)])", om(RCAS.hold { integrate(sin(x), x) }).to_s
+    assert_equal "arith1.sum(interval1.integer_interval(1, $n), fns1.lambda[$k -> arith1.power($k, 2)])",
                  om(RCAS.hold { sum(k**2, k, 1, n) }).to_s
   end
 
@@ -207,8 +207,8 @@ class OpenMathTest < Minitest::Test
   end
 
   def test_relations_intervals_and_sets
-    assert_equal "relation1.eq(arith1.power(x, 2), 4)", om(RCAS::Equation.new(X**2, 4)).to_s
-    assert_equal "relation1.lt(x, 3)", om(X < 3).to_s
+    assert_equal "relation1.eq(arith1.power($x, 2), 4)", om(RCAS::Equation.new(X**2, 4)).to_s
+    assert_equal "relation1.lt($x, 3)", om(X < 3).to_s
     assert_equal "x**2 = 4", back(om(RCAS::Equation.new(X**2, 4)).to_xml).to_s
     assert_equal "x < 3", back(om(X < 3).to_xml).to_s
     assert_equal "interval1.interval_co(0, 1)", om(RCAS::Interval.new(0, 1, right_open: true)).to_s
@@ -219,7 +219,7 @@ class OpenMathTest < Minitest::Test
 
   def test_piecewise_carries_its_conditions
     f = RCAS.piecewise((X < 0) => -X, :else => X)
-    assert_equal "piece1.piecewise(piece1.piece(arith1.unary_minus(x), relation1.lt(x, 0)), piece1.otherwise(x))", om(f).to_s
+    assert_equal "piece1.piecewise(piece1.piece(arith1.unary_minus($x), relation1.lt($x, 0)), piece1.otherwise($x))", om(f).to_s
     assert_equal f, back(om(f).to_xml), "piece1.piece is (value, condition), that way round"
   end
 
@@ -247,7 +247,7 @@ class OpenMathTest < Minitest::Test
   end
 
   def test_an_unknown_function_is_an_omv_application
-    assert_equal "u(arith1.plus(n, 1))", om(RCAS::Fn.new(:u, [N + 1])).to_s
+    assert_equal "$u(arith1.plus($n, 1))", om(RCAS::Fn.new(:u, [N + 1])).to_s
     assert_round_trip RCAS::Fn.new(:u, [N + 1])
   end
 
@@ -272,6 +272,42 @@ class OpenMathTest < Minitest::Test
   def test_what_cannot_be_encoded_says_so
     assert_raises(OM::EncodeError) { RCAS.openmath(Object.new) }
     assert_raises(OM::ParseError) { back('<OMOBJ><OMSTR>hello</OMSTR></OMOBJ>') }
+  end
+
+  # ---- foreign content ----------------------------------------------------
+
+  def test_foreign_content_is_carried_exactly_as_it_came
+    source = <<~XML
+      <OMOBJ version="2.0">
+        <OMATTR>
+          <OMATP><OMS cd="altenc" name="MathML_encoding"/>
+            <OMFOREIGN encoding="application/mathml-presentation+xml"><mrow><mi>x</mi><mo>+</mo><mn>1</mn></mrow></OMFOREIGN>
+          </OMATP>
+          <OMA><OMS cd="arith1" name="plus"/><OMV name="x"/><OMI>1</OMI></OMA>
+        </OMATTR>
+      </OMOBJ>
+    XML
+    node = OM::XML.decode(source)
+    foreign = node.object.pairs.first.value
+    assert_instance_of OM::Foreign, foreign
+    assert_equal "<mrow><mi>x</mi><mo>+</mo><mn>1</mn></mrow>", foreign.content, "markup and all, never parsed"
+    assert_equal "application/mathml-presentation+xml", foreign.encoding
+    assert_equal node, OM::XML.decode(OM::XML.encode(node)), "and it survives being written out again"
+    assert_equal "x + 1", node.to_expression.to_s, "the attributes are dropped, the object is read"
+  end
+
+  def test_foreign_content_is_a_derived_object_and_goes_only_where_it_may
+    foreign = OM::Foreign.new("<mi>x</mi>")
+    refute_predicate foreign, :object?
+    assert OM::Int.new(1).object?
+    # legal: the value of an attribution and an argument of an error
+    OM::Attribution.new([[OM.sym("altenc", "MathML_encoding"), foreign]], OM::Int.new(1))
+    OM::Error.new(OM.sym("error", "unexpected_symbol"), foreign)
+    # illegal everywhere else
+    assert_raises(TypeError) { OM::Application.new(OM.sym("arith1", "plus"), foreign) }
+    assert_raises(TypeError) { OM::Application.new(foreign, OM::Int.new(1)) }
+    assert_raises(TypeError) { OM::Root.new(foreign) }
+    assert_raises(TypeError) { OM::Bind.new(OM.sym("fns1", "lambda"), OM::Variable.new("x"), foreign) }
   end
 
   # ---- the table covers every node ----------------------------------------

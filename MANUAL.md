@@ -121,6 +121,7 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
   - [Files](#files)
 - [Appendix D. OpenMath](#appendix-d-openmath)
   - [Objects, not XML](#objects-not-xml)
+  - [POPCORN, the notation for people](#popcorn-the-notation-for-people)
   - [What comes back is held](#what-comes-back-is-held)
   - [What travels](#what-travels)
   - [Nothing is lost in silence](#nothing-is-lost-in-silence)
@@ -3399,7 +3400,7 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | domains | `NN ZZ QQ RR CC` (also `ℕ ℤ ℚ ℝ ℂ`), `GF assume forget assumptions` |
 | linear algebra | `vector matrix gram_schmidt least_squares project orthogonal? lu qr cholesky diagonalize jordan` |
 | holding | `hold evaluate` |
-| interchange | `openmath from_openmath` (Appendix D) |
+| interchange | `openmath from_openmath popcorn from_popcorn` (Appendix D) |
 | worked solutions | `steps` (a block, or `:solve :factor :apart :rref :gcd :discuss`) |
 | help | `doc` (`/help NAME` in rcas-chat) |
 | session | `In`, `Out` (the numbered lines), `_` (irb's last value) |
@@ -3529,6 +3530,7 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | a sum that follows its dominant term (bounded rest, an oscillation of strictly smaller order, or a quotient that vanishes) | series.rb | [Rud76, th. 3.19] |
 | piecewise functions: branch selection, continuous antiderivative | piecewise.rb | [Spi08, ch. 13] |
 | OpenMath objects, the XML encoding, the content dictionaries of the phrasebook | openmath/objects.rb, openmath/xml.rb, openmath/phrasebook.rb | [OM19] |
+| POPCORN, the notation OpenMath objects are written in for people | openmath/popcorn.rb | [HR09] |
 | the window: HTTP message format, the Host header against DNS rebinding, the desktop entry file | app/server.rb, app/launcher.rb | [RFC9112]; [RFC9110, sec. 7.2]; [FDO14] |
 | Fourier series and half-range expansions | fourier.rb | [Spi08, ch. 13]; the coefficients are rcas's own integrals |
 | Ei, Si, Ci, li: series and continued fractions | integral_functions.rb | [AS64, §5.1, §5.2]; [PTVF07, §6.3]; Lentz [Len76] |
@@ -3633,6 +3635,9 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   1971.
 - [Hor08] P. Horn, *Faktorisierung in Schief-Polynomringen*, Dissertation,
   Universität Kassel 2008, chapter 6 (Lineare Algebra mit Polynom-Matrizen).
+- [HR09] P. Horn, D. Roozemond, OpenMath in SCIEnce: SCSCP and POPCORN,
+  in *Intelligent Computer Mathematics (CICM 2009)*, LNCS 5625, Springer
+  2009, 474-479.
 - [HW08] G. H. Hardy, E. M. Wright, *An Introduction to the Theory of
   Numbers*, 6th ed., Oxford University Press 2008.
 - [Ker66] I. O. Kerner, Ein Gesamtschrittverfahren zur Berechnung der
@@ -4250,7 +4255,7 @@ apart. `openmath` builds the object, and the object prints as itself:
 
 ```
 rcas> om = openmath(x + 1)
-=> arith1.plus(x, 1)
+=> arith1.plus($x, 1)
 ```
 
 `arith1.plus` is the addition of the content dictionary `arith1`. A
@@ -4291,15 +4296,100 @@ is easier to read:
 </OMOBJ>
 ```
 
-The objects are the thirteen classes of `RCAS::OpenMath`: `Int`, `Double`,
-`Text`, `Bytes`, `Variable`, `ContentSymbol`, `Application`, `Bind`,
-`BVar`, `Attribution`, `AttrPair`, `Error`, `Reference` and the wrapper
-`Root`. Four of the standard's own words (Integer, Float, String, Object)
-would shadow a Ruby class inside that namespace, and two more (Binding,
-Symbol) are taken - `Symbol` already means the indeterminate `:x` here -
-so those six carry the names above. `OpenMath::Error` is a *node*, the
-object a sender hands back for a symbol it could not deal with, and not an
-exception.
+The objects are the classes of `RCAS::OpenMath`: the six basic ones
+(`Int`, `Double`, `Text`, `Bytes`, `ContentSymbol`, `Variable`), the four
+compound ones (`Application`, `Bind`, `Attribution`, `Error`), the derived
+one (`Foreign`), and `Reference`, `BVar`, `AttrPair` and the wrapper
+`Root`, which the encodings need. Four of the standard's own words
+(Integer, Float, String, Object) would shadow a Ruby class inside that
+namespace, and two more (Binding, Symbol) are taken - `Symbol` already
+means the indeterminate `:x` here - so those six carry the names above.
+`OpenMath::Error` is a *node*, the object a sender hands back for a symbol
+it could not deal with, and not an exception; `Foreign` is the standard's
+own odd one out, data that is *not* OpenMath - a presentation-MathML or
+LaTeX rendering of the formula it hangs on - which the standard calls a
+derived object and allows only as the value of an attribution or an
+argument of an error. rcas carries its content exactly as it stands,
+markup and all, and never looks inside it.
+
+### POPCORN, the notation for people
+
+XML is for machines. POPCORN [HR09] is the third encoding of the same
+objects, and the one a person types: `openmath` builds the object,
+`popcorn` writes it down.
+
+```
+rcas> om.to_popcorn
+=> "$x + 1"
+rcas> om.to_s
+=> "arith1.plus($x, 1)"
+```
+
+Those are two spellings of one notation, and both read back. An
+indeterminate carries a `$`, which is the trick the whole thing turns on:
+with variables marked, a bare name is free to be short for a symbol, so
+`sin` may stand for `transc1.sin` and `+` for `arith1.plus`. `to_s` is the
+spelling with every symbol written out, because someone meeting OpenMath
+should see `arith1.plus` before they see `+`; `to_popcorn` is the short
+one.
+
+```
+rcas> popcorn(x**2 + 1)
+=> "$x^2 + 1"
+rcas> popcorn(2*x*(1 - x))
+=> "2*$x*(1 - $x)"
+rcas> popcorn(1/2r + I)
+=> "1//2 + i"
+rcas> popcorn(gamma(z))
+=> "rcas1.gamma($z)"
+rcas> popcorn(hold { integrate(sin(t), t, 0, PI) })
+=> "defint(0 .. pi, lambda[$t -> sin($t)])"
+```
+
+A symbol of rcas's own dictionary is never shortened: nobody else would
+know what a bare `gamma` meant.
+
+Reading it back holds, exactly as the XML does:
+
+```
+rcas> from_popcorn("$x^2 + 1")
+=> x**2 + 1
+rcas> from_popcorn("1 + 2")
+=> 1 + 2
+rcas> from_popcorn("sin($x)/cos($x)")
+=> sin(x)/cos(x)
+rcas> from_popcorn("defint(0 .. pi, lambda[$t -> sin($t)])")
+=> integral(sin(t), t, 0, pi)
+rcas> from_popcorn("defint(0 .. pi, lambda[$t -> sin($t)])").doit
+=> 2
+```
+
+Three of its operators have no counterpart in ordinary mathematical
+writing, because they build the objects that are applications rather than
+numbers: `//` is `nums1.rational`, `|` is `complex1.complex_cartesian`,
+and `..` is `interval1.interval`. A minus sign in front of a literal
+belongs to the literal, so `-17` is the integer and not a negation:
+
+```
+rcas> from_popcorn("1//2")
+=> 1/2
+rcas> from_popcorn("3|4")
+=> 3 + 4*i
+rcas> from_popcorn("-17")
+=> -17
+rcas> from_popcorn("$u($n + 1)")
+=> u(n + 1)
+```
+
+The notation is not part of the OpenMath standard - it comes from the
+SCIEnce project, with a grammar and a Java implementation - so what is
+written here follows that published grammar, `~` for `relation2.approx`
+and all. Two details of it are ours: a bare name is short for a symbol
+only when rcas knows the symbol (the reference implementation carries a
+table of some 570 names, ours is read off the phrasebook), and the
+bracketing follows the association of the operators rather than the
+reference implementation's precedences, so that what is written is what
+reads back. Typed expressions (`a::b`) are not supported.
 
 ### What comes back is held
 
@@ -4318,7 +4408,7 @@ answers it when you ask:
 
 ```
 rcas> openmath(hold { integrate(sin(t), t, 0, PI) })
-=> calculus1.defint(interval1.interval(0, nums1.pi), fns1.lambda[t -> transc1.sin(t)])
+=> calculus1.defint(interval1.interval(0, nums1.pi), fns1.lambda[$t -> transc1.sin($t)])
 rcas> from_openmath(openmath(hold { integrate(sin(t), t, 0, PI) }).to_xml)
 => integral(sin(t), t, 0, pi)
 rcas> from_openmath(openmath(hold { integrate(sin(t), t, 0, PI) }).to_xml).doit
@@ -4330,9 +4420,9 @@ and derivatives as well as integrals:
 
 ```
 rcas> openmath(hold { sum(k**2, k, 1, n) })
-=> arith1.sum(interval1.integer_interval(1, n), fns1.lambda[k -> arith1.power(k, 2)])
+=> arith1.sum(interval1.integer_interval(1, $n), fns1.lambda[$k -> arith1.power($k, 2)])
 rcas> openmath(hold { limit(sin(t)/t, t, 0) })
-=> limit1.limit(0, limit1.both_sides, fns1.lambda[t -> arith1.divide(transc1.sin(t), t)])
+=> limit1.limit(0, limit1.both_sides, fns1.lambda[$t -> arith1.divide(transc1.sin($t), $t)])
 ```
 
 ### What travels
@@ -4348,15 +4438,15 @@ rcas> openmath(1/2r)
 rcas> openmath(PI + I)
 => arith1.plus(nums1.pi, nums1.i)
 rcas> openmath(eq(x**2, 4))
-=> relation1.eq(arith1.power(x, 2), 4)
+=> relation1.eq(arith1.power($x, 2), 4)
 rcas> openmath(x < 3)
-=> relation1.lt(x, 3)
+=> relation1.lt($x, 3)
 rcas> openmath(ZZ)
 => setname1.Z
 rcas> openmath(matrix([[1, 2], [3, 4]]))
 => linalg2.matrix(linalg2.matrixrow(1, 2), linalg2.matrixrow(3, 4))
 rcas> openmath(piecewise(x < 0 => -x, :else => x))
-=> piece1.piecewise(piece1.piece(arith1.unary_minus(x), relation1.lt(x, 0)), piece1.otherwise(x))
+=> piece1.piecewise(piece1.piece(arith1.unary_minus($x), relation1.lt($x, 0)), piece1.otherwise($x))
 ```
 
 The official dictionaries have no name for the gamma function, the zeta
@@ -4365,7 +4455,7 @@ rcas's own content dictionary, which says so in the symbol:
 
 ```
 rcas> openmath(gamma(z))
-=> rcas1.gamma(z)
+=> rcas1.gamma($z)
 ```
 
 ### Nothing is lost in silence
@@ -4404,7 +4494,8 @@ is a different thing altogether - notation, the neighbour of Appendix A -
 and belongs with `to_latex` rather than here. Assumptions (`x.in(ZZ)`) are
 not attached to the objects, although OpenMath has attribution for exactly
 that purpose, and an attribution arriving from elsewhere is read for the
-object it wraps, with its attributes dropped. Finite field elements have no encoding. OpenMath's n-ary
+object it wraps, with its attributes dropped - the object survives, the
+rendering hanging on it does not. Finite field elements have no encoding. OpenMath's n-ary
 operators fold to the left on the way in, so `plus(x, y, z)` becomes
 `x + y + z` as a tree of two additions, and goes back out that way.
 
@@ -4415,5 +4506,7 @@ lib/rcas/openmath.rb             the entry points, openmath and from_openmath
 lib/rcas/openmath/objects.rb     the thirteen classes
 lib/rcas/openmath/xml.rb         the XML encoding, written and read
 lib/rcas/openmath/phrasebook.rb  the one table, rcas <-> OpenMath
+lib/rcas/openmath/popcorn.rb     POPCORN, written and read
 test/openmath_test.rb            tests
+test/popcorn_test.rb             tests for the notation
 ```

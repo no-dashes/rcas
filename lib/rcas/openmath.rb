@@ -3,6 +3,7 @@
 require_relative "openmath/objects"
 require_relative "openmath/xml"
 require_relative "openmath/phrasebook"
+require_relative "openmath/popcorn"
 
 module RCAS
   module OpenMath
@@ -36,5 +37,13 @@ module RCAS
     # from_openmath(xml): the rcas object an OpenMath document stands for,
     # held rather than evaluated - "1 + 2" comes back as 1 + 2.
     def from_openmath(source) = OpenMath.read(source)
+
+    # popcorn(x**2 + 1): the OpenMath object in POPCORN, the notation meant
+    # for people rather than machines - "$x^2 + 1".
+    def popcorn(obj) = OpenMath::Phrasebook.to_openmath(obj).to_popcorn
+
+    # from_popcorn("$x^2 + 1"): the rcas object that notation stands for,
+    # held rather than evaluated.
+    def from_popcorn(source) = OpenMath::Popcorn.parse(source).to_expression
   end
 end
