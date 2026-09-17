@@ -143,6 +143,9 @@ module RCAS
         return Neg.new(receiver) if name == :-@
         # RCAS.integrate(f, x) is the same call as a bare integrate(f, x):
         # outside bin/rcas that qualified form is how the manual writes it.
+        # x.in?(ZZ) inside a block is the statement, not the answer, the way
+        # == is an Equation here and != an Inequality.
+        return Membership.new(receiver, args.first) if name == :in? && args.size == 1 && args.first.is_a?(Domain)
         return function(name, args) if receiver.equal?(RCAS)
         return formal(name, [receiver] + args) if FORMAL.include?(name) && receiver.is_a?(Expression)
         lift(receiver.public_send(name, *args))

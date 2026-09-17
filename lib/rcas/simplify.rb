@@ -162,6 +162,13 @@ module RCAS
                 e.base.exponent.value.is_a?(Integer) && RCAS.nonnegative?(e.base.base)
             # (x**2)**(1/2) is x when x cannot be negative
             stack.push([e.base.base, multiply_exponents(e.base.exponent.value, multiply_exponents(exp, pw)), true])
+          elsif exp.is_a?(Rational) && exp.denominator > 1 && (split = root_of_product(e.base, exp))
+            # (a**2*x**2)**(1/2) is a*(x**2)**(1/2) for a nonnegative a: a
+            # factor that cannot be negative comes out of the root, and the
+            # rest stays inside, where its sign is still nobody's business.
+            outside, inside = split
+            outside.each { |base, power| stack.push([base, multiply_exponents(power, pw), true]) }
+            stack.push([Pow.new(inside, Num.new(exp)), pw, true])
           elsif exp.is_a?(Numeric) && e.base.is_a?(Num) && (root = exact_power(e.base.value, exp))
             coeff *= pow_number(root, pw)
           elsif e.base.is_a?(Num) && exp.is_a?(Numeric) && (exp.is_a?(Float) || e.base.value.is_a?(Float))
@@ -297,6 +304,26 @@ module RCAS
     end
 
     # Exact integer power, going through Rational for negative exponents.
+    # The factors of a product that may leave a root: nonnegative ones whose
+    # exponent the root divides, since sqrt(c**2*w) is c*sqrt(w) for a real
+    # c >= 0 and any w. Everything else stays inside. nil when nothing comes
+    # out, which is what stops the rule from firing on its own result.
+    def root_of_product(base, exp)
+      return nil unless base.is_a?(Mul)
+      coeff, factors = factorize(base)
+      outside = {}
+      inside = {}
+      factors.each do |factor, power|
+        if power.is_a?(Integer) && (power * exp).denominator == 1 && !power.zero? && RCAS.nonnegative?(factor)
+          outside[factor] = power * exp
+        else
+          inside[factor] = power
+        end
+      end
+      return nil if outside.empty?
+      [outside, rebuild_product(coeff, inside)]
+    end
+
     def pow_number(value, power)
       return value if power == 1
       return normalize_number(value**power) if value.is_a?(Complex)

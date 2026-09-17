@@ -39,6 +39,32 @@ module RCAS
       end
     end
 
+    # sin and cos repeat every 2*pi, tan and cot every pi, so an added term
+    # that is an integer multiple of the period drops out of the argument:
+    # sin(pi/6 + 2*pi*k) is sin(pi/6) for an integer k. The multiple has to
+    # be *known* to be one, which is what assume(k: ZZ) says - for an
+    # undeclared k nothing happens, because k = 1/2 would be another matter.
+    PERIODS = { sin: 2, cos: 2, tan: 1 }.freeze
+
+    def reduce_period(name, arg)
+      period = PERIODS[name]
+      return nil if period.nil?
+      constant, terms = Simplify.termize(Expression.lift(arg))
+      kept = terms.reject { |factors, coeff| whole_period?(factors, coeff, period) }
+      return nil if kept.size == terms.size
+      Simplify.rebuild_sum(constant, kept)
+    end
+
+    # Is coeff * factors an integer multiple of period*pi?
+    def whole_period?(factors, coeff, period)
+      return false unless factors[PI] == 1
+      return false unless coeff.is_a?(Integer) && (coeff % period).zero?
+      rest = factors.reject { |base, _| base == PI }
+      return true if rest.empty?
+      domain = Infer.domain(Simplify.rebuild_product(1, rest))
+      !domain.nil? && domain <= ZZ
+    end
+
     # The function whose even powers are replaced when +keep+ is kept, and
     # what its square becomes: sin**2 + cos**2 = 1, cosh**2 - sinh**2 = 1.
     SQUARES = {

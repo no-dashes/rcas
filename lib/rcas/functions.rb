@@ -635,6 +635,11 @@ module RCAS
       return fn unless fn.args.size == 1
       arg = fn.args.first
 
+      # a whole period added to the argument of sin, cos or tan drops out
+      if (reduced = Trigonometry.reduce_period(fn.name, arg))
+        return fold(Fn.new(fn.name, [reduced]))
+      end
+
       # odd / even symmetry: sin(-u) = -sin(u), cos(-u) = cos(u)
       if (ODD.include?(fn.name) || EVEN.include?(fn.name)) && !arg.is_a?(Num)
         coeff, factors = Simplify.factorize(arg)

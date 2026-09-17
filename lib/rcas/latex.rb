@@ -81,7 +81,11 @@ module RCAS
     def hash(table)
       return '\left\{\,\right\}' if table.empty?
       pairs = table.map do |k, v|
-        v.is_a?(Domain) ? "#{of(k)} \\in #{of(v)}" : "#{of(k)} \\mapsto #{of(v)}"
+        case v
+        when Membership, Inequality, Equation then of(v)
+        when Domain then "#{of(k)} \\in #{of(v)}"
+        else "#{of(k)} \\mapsto #{of(v)}"
+        end
       end
       pairs.join(',\; ')
     end
@@ -505,6 +509,10 @@ module RCAS
   class Matrix
     include Typeset
     def to_latex = LaTeX.matrix(entries)
+  end
+
+  class Membership
+    include Typeset
   end
 
   if defined?(Equation)

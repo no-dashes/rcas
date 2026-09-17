@@ -122,7 +122,7 @@ lib/rcas/inequalities.rb    Inequality, Interval, RealSet (complement/-), Cases,
 lib/rcas/piecewise.rb       Piecewise node + Piecewises: first-match branch selection, diff/integrate (continuity constant)/limit/solve per branch, discontinuities/kinks
 lib/rcas/ode.rb             Derivative node, dsolve (separable, linear 1st order, const-coeff any order: char. roots, undetermined coefficients, variation of parameters) and systems: dsolve([eqs], [y1, y2], t) via eigenvectors + Jordan chains
 lib/rcas/constants.rb       Const (pi, oo), E = exp(1), I = Num(Complex(0,1)), exact trig values
-lib/rcas/domains.rb         NN ZZ QQ RR CC, assumptions, Infer (domain inference), PolynomialRing, FractionField
+lib/rcas/domains.rb         NN ZZ QQ RR CC, assumptions, Infer (domain inference, `excluded?`), Membership ("x in ZZ": the statement `hold { x.in?(ZZ) }` keeps, and what `assumptions` lists), PolynomialRing, FractionField
 lib/rcas/polynomial.rb      ring elements: {exponent vector => coefficient}
 lib/rcas/coefficients.rb    degree/ldegree/lcoeff/tcoeff/coeff/coeffs/collect on expressions (via Expand.table)
 lib/rcas/gcd.rb             primitive PRS gcd (multivariate over ZZ/QQ), xgcd, lcm
@@ -172,8 +172,11 @@ MANUAL.md                   the user manual (usage); README.md (setup only); ass
    `simplify`. `Functions#sin` etc. implement this; `Fn.new` does not fold.
 2. **`==` is structural**, `eql?`/`hash` too (hash keys, `subs` patterns
    rely on it). Mathematical equality = compare canonical forms, or
-   `Scalar.zero?(a - b)`. Inside `hold { }`, `==` builds an `Equation` and
-   `!=` an `Inequality`.
+   `Scalar.zero?(a - b)`. Inside `hold { }`, `==` builds an `Equation`,
+   `!=` an `Inequality` and `in?` a `Membership` - three
+   statements that are not Expressions and each need their own row in
+   latex.rb and the OpenMath phrasebook (relation1.eq, relation1.lt...,
+   set1.in).
 3. **Canonical form** (`Simplify`): sums ordered by ascending degree,
    constant first (Mathematica style: `1 + 2*x + x**2`), then graded
    lexicographic; factors ordered Num, Const, Var, Fn, sums; `i` first.
@@ -663,6 +666,17 @@ names one without a session-wide assumption.
   an `assume` or a `forget` inside the block is local as well.
 - The filter is at the one funnel (`solve`), not inside `univariate`, which
   recurses through the case splits.
+- **An assumption is used in three more places since 17 Sept 2026.**
+  `Trigonometry.reduce_period` drops a whole period from the argument of
+  sin, cos or tan when the multiple is known to be an integer, which is
+  what makes the `all: true` families checkable (`sin(pi/6 + 2*pi*k)` is
+  `1/2` for an integer k, and nothing at all for an undeclared one).
+  `Simplify.root_of_product` takes a factor that cannot be negative out of
+  a root, `sqrt(c**2*w) = c*sqrt(w)`, and leaves the rest inside - only
+  when the root divides that factor's exponent, so it is always a
+  simplification and never churn. And `assumptions` lists Memberships, so
+  `RCAS.assumptions` prints statements while `RCAS.assumption(name)` stays
+  the domain that Infer and solve want.
 
 ## Traps we have hit (so you do not hit them again)
 

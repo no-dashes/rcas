@@ -234,7 +234,7 @@ module RCAS
         declared = RCAS.assumptions
         return info("no assumptions") if declared.empty?
         rows = declared.map do |name, value|
-          text = value.is_a?(Inequality) ? value.to_s : "#{name} #{RCAS.unicode? ? '∈' : 'in'} #{value}"
+          text = RCAS.unicode? ? value.to_s.sub(" in ", " ∈ ") : value.to_s
           { name: name.to_s, text: text, latex: (LaTeX.of(value) if @format.typesettable?(value)) }
         end
         { kind: "vars", title: "assumptions", rows: rows }

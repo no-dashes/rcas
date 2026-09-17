@@ -36,6 +36,39 @@ module RCAS
     def symbol(ascii) = unicode? ? UNICODE.fetch(ascii.to_s, ascii.to_s) : ascii.to_s
   end
 
+  # "x in ZZ": the statement, not the answer. `x.in?(ZZ)` decides membership
+  # and returns true or false; inside hold { } the same call is kept as this,
+  # the way `==` is kept as an Equation, so that a condition can be written
+  # down, printed, typeset (x \in \mathbb{Z}) and carried around.
+  #
+  #   hold { x.in?(ZZ) }        # => x in ZZ
+  #   assumptions               # => {:x=>x in ZZ}
+  class Membership
+    attr_reader :value, :domain
+
+    def initialize(value, domain)
+      @value = value.is_a?(Expression) || value.is_a?(Numeric) || value.is_a?(Symbol) ? Expression.lift(value) : value
+      @domain = domain
+      freeze
+    end
+
+    # Does it hold? The domain decides, exactly where it can.
+    def holds? = domain.include?(value)
+
+    def variables = value.respond_to?(:variables) ? value.variables : []
+    def subs(*args) = Membership.new(value.subs(*args), domain)
+    def simplify = Membership.new(value.simplify, domain)
+
+    def ==(other) = other.is_a?(Membership) && other.value == value && other.domain == domain
+    alias eql? ==
+    def hash = [Membership, value, domain].hash
+
+    def to_s = "#{value} in #{domain}"
+    alias inspect to_s
+
+    def to_latex(wrap: nil) = "#{LaTeX.of(value, wrap: wrap)} \\in #{LaTeX.of(domain)}"
+  end
+
   # Common protocol of NN, ZZ, QQ, RR, CC, polynomial rings and fraction fields.
   class Domain
     def include?(_obj) = raise(NotImplementedError)
@@ -230,7 +263,14 @@ module RCAS
     end
 
     # Domains as number sets, signs as the inequality they stand for.
-    def assumptions = @assumptions.merge(@signs.to_h { |name, sign| [name, sign_statement(name, sign)] })
+    # Every assumption as the statement it is: a sign was already an
+    # Inequality, and a domain is a Membership rather than the bare set.
+    # `assumption(name)` is the domain itself, which is what Infer and solve
+    # want.
+    def assumptions
+      domains = @assumptions.to_h { |name, domain| [name, Membership.new(Var.new(name), domain)] }
+      domains.merge(@signs.to_h { |name, sign| [name, sign_statement(name, sign)] })
+    end
 
     def sign_statement(name, sign)
       relation = SIGNS.key(sign)

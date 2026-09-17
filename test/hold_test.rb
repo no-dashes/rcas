@@ -3,6 +3,20 @@
 require_relative "test_helper"
 
 class HoldTest < Minitest::Test
+  # in? decides membership; inside hold it is kept as the statement, the way
+  # == is kept as an equation.
+  def test_membership_is_held_as_a_statement
+    x = RCAS::Var.new(:x)
+    statement = RCAS.hold { x.in?(RCAS::ZZ) }
+    assert_kind_of RCAS::Membership, statement
+    assert_equal "x in ZZ", statement.to_s
+    assert_equal "x \\in \\mathbb{Z}", statement.to_latex
+    refute statement.holds?, "x is not declared an integer"
+    assert statement.subs(x => RCAS::Num.new(3)).holds?
+    assert_equal false, x.in?(RCAS::ZZ), "the bare call still answers"
+    assert_equal "x + 1 in QQ", RCAS.hold { (x + 1).in?(RCAS::QQ) }.to_s
+  end
+
   def test_numbers_stay_symbolic
     e = RCAS.hold { 1 + 2 }
     assert_equal [:add, 1, 2], e.to_sexp

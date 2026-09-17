@@ -209,7 +209,7 @@ module RCAS
       def context
         locals = @workspace.locals.reject { |_, v| v.is_a?(Symbol) }.map { |k, v| "#{k} = #{clip(v.to_s.gsub("\n", ' '))}" }
         symbols = @workspace.locals.select { |k, v| v.is_a?(Symbol) && v == k }.keys
-        assumptions = RCAS.assumptions.map { |k, v| "#{k} in #{v}" }
+        assumptions = RCAS.assumptions.values.map(&:to_s)
         parts = []
         parts << "variables: #{symbols.join(', ')}" unless symbols.empty?
         parts << "locals: #{locals.join('; ')}" unless locals.empty?

@@ -310,6 +310,7 @@ module RCAS
         when Node        then obj
         when Expression  then encode_expression(obj)
         when Equation    then Application.new(OpenMath.sym("relation1", "eq"), encode(obj.lhs), encode(obj.rhs))
+        when Membership  then Application.new(OpenMath.sym("set1", "in"), encode(obj.value), encode(obj.domain))
         when Inequality  then encode_inequality(obj)
         when Interval    then encode_interval(obj)
         when NumberSet   then encode_number_set(obj)
@@ -505,6 +506,14 @@ module RCAS
       %w[eq lt leq gt geq neq].each do |name|
         DECODE_APPLY[["relation1", name]] = ->(args, node) { decode_relation(node) }
       end
+
+      # set1.in is a Membership, which is a statement and not an Expression
+      # either. The set comes back as the number set it names.
+      DECODE_APPLY[%w[set1 in]] = lambda { |args, _|
+        next nil unless args.size == 2
+        value, domain = args.map { |a| decode(a) }
+        domain.is_a?(Domain) ? Membership.new(value, domain) : nil
+      }
 
       # linalg2: a matrix of matrixrows, and a vector.
       DECODE_APPLY[%w[linalg2 matrix]] = lambda { |args, _|

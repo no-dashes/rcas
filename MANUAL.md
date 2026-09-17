@@ -1891,6 +1891,19 @@ rcas> solve(tan(x) - 1, x, all: true)
 => [pi/4 + pi*k]
 ```
 
+The parameter is an integer, and saying so is what lets the family be
+checked: sine and cosine repeat every `2*pi` and the tangent every `pi`,
+so a whole period added to the argument drops out once the multiple is
+known to be a whole number. Without that, `k` could be `1/2` and nothing
+may be dropped.
+
+```
+rcas> assume(k: ZZ) { sin(x + 2*pi*k).simplify }
+=> sin(x)
+rcas> assume(k: ZZ) { solve(sin(x) - 1/2r, x, all: true).map { |s| sin(s).simplify } }
+=> [1/2, 1/2]
+```
+
 Where the unknown lives is part of the question. A domain declared with
 `assume` (or named for one call with `domain:`) keeps out the solutions
 that demonstrably do not lie in it, and a declared sign does the same:
@@ -2086,9 +2099,35 @@ rcas> ZZ[x].(x**2 - 1).in?(QQ[x])
 rcas> (t + 1).domain
 => nil
 rcas> assumptions
-=> {:x=>ZZ, :n=>NN, :y=>QQ}
+=> {:x=>x in ZZ, :n=>n in NN, :y=>y in QQ}
 rcas> forget
 => true
+```
+
+An assumption is a statement, and `assumptions` lists it as one: a sign was
+always written `x > 0`, and a domain is now `x in ZZ` rather than the bare
+set. `x.in?(ZZ)` still answers true or false, but inside `hold { }` it is
+kept as that statement, the way `==` is kept as an equation - so a
+condition can be written down, typeset and carried around.
+
+```
+rcas> hold { x.in?(ZZ) }
+=> x in ZZ
+rcas> Out[-1].to_latex
+=> "x \\in \\mathbb{Z}"
+rcas> assume(x: ZZ) { hold { x.in?(ZZ) }.holds? }
+=> true
+```
+
+A declared sign also lets a root come apart: `sqrt(c**2*w)` is `c*sqrt(w)`
+whenever `c` cannot be negative, whatever `w` does, and what is left keeps
+its root.
+
+```
+rcas> assume(a > 0) { sqrt(a**2*x**2).simplify }
+=> a*(x**2)**(1/2)
+rcas> assume(a > 0, x > 0) { sqrt(a**2*x**2).simplify }
+=> a*x
 ```
 
 An assumption that is only meant for one calculation takes a block. It
@@ -2104,9 +2143,9 @@ rcas> assumptions
 rcas> assume(x: RR)
 => true
 rcas> assume(x: ZZ) { assumptions }
-=> {:x=>ZZ}
+=> {:x=>x in ZZ}
 rcas> assumptions
-=> {:x=>RR}
+=> {:x=>x in RR}
 rcas> forget
 => true
 ```

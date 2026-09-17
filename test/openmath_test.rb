@@ -25,6 +25,16 @@ class OpenMathTest < Minitest::Test
 
   # ---- the objects -------------------------------------------------------
 
+  # set1.in carries a membership, which is a statement and not an Expression.
+  def test_membership_travels_as_set1_in
+    x = RCAS::Var.new(:x)
+    statement = RCAS.hold { x.in?(RCAS::ZZ) }
+    xml = RCAS.openmath(statement).to_xml
+    assert_includes xml, '<OMS cd="set1" name="in"/>'
+    assert_includes xml, '<OMS cd="setname1" name="Z"/>'
+    assert_equal statement, RCAS.from_openmath(xml)
+  end
+
   def test_objects_are_structural_and_frozen
     a = OM::Application.new(OM.sym("arith1", "plus"), OM::Int.new(1), OM::Variable.new("x"))
     b = OM::Application.new(OM.sym("arith1", "plus"), OM::Int.new(1), OM::Variable.new("x"))

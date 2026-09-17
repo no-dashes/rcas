@@ -5,6 +5,8 @@ require_relative "test_helper"
 class SimplifyTest < Minitest::Test
   def s(expr) = expr.simplify.to_s
 
+  def teardown = RCAS.forget
+
   def test_identities
     assert_equal "x", s(:x + 0)
     assert_equal "x", s(:x * 1)
@@ -69,6 +71,41 @@ class SimplifyTest < Minitest::Test
     together = RCAS.cos(u)**2 * RCAS.cos(v)**2 + RCAS.cos(u)**2 * RCAS.sin(v)**2 + RCAS.sin(u)**2
     assert_equal "1", RCAS::Trigonometry.trigsimp(together).to_s
     assert_equal "cosh(u)**2", RCAS::Trigonometry.trigsimp(1 + RCAS.sinh(u)**2).to_s
+  end
+
+  # sqrt(c**2*w) is c*sqrt(w) for a c that cannot be negative; the rest of
+  # the product stays inside, where its sign is still nobody's business.
+  def test_a_nonnegative_factor_leaves_a_root
+    a = RCAS::Var.new(:a)
+    x = RCAS::Var.new(:x)
+    assert_equal "(a**2*x**2)**(1/2)", RCAS.sqrt(a**2 * x**2).simplify.to_s, "nothing is known about a"
+    RCAS.assume(a > 0) do
+      assert_equal "a*(x**2)**(1/2)", RCAS.sqrt(a**2 * x**2).simplify.to_s
+      assert_equal "a*x**(1/2)", RCAS.sqrt(a**2 * x).simplify.to_s
+      assert_equal "(a**3*x**2)**(1/2)", RCAS.sqrt(a**3 * x**2).simplify.to_s, "the root has to divide the exponent"
+      assert_equal "(a**2*x**2)**(1/4)", RCAS.root(a**2 * x**2, 4).simplify.to_s
+    end
+    RCAS.assume(a > 0, x > 0) { assert_equal "a*x", RCAS.sqrt(a**2 * x**2).simplify.to_s }
+    assert_equal "2*(x**2)**(1/2)", RCAS.sqrt(4 * x**2).simplify.to_s, "a numeric factor came out already"
+  end
+
+  # sin and cos repeat every 2*pi, tan every pi, once the multiple is known
+  # to be a whole number.
+  def test_a_whole_period_drops_out_of_the_argument
+    x = RCAS::Var.new(:x)
+    k = RCAS::Var.new(:k)
+    assert_equal "sin(2*pi*k + x)", RCAS.sin(x + 2 * RCAS::PI * k).simplify.to_s, "k could be 1/2"
+    RCAS.assume(k: RCAS::ZZ) do
+      assert_equal "sin(x)", RCAS.sin(x + 2 * RCAS::PI * k).simplify.to_s
+      assert_equal "cos(x)", RCAS.cos(x + 2 * RCAS::PI * k).simplify.to_s
+      assert_equal "tan(x)", RCAS.tan(x + RCAS::PI * k).simplify.to_s
+      assert_equal "1", RCAS.cos(2 * RCAS::PI * k).simplify.to_s
+      assert_equal "sin(pi*k + x)", RCAS.sin(x + RCAS::PI * k).simplify.to_s, "half a period is not one"
+      # the family solve returns checks out against the equation it solves
+      family = RCAS.solve(RCAS.sin(x) - Rational(1, 2), :x, all: true)
+      assert_equal ["pi/6 + 2*pi*k", "5*pi/6 + 2*pi*k"], family.map(&:to_s)
+      assert_equal ["1/2", "1/2"], family.map { |s| RCAS.sin(s).simplify.to_s }
+    end
   end
 
   def test_numeric_content_leaves_a_root
