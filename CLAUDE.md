@@ -95,6 +95,7 @@ lib/rcas/docs.rb            Docs.doc(name) -> Documentation: signature + comment
 lib/rcas/plot.rb            Plot (braille canvas, SVG, PNG via Render.which/run + Chrome) and Plotting.plot/parametric/polar/scatter/histogram/boxplot/barchart (Curve markers: line, :dot, :stem, :bar, :box; ylabels/xlabels name the rows and columns); Plot has no to_latex on purpose, so the chat shows the art. `Plot.style` (:text/:image, RCAS_PLOT_STYLE) is the hook the chat's /plotstyle writes; `picture?`/`picture` draw the inline image
 lib/rcas/numerics.rb        Numerics.nsolve (bisection + Newton), nintegrate (adaptive Simpson, infinite ranges by substitution), resolve (evalf on a definite Integral)
 lib/rcas/analysis.rb        Analysis: critical_points/extrema/inflections/asymptotes/tangent/normal/real_domain, gradient/hessian/jacobian/divergence/curl/laplacian/lagrange, arclength/revolution_volume/revolution_surface
+lib/rcas/vector_calculus.rb VectorCalculus: line_integral/surface_integral/flux over a parametrization, enclosed_area, green/stokes/divergence_theorem (each computes the side over the region, the integrals compute the other), conservative?/potential; `norm` takes perfect squares out of the length element with the sign they have on the parameter range
 lib/rcas/discussion.rb      Discussion.discuss -> Report: the whole Kurvendiskussion in one object (domain, symmetry/period, zeros, gaps, limits+asymptotes, extrema, monotonicity, inflections, curvature). Every row comes from the function that owns it; nil means undecided and prints as "not determined", [] means none. Monotonicity/curvature by sign chart (three samples a piece); a periodic f is charted over one period. steps(f, x, :discuss) narrates the same report, and `hold`/`steps { discuss(f, x) }` keep the call as `Fn(:discuss, [f, x])` (in `Hold::FORMAL`; `doit` answers it with the Report, which is not an Expression)
 lib/rcas/geometry.rb        Geometry::{Point Line Circle} (a line is a*x + b*y + c = 0, normalized) and the constructions; exact coordinates
 lib/rcas/linear_algebra.rb  LinearAlgebra: gram_schmidt/project/least_squares, exact
@@ -565,6 +566,37 @@ Every rule is tested by differentiating its answer and comparing numerically
 at a few points; batteries of trial integrals belong in the scratchpad, not
 in the repo.
 
+## Line and surface integrals (vector_calculus.rb)
+
+Everything is a parametrization followed by an ordinary integral, so the
+module is small and the decisions are all about honesty:
+
+- **The order of the ranges is the order of integration *and* the
+  orientation.** `surface_integral(f, s, u: .., v: ..)` integrates u
+  innermost (as `integrate` does) and takes the normal as `r_u x r_v` for
+  the first parameter u and the second v. Exchanging the two ranges turns
+  the normal round: the sphere's flux is `4*pi` written `v: 0..pi,
+  u: 0..2*pi` and `-4*pi` the other way. That is the mathematics, not a
+  bug, and the manual says so.
+- **`norm` pulls perfect squares out of the length element**, because
+  `sqrt(a**4*sin(v)**2)` would otherwise leave the sphere unintegrable.
+  The sign of each factor is decided by sampling it on the parameter box
+  (`sign_on`, 5 points per variable); where it changes, or where a bound is
+  not a number, the answer keeps `abs(...)`. A radicand with trig functions
+  is `trigsimp`ed first - which is what uncovered the `reduce_table` bug.
+- **The coordinates of a field default to x, y, z**, which is what a
+  student writes; the field's own variables are used instead when there are
+  exactly as many of them as the parametrization has components (so a field
+  in u, v works), and `vars:` settles it in any other case. For `green` and
+  `divergence_theorem` the coordinates are the *range* variables sorted, so
+  that `[P, Q]` belongs to x, y and not to the order of integration.
+- The three theorems each compute the side over the region, which is
+  usually the easier one; `line_integral`/`surface_integral` compute the
+  other, and the tests put the two next to each other (Green against the
+  four sides of a square, Stokes against the circulation around a disc,
+  Gauss against the flux through the six faces of a cube). That is the
+  property check for this file - there is no antiderivative to differentiate.
+
 ## Traps we have hit (so you do not hit them again)
 
 - `RCAS::IRB::AutoSymbol` turns an undefined `name(args)` with Expression,
@@ -641,6 +673,11 @@ in the repo.
   one. Every fence in the two manuals stays plain.
 - `assert_in_delta(exp, act, delta, msg)`: the third argument is the
   tolerance, not the message.
+- `Trigonometry.reduce_table` rebuilt its term from the *original* factor
+  map inside the loop, so a term with two reducible squares kept only the
+  last replacement (cos(u)**2*cos(v)**2 lost one half) and sin**2 + cos**2
+  = 1 never closed. It reduces all of them in one pass now; the length of
+  a sphere's surface normal depends on it (simplify_test).
 - Every Expression class needs a case in `LaTeX.print`; `RootOf` had none
   for a year because nothing typeset one until `discuss` put roots in a
   report. The audit is cheap: build one of each node and call `LaTeX.of`.
@@ -682,7 +719,9 @@ lists the same gaps for the reader): full Risch, special functions beyond
 erf, Ei, Si, Ci and li (the dilogarithm, and with it log(x)/(1 + x)),
 rational functions needing a real factor of degree three or more
 (1/(x**3 - 2), 1/(x**8 + 1)), ANOVA and non-parametric tests (Wilcoxon, KS), 3-d
-plots, geometry in space, conics, Fourier transforms (the *series* are in
+plots, geometry in space, conics, surfaces given implicitly rather than by a
+parametrization (vector_calculus.rb always asks for one), differential forms
+of their own, Fourier transforms (the *series* are in
 fourier.rb), group
 theory, ODEs with variable coefficients beyond first
 order, inequalities with 2+ parameters or
@@ -736,7 +775,9 @@ whole vocabulary in one place rather than a method per class), and then
 POPCORN and OMFOREIGN (17 Sept 2026, after the user pointed at
 github.com/symcomp/org.symcomp.openmath - which is the user's own library:
 POPCORN is Horn & Roozemond, CICM 2009, so check the grammar there rather
-than guessing, and ask rather than reconstruct). ODEs with variable
+than guessing, and ask rather than reconstruct), and then line and surface
+integrals with Green, Stokes and Gauss (17 Sept 2026, on the parametric
+curves that had just landed: vector_calculus.rb). ODEs with variable
 coefficients (Bernoulli, Riccati, exact equations, Cauchy-Euler, and
 Frobenius series solutions, which are fps.rb run backwards) are the most
 requested-adjacent remaining item; a `steps`/`explain` layer that narrates

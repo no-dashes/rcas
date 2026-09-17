@@ -69,7 +69,8 @@ class AnalysisTest < Minitest::Test
     assert_equal "pi", RCAS.arclength([RCAS.cos(:t), RCAS.sin(:t)], t: 0..RCAS::PI).to_s, "half a unit circle"
     assert_in_delta 1.4789428575445973, RCAS.arclength(:x**2, x: 0..1).evalf, 1e-9
     assert_equal 5, RCAS.arclength(3 * :x / 4, x: 0..4), "a 3-4-5 triangle"
-    assert_raises(ArgumentError) { RCAS.arclength([:t, :t, :t], t: 0..1) }
+    assert_equal "3**(1/2)", RCAS.arclength([:t, :t, :t], t: 0..1).to_s, "a space curve"
+    assert_raises(ArgumentError) { RCAS.arclength([:t, :t, :t, :t], t: 0..1) }
   end
 
   def test_solids_of_revolution

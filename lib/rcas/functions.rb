@@ -133,6 +133,17 @@ module RCAS
       end
     end
 
+    # The ranges of an integral over a region, in the order they were given,
+    # which is the order they are integrated in: the first one innermost.
+    def self.range_list(ranges, count, name)
+      wanted = count.is_a?(Range) ? count : (count..count)
+      unless wanted.cover?(ranges.size)
+        example = name == "green" ? "#{name}(f, x: 0..1, y: 0..1)" : "#{name}(f, s, u: 0..1, v: 0..1)"
+        raise ArgumentError, "#{name}: give #{wanted.to_a.join(' or ')} ranges, e.g. #{example}"
+      end
+      ranges.map { |k, r| range_arguments(nil, nil, nil, { k => r }, name, discrete: false) }
+    end
+
     def self.range_arguments(k, from, to, range, name, discrete:)
       unless range.empty?
         raise ArgumentError, "#{name}: give one variable, e.g. #{name}(f, k: 1..n)" unless range.size == 1 && k.nil?
@@ -261,6 +272,61 @@ module RCAS
       var, from, to = Functions.range_arguments(var, from, to, range, "revolution_surface", discrete: false)
       Analysis.revolution_surface(f, var, from, to, axis: axis)
     end
+
+    # line_integral(x*y, [cos(t), sin(t)], t: 0..pi/2): a scalar field along a curve,
+    # the integral of f ds; with a vector field, line_integral([-y, x], curve, t: 0..2*pi)
+    # is the integral of F.dr, the work done along it. The field is read in x, y, z
+    # unless vars: names other coordinates.
+    def line_integral(f, curve, var = nil, from = nil, to = nil, vars: nil, **range)
+      var, from, to = Functions.range_arguments(var, from, to, range, "line_integral", discrete: false)
+      VectorCalculus.line_integral(f, curve, var, from, to, vars: vars)
+    end
+
+    # surface_integral(1, [u, v, u + v], u: 0..1, v: 0..1): a scalar field over a
+    # parametrized surface, the integral of f dS; a vector field is integrated
+    # against the normal, F.dS, which is the flux through it
+    def surface_integral(f, surface, vars: nil, **ranges)
+      VectorCalculus.surface_integral(f, surface, Functions.range_list(ranges, 2, "surface_integral"), vars: vars)
+    end
+
+    # flux([x, y], [cos(t), sin(t)], t: 0..2*pi) across a plane curve (outwards when
+    # it runs anticlockwise), or flux(field, surface, u: .., v: ..) through a surface
+    def flux(field, boundary, vars: nil, **ranges)
+      list = Functions.range_list(ranges, (1..2), "flux")
+      return VectorCalculus.surface_integral(field, boundary, list, vars: vars) if list.size == 2
+      VectorCalculus.curve_flux(field, boundary, *list.first, vars: vars)
+    end
+
+    # enclosed_area([cos(t)**3, sin(t)**3], t: 0..2*pi): the area a closed plane curve
+    # encloses, as the line integral Green's theorem turns it into
+    def enclosed_area(curve, var = nil, from = nil, to = nil, **range)
+      var, from, to = Functions.range_arguments(var, from, to, range, "enclosed_area", discrete: false)
+      VectorCalculus.enclosed_area(curve, var, from, to)
+    end
+
+    # green([-y, x], x: 0..1, y: 0..1): Green's theorem, the circulation of a plane
+    # field around the boundary of a region as the double integral of Q_x - P_y over
+    # it. The ranges describe the region, innermost first, as for integrate.
+    def green(field, vars: nil, **ranges)
+      VectorCalculus.green(field, Functions.range_list(ranges, 2, "green"), vars: vars)
+    end
+
+    # stokes([-y, x, 0], [u*cos(v), u*sin(v), 0], u: 0..1, v: 0..2*pi): Stokes's theorem,
+    # the circulation around the edge of a surface as the flux of the curl through it
+    def stokes(field, surface, vars: nil, **ranges)
+      VectorCalculus.stokes(field, surface, Functions.range_list(ranges, 2, "stokes"), vars: vars)
+    end
+
+    # divergence_theorem([x, y, z], x: 0..1, y: 0..1, z: 0..1): Gauss's theorem, the flux
+    # out of the boundary of a solid as the triple integral of the divergence over it
+    def divergence_theorem(field, vars: nil, **ranges)
+      VectorCalculus.divergence_theorem(field, Functions.range_list(ranges, 3, "divergence_theorem"), vars: vars)
+    end
+
+    # conservative?([2*x*y, x**2]) asks whether a field is a gradient; potential(field)
+    # is the function it is the gradient of, up to a constant
+    def conservative?(field, vars = nil) = VectorCalculus.conservative?(field, vars)
+    def potential(field, vars = nil) = VectorCalculus.potential(field, vars)
 
     # nsolve(cos(x) - x, x: 0..1) or nsolve(f, x, guess): a root as a Float when no formula applies
     def nsolve(f, var = nil, guess = nil, **range) = Numerics.nsolve(f, var, guess, **range)

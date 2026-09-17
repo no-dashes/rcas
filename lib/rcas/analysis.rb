@@ -252,14 +252,14 @@ module RCAS
     # ---- lengths, areas, volumes ---------------------------------------------
 
     # The length of a curve: integral(sqrt(1 + f'**2)) for a graph and
-    # integral(sqrt(x'**2 + y'**2)) for [x(t), y(t)]. The integral is
+    # integral(sqrt(x'**2 + y'**2)) for [x(t), y(t)], in space too. The integral is
     # rarely elementary and then stays an integral(...) node, which evalf
     # or nintegrate finishes.
     def arclength(f, var, from, to)
       var = Expression.lift(var)
       integrand =
         if f.is_a?(Array)
-          raise ArgumentError, "arclength: a parametric curve needs two components" unless f.size == 2
+          raise ArgumentError, "arclength: a parametric curve needs two or three components" unless [2, 3].include?(f.size)
           f.map { |c| Expression.lift(c).diff(var)**2 }.reduce(:+)
         else
           Num.new(1) + Expression.lift(f).diff(var)**2

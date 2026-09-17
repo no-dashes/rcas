@@ -91,13 +91,11 @@ module RCAS
       constant, table = Expand.table(expr)
       result = Num.new(constant)
       table.each do |factors, coeff|
-        term = Simplify.rebuild_product(coeff, factors)
-        factors.each do |base, exp|
-          next unless base.is_a?(Fn) && base.name == victim && exp.is_a?(Integer) && exp >= 2
-          u = base.args.first
-          partner = Fn.new(keep, [u])
-          replacement = square.call(partner)**(exp / 2) * base**(exp % 2)
-          term = (Simplify.rebuild_product(coeff, factors.reject { |b, _| b == base }) * replacement).expand
+        reducible = factors.select { |base, exp| base.is_a?(Fn) && base.name == victim && exp.is_a?(Integer) && exp >= 2 }
+        term = Simplify.rebuild_product(coeff, factors.reject { |b, _| reducible.key?(b) })
+        reducible.each do |base, exp|
+          partner = Fn.new(keep, [base.args.first])
+          term = (term * square.call(partner)**(exp / 2) * base**(exp % 2)).expand
         end
         result += term
       end

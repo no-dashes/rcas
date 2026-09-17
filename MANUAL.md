@@ -49,6 +49,8 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
     - [Curve sketching](#curve-sketching)
     - [The whole discussion](#the-whole-discussion)
     - [Several variables](#several-variables)
+    - [Line and surface integrals](#line-and-surface-integrals)
+    - [Green, Stokes and Gauss](#green-stokes-and-gauss)
     - [Series](#series)
     - [Formal power series](#formal-power-series)
     - [Limits](#limits)
@@ -343,8 +345,9 @@ recurrences, 1.10 Statistics.
 Rings and fields as objects: polynomial rings over ZZ, QQ or a finite
 field, algebraic numbers with their minimal polynomials, Gröbner bases for
 polynomial systems. Laplace transforms and systems of differential
-equations for the applied courses, several-variable calculus, and the
-number theory of a first course in it.
+equations for the applied courses, several-variable calculus up to the
+line and surface integrals of a vector analysis course, and the number
+theory of a first course in it.
 
 ```
 rcas> QQ[x].(x**4 - 1).factor
@@ -367,6 +370,8 @@ rcas> sumrecursion(binomial(n, k)**2, k, s(n))
 => s(n)*(-2 - 4*n) + s(1 + n)*(1 + n) = 0
 rcas> qsolve(eq(u(q*x), (1 - t*x)*u(x)), u, x, q)
 => u(q**n) = C1*qpochhammer(t, q, n)
+rcas> stokes([-y, x, 0], [u*cos(v), u*sin(v), 0], u: 0..1, v: 0..2*pi)
+=> 2*pi
 ```
 
 Read on: 1.5 Domains and assumptions, 1.6 Polynomial rings, 1.8
@@ -887,7 +892,8 @@ leaves is exactly `Si` and `Ci`.
 
 The three questions a first course in integration ends with.
 `arclength(f, x: a..b)` is `integral(sqrt(1 + f'**2))` for a graph and
-`integral(sqrt(x'**2 + y'**2))` for a parametric curve `[x(t), y(t)]`;
+`integral(sqrt(x'**2 + y'**2))` for a parametric curve `[x(t), y(t)]`, in
+space with three components;
 `revolution_volume` and `revolution_surface` turn a graph about the x-axis
 (or about the y-axis with `axis: :y`, which is the shell formula).
 
@@ -1168,6 +1174,120 @@ rcas> integrate(x*y, x: 0..1, y: 0..2)
 => 1
 rcas> lagrange(x + y, [x**2 + y**2 - 1], [x, y])
 => [{x=>-2**(1/2)/2, y=>-2**(1/2)/2}, {x=>2**(1/2)/2, y=>2**(1/2)/2}]
+```
+
+#### Line and surface integrals
+
+A line integral adds a function up along a curve, a surface integral over
+a surface. Both become ordinary integrals as soon as the curve or the
+surface is parametrized: a curve `[x(t), y(t)]` (three components in
+space) carries the length element `ds = |r'(t)|dt`, a surface
+`[x(u, v), y(u, v), z(u, v)]` the area element `dS = |r_u x r_v|du dv`.
+`line_integral(f, curve, t: a..b)` integrates a scalar field against `ds`;
+handed a *vector* field it integrates against `dr` instead, which is the
+work that field does along the curve. `flux` asks the same question of the
+normal: across a plane curve it integrates `F.n ds`, outwards where the
+curve runs anticlockwise. The field is read in `x`, `y`, `z` unless
+`vars: [u, v]` names other coordinates.
+
+```
+rcas> line_integral(1, [cos(t), sin(t)], t: 0..2*pi)
+=> 2*pi
+rcas> line_integral(x*y, [cos(t), sin(t)], t: 0..pi/2)
+=> 1/2
+rcas> line_integral(z, [cos(t), sin(t), t], t: 0..2*pi)
+=> 2*2**(1/2)*pi**2
+rcas> line_integral([-y, x], [cos(t), sin(t)], t: 0..2*pi)
+=> 2*pi
+rcas> line_integral([2*x*y, x**2], [t, t**2], t: 0..1)
+=> 1
+rcas> flux([x, y], [cos(t), sin(t)], t: 0..2*pi)
+=> 2*pi
+rcas> enclosed_area([cos(t)**3, sin(t)**3], t: 0..2*pi)
+=> 3*pi/8
+```
+
+The last one is Green's theorem read backwards: the area inside a closed
+curve is a line integral around it, here around an astroid.
+
+A surface is integrated over its two parameters in the order they are
+given, the first one innermost, as for `integrate`. That order also
+orients the surface, because the normal is `r_u x r_v` for the first
+parameter `u` and the second `v`: exchanging the two ranges turns the
+normal round, and the flux changes sign with it. Nothing here is a new
+kind of integral, so what `integrate` cannot do stays an `integral(...)`
+node and `evalf` finishes it.
+
+```
+rcas> surface_integral(1, [u, v, u + v], u: 0..1, v: 0..1)
+=> 3**(1/2)
+rcas> surface_integral(1, [a*sin(v)*cos(u), a*sin(v)*sin(u), a*cos(v)], v: 0..pi, u: 0..2*pi)
+=> 4*pi*a**2
+rcas> surface_integral(z**2, [sin(v)*cos(u), sin(v)*sin(u), cos(v)], v: 0..pi, u: 0..2*pi)
+=> 4*pi/3
+rcas> flux([x, y, z], [sin(v)*cos(u), sin(v)*sin(u), cos(v)], v: 0..pi, u: 0..2*pi)
+=> 4*pi
+rcas> flux([x, y, z], [sin(v)*cos(u), sin(v)*sin(u), cos(v)], u: 0..2*pi, v: 0..pi)
+=> -4*pi
+rcas> line_integral(1, [t, exp(t**2)], t: 0..1)
+=> integral((1 + 4*t**2*exp(2*t**2))**(1/2), t, 0, 1)
+rcas> line_integral(1, [t, exp(t**2)], t: 0..1).evalf
+=> 2.1276164146866363
+```
+
+The sphere shows what the length element needs: `|r_u x r_v|` is
+`sqrt(a**4*sin(v)**2)`, and the square root of a square is the absolute
+value. rcas takes the factor out of the root with the sign it has on the
+parameter range - `sin(v)` is positive on `0..pi` - and writes `abs(...)`
+where the sign changes there, rather than assuming one silently.
+
+#### Green, Stokes and Gauss
+
+The three theorems of vector calculus all say the same thing: an integral
+over a boundary equals an integral of a derivative over what it bounds.
+Green's turns the circulation of `[P, Q]` around the edge of a plane
+region into the double integral of `Q_x - P_y` over the region; Stokes's
+turns the circulation around the edge of a surface into the flux of the
+curl through it; Gauss's turns the flux out of the boundary of a solid
+into the triple integral of the divergence over it. Each function computes
+the side over the region, which is usually the easier one; the integrals
+of the previous section compute the other, so both sides can be put next
+to each other and compared.
+
+```
+rcas> green([-y, x], x: 0..1, y: 0..1)
+=> 2
+rcas> green([y**2, x**2], y: 0..x, x: 0..1)
+=> 1/3
+rcas> stokes([-y, x, 0], [u*cos(v), u*sin(v), 0], u: 0..1, v: 0..2*pi)
+=> 2*pi
+rcas> line_integral([-y, x, 0], [cos(t), sin(t), 0], t: 0..2*pi)
+=> 2*pi
+rcas> divergence_theorem([x, y, z], x: 0..1, y: 0..1, z: 0..1)
+=> 3
+```
+
+The ranges describe the region, innermost first, so the inner bounds may
+depend on the outer variable: the second line integrates a triangle,
+`0 <= y <= x <= 1`. The third and fourth are the two sides of Stokes's
+theorem for the unit disc, computed independently of each other.
+
+A field whose circulation around every closed curve vanishes is the
+gradient of a potential, and then the work it does depends only on the
+ends of the path. `conservative?` checks that by the symmetry of the
+derivatives, and `potential` integrates the field back, component by
+component; a field that has no potential says so rather than returning
+something that is not one.
+
+```
+rcas> conservative?([2*x*y, x**2])
+=> true
+rcas> potential([2*x*y, x**2])
+=> x**2*y
+rcas> conservative?([-y, x])
+=> false
+rcas> potential([-y, x])
+=> ArgumentError: potential: (-y, x) is not conservative
 ```
 
 #### Series
@@ -3386,6 +3506,7 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | curve sketching | `critical_points extrema inflections asymptotes tangent normal real_domain`, `discuss` for all of it at once |
 | length, area, volume | `arclength revolution_volume revolution_surface` |
 | several variables | `gradient hessian jacobian divergence curl laplacian lagrange` |
+| line and surface integrals | `line_integral surface_integral flux enclosed_area green stokes divergence_theorem conservative? potential` |
 | algebra | `solve eq factor groebner reduce interval` |
 | differential equations, recurrences | `D dsolve rsolve hyper laplace inverse_laplace` |
 | complex numbers | `re im conj arg` |
@@ -3413,7 +3534,8 @@ coeffs domain in in? to_poly to_sexp hold-related evaluate`.
 Not implemented: the complete Risch algorithm and special functions beyond
 `erf`, `Ei`, `Si`, `Ci` and `li` (the dilogarithm, so `log(x)/(1 + x)`),
 analysis of variance and non-parametric tests,
-three-dimensional plots, geometry in space, Fourier
+three-dimensional plots, geometry in space, surfaces that are given
+implicitly rather than by a parametrization, Fourier
 transforms, group theory, differential equations with variable
 coefficients beyond first order, inequalities beyond
 polynomial, rational and absolute-value ones, number fields with more than
@@ -3460,6 +3582,7 @@ lib/rcas/special.rb         incomplete gamma and beta, numerically
 lib/rcas/hypothesis.rb      t, z, chi-square, F and binomial tests; confidence intervals
 lib/rcas/numerics.rb        nsolve and nintegrate: numbers when the symbols run out
 lib/rcas/analysis.rb        curve sketching and several variables
+lib/rcas/vector_calculus.rb  line and surface integrals, Green, Stokes, Gauss
 lib/rcas/discussion.rb      the whole curve discussion in one report
 lib/rcas/geometry.rb        points, lines and circles in the plane
 lib/rcas/linear_algebra.rb  orthogonality, projections and least squares
@@ -3540,6 +3663,7 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | erf, Si, Ci, Ei, li and zeta in BigDecimal | precision.rb | the series of [AS64, §5.1, §5.2, §7.1]; Euler-Maclaurin [AS64, §23.2] |
 | worked solutions: the rules named as they are used | steps.rb | [Spi08, ch. 10, 18, 19]; Euclid [Knu98, §4.5.2] |
 | arc length, solids of revolution | analysis.rb | [Spi08, ch. 13] |
+| line and surface integrals, Green, Stokes and the divergence theorem | vector_calculus.rb | [MT12, ch. 7-8]; [Spi65, ch. 4-5] |
 | LU, QR, Cholesky, diagonalization | decompositions.rb | [Str16, ch. 2, 4, 6] |
 | Jordan normal form from chains of generalized eigenvectors | decompositions.rb | [HK71, ch. 7] |
 | Faulhaber sums by Newton interpolation, Bernoulli numbers, zeta(2m) | summation.rb | [GKP94, §6.5]; Euler-Maclaurin tail [GKP94, §9.5] |
@@ -3668,6 +3792,8 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   Comput. System Sci.* 13 (1976), 300-317.
 - [MT00] G. Marsaglia, W. W. Tsang, A simple method for generating gamma
   variables, *ACM Trans. Math. Software* 26 (2000), 363-372.
+- [MT12] J. E. Marsden, A. Tromba, *Vector Calculus*, 6th ed., W. H.
+  Freeman 2012.
 - [NM77] A. C. Norman, P. M. A. Moore, Implementing the new Risch
   integration algorithm, *Proc. 4th Int. Colloquium on Advanced Computing
   Methods in Theoretical Physics*, Marseille 1977, 99-110.
@@ -3702,6 +3828,7 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 - [Rud76] W. Rudin, *Principles of Mathematical Analysis*, 3rd ed.,
   McGraw-Hill 1976.
 - [Spi08] M. Spivak, *Calculus*, 4th ed., Publish or Perish 2008.
+- [Spi65] M. Spivak, *Calculus on Manifolds*, W. A. Benjamin 1965.
 - [Sta99] R. P. Stanley, *Enumerative Combinatorics, vol. 2*, Cambridge
   University Press 1999.
 - [Str16] G. Strang, *Introduction to Linear Algebra*, 5th ed.,

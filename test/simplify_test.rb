@@ -60,7 +60,19 @@ class SimplifyTest < Minitest::Test
     assert_equal "1 + x/y", ((:x + :y) / :y).expand.to_s
   end
 
+  # sin**2 + cos**2 = 1 has to be used on every factor of a term, not only on
+  # the last one: the length of a surface normal depends on it.
+  def test_trigonometric_squares_in_one_term
+    u = RCAS::Var.new(:u)
+    v = RCAS::Var.new(:v)
+    assert_equal "1", RCAS::Trigonometry.trigsimp(RCAS.sin(u)**2 + RCAS.cos(u)**2).to_s
+    together = RCAS.cos(u)**2 * RCAS.cos(v)**2 + RCAS.cos(u)**2 * RCAS.sin(v)**2 + RCAS.sin(u)**2
+    assert_equal "1", RCAS::Trigonometry.trigsimp(together).to_s
+    assert_equal "cosh(u)**2", RCAS::Trigonometry.trigsimp(1 + RCAS.sinh(u)**2).to_s
+  end
+
   def test_numeric_content_leaves_a_root
+
     root = ->(base, q) { (base**(1 / q.to_r)).simplify.to_s }
     assert_equal "2*(1 - y**2)**(1/2)", root.call(4 - 4 * :y**2, 2)
     assert_equal "2*(-1 + y**2)**(1/2)", root.call(-4 + 4 * :y**2, 2)

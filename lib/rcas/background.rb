@@ -325,6 +325,36 @@ module RCAS
         maths: "Extremes under a constraint: at a constrained extreme the gradient of the objective is a combination of the gradients of the constraints, because no direction along the constraint improves the value. The multipliers are those coefficients.",
         method: "The multiplier equations together with the constraints are handed to the polynomial system solver [Spi08, ch. 17]."
       },
+      line_integral: {
+        maths: "A function added up along a curve: f ds against the length element ds = |r'(t)|dt, or a vector field against dr = r'(t)dt, which is the work the field does along the curve. Neither depends on the parametrization, only on the curve and on the direction it is run in.",
+        method: "The field is composed with the parametrization and the parameter integral is handed to integrate [MT12, ch. 7]."
+      },
+      surface_integral: {
+        maths: "The same over a parametrized surface, against the area element dS = |r_u x r_v|du dv, or, for a vector field, against the vector element (r_u x r_v)du dv, which is the flux through the surface. The order of the two parameters chooses which way the normal points, and that is the orientation.",
+        method: "The cross product of the two partial derivatives, then one definite integral per parameter. The length of the normal keeps its square factors honest: they come out of the root with the sign they have on the parameter range, and as abs(...) where that sign changes [MT12, ch. 7]."
+      },
+      flux: :surface_integral,
+      enclosed_area: {
+        maths: "The area inside a closed plane curve as the line integral 1/2*integral(x*y' - y*x'): Green's theorem for the field (-y, x)/2, whose Q_x - P_y is 1. It is positive when the curve runs anticlockwise, which is the sign convention of the whole subject.",
+        method: "The parameter integral of that expression [MT12, ch. 8]."
+      },
+      green: {
+        maths: "Green's theorem: the circulation of (P, Q) around the boundary of a plane region is the double integral of Q_x - P_y over the region. The two-dimensional case of Stokes's theorem, and the reason a plane field with Q_x = P_y has a potential.",
+        method: "The double integral over the region, iterated in the order the ranges are given, so the inner bounds may depend on the outer variable [MT12, ch. 8]."
+      },
+      stokes: {
+        maths: "Stokes's theorem: the circulation of a field around the edge of a surface is the flux of its curl through the surface. It does not matter which surface the edge bounds, which is why the curl measures circulation per unit area.",
+        method: "The curl is computed and integrated against the vector surface element [MT12, ch. 8]; the general statement for differential forms is [Spi65, ch. 4-5]."
+      },
+      divergence_theorem: {
+        maths: "Gauss's theorem: the flux of a field out of the boundary of a solid is the triple integral of its divergence over the solid. It is what makes the divergence the source density of the field, and it turns the flux integrals of electrostatics into volume integrals.",
+        method: "The triple integral of the divergence over the three ranges, innermost first [MT12, ch. 8]."
+      },
+      conservative?: {
+        maths: "A field is conservative when it is the gradient of a potential; then the work it does depends only on the ends of the path and vanishes around every closed curve. On a region without holes that is exactly the symmetry of the derivatives: curl = 0 in space, Q_x = P_y in the plane.",
+        method: "The mixed derivatives are compared; the potential is found by integrating the first component and correcting it with what each further component still misses [MT12, ch. 8]."
+      },
+      potential: :conservative?,
       point: { maths: "Analytic geometry: a point is a pair of coordinates, a line the solutions of a*x + b*y + c = 0, a circle the points at a fixed distance from a centre. Geometry becomes algebra, which is what makes it computable.", method: "Exact coordinates throughout, so a distance is a square root and a right angle is exactly pi/2." },
       line: :point, circle: :point,
       distance: { maths: "Between two points the Pythagorean length; from a point to a line the shortest one, along the perpendicular; between parallel lines the constant gap.", method: "The Pythagorean formula, and for a line the normal form |a*x + b*y + c| divided by the length of (a, b)." },
@@ -640,6 +670,13 @@ module RCAS
       jacobian: ["Jacobian matrix and determinant"],
       divergence: ["Divergence", "Curl (mathematics)", "Laplace operator"],
       lagrange: ["Lagrange multiplier"],
+      line_integral: ["Line integral", "Arc length"],
+      surface_integral: ["Surface integral", "Parametric surface"],
+      enclosed_area: ["Shoelace formula", "Green's theorem"],
+      green: ["Green's theorem"],
+      stokes: ["Stokes' theorem", "Curl (mathematics)"],
+      divergence_theorem: ["Divergence theorem", "Divergence"],
+      conservative?: ["Conservative vector field", "Scalar potential", "Gradient theorem"],
       point: ["Analytic geometry", "Cartesian coordinate system"],
       distance: ["Euclidean distance", "Distance from a point to a line"],
       angle: ["Angle", "Dot product"],
