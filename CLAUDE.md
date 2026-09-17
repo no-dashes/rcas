@@ -147,7 +147,7 @@ lib/rcas/app/public/        index.html, app.css, app.js: the worksheet
 bin/rcas, bin/rcas-chat, bin/rcas-app
 test/*_test.rb              minitest; test/manual_test.rb runs every `rcas>` transcript in MANUAL.md
 test/app_test.rb            the window front end: worksheet cells, the server (including the token, Host and traversal guards), the browser flags, the desktop entries
-MANUAL.md                   the user manual (usage); MANUAL-de.md (German, kept in step by test/manual_de_test.rb); README.md (setup only); assets/ (logo)
+MANUAL.md                   the user manual (usage); README.md (setup only); assets/ (logo)
 ```
 
 ## Core design invariants (do not break these)
@@ -220,28 +220,6 @@ MANUAL.md                   the user manual (usage); MANUAL-de.md (German, kept 
     with `puts`/`Kernel.p`. Symbol comparison operators build inequalities
     only against Numeric/Expression; symbol vs symbol keeps Ruby semantics.
 
-## The German manual
-
-`MANUAL-de.md` is the German translation of `MANUAL.md`. They are kept in
-step by `test/manual_de_test.rb`, which fails unless
-
-- every fenced code block is **byte-identical** in both files, in the same
-  order (the transcripts are code and verified output, never translated),
-- the headings line up one for one, in the same levels and with the same
-  section numbers, so that cross references carry over,
-- the bibliography keys are the same list (the entries themselves stay in
-  the language of the works).
-
-So: change MANUAL.md, then mirror the change in MANUAL-de.md, copying the
-transcript verbatim and translating only the prose. `ruby -S rake toc`
-regenerates both tables of contents (its anchors use `[:word:]`, which
-keeps the umlauts). The vocabulary in use: Unbestimmte (indeterminate),
-Ausdruck, Bereich (domain), Zahlbereich (number set), Annahme (assumption),
-Stammfunktion (antiderivative), Kurvendiskussion (curve sketching),
-Ausgleichsgerade (least squares line), Antennen (whiskers), Prüfverteilung
-(sampling distribution). The audience sections are Schule, Oberstufe,
-Grundstudium, Bachelorstudium.
-
 ## Workflow
 
 - Run everything: `ruby -S rake` (plain `rake` may hit a shell alias).
@@ -302,8 +280,7 @@ Grundstudium, Bachelorstudium.
    `evalf`-comparing at a few points; ODE solutions by substitution; sums
    by `call` at small n).
 6. Manual section with transcripts (they become tests), reference table
-   row, "not implemented" list if applicable; **mirror it in MANUAL-de.md**
-   with the code blocks copied byte for byte; `ruby -S rake toc`.
+   row, "not implemented" list if applicable; `ruby -S rake toc`.
 7. **Cite the source.** Every non-trivial algorithm names its origin in the
    module header comment with a key like `[GCL92, ch. 8]`, and the key is
    listed in MANUAL.md "4. Sources" (table row + bibliography entry). The
@@ -392,9 +369,9 @@ drops the `=>`).
 (`rcas[3]> `, `[3]❯ `) via `Results.prompt(plain)`; results always keep
 `=> `. It is **on by default** (the user asked for that in Sept 2026);
 `RCAS.numbered = false`, `RCAS_NUMBERED=0`, `/numbered off` or the settings
-key `numbered` switch it off. The transcripts in MANUAL.md and MANUAL-de.md
-still show the plain `rcas> ` prompt, and both manuals say so once in
-"Sessions and setup" - keep that note if you touch the prompt again.
+key `numbered` switch it off. The transcripts in MANUAL.md still show the
+plain `rcas> ` prompt, and the manual says so once in "Sessions and
+setup" - keep that note if you touch the prompt again.
 test/manual_test.rb prints no prompt at all, so it is unaffected either
 way. irb is hooked in `RCAS::IRB.record_session`: prepended `output_value`
 (result) and `IRB::Context#evaluate` (input, `Statement::Expression` only,
@@ -667,10 +644,6 @@ module is small and the decisions are all about honesty:
   kind there is. It is legal as the value of an OMATTR and an argument of
   an OME and nowhere else; `OpenMath.object!` is what enforces that, and
   `Foreign#object?` is false.
-- `test/manual_de_test.rb` pairs code blocks with a regex that only sees a
-  bare ``` fence, so a fence carrying a language (```xml) is not read as an
-  opening fence and its *closing* fence pairs with the next block's opening
-  one. Every fence in the two manuals stays plain.
 - `assert_in_delta(exp, act, delta, msg)`: the third argument is the
   tolerance, not the message.
 - `Trigonometry.reduce_table` rebuilt its term from the *original* factor
@@ -756,8 +729,11 @@ layer, which had been on the suggestion list twice before it was picked
 user directly: product/rsolve/complex parts/rounding/sequences,
 interpolate, statistics, hypothesis tests and confidence intervals,
 plotting (text and pictures, function and statistical), `/help NAME` with
-Wikipedia references, the UTF-8 set symbols, the audience sections and
-MANUAL-de.md, the numbered session `In`/`Out` (Sept 2026, after a
+Wikipedia references, the UTF-8 set symbols, the audience sections and a
+German translation of the manual (MANUAL-de.md, removed again on 17 Sept
+2026: "the german Manual is somewhat strange, remove it and leave it away"
+- do not reintroduce it, and do not translate the manual anywhere else),
+the numbered session `In`/`Out` (Sept 2026, after a
 question about Mathematica's own In/Out), the formal power series `fps`
 (Sept 2026, after asking whether rcas had one), the named polynomial
 families in the `Poly` namespace (Sept 2026: "there are named classes of

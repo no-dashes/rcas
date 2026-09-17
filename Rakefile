@@ -9,11 +9,10 @@ end
 
 task default: :test
 
-desc "Regenerate the tables of contents in MANUAL.md and MANUAL-de.md"
+desc "Regenerate the table of contents in MANUAL.md"
 task :toc do
-  # [:word:] keeps the umlauts of the German headings, which \w would drop.
   anchor = ->(title) { title.downcase.gsub(/[^[:word:]\s-]/, "").strip.tr(" ", "-") }
-  %w[MANUAL.md MANUAL-de.md].each do |path|
+  %w[MANUAL.md].each do |path|
     next unless File.file?(path)
     lines = File.read(path).split("\n")
     start = lines.index("<!-- toc -->")

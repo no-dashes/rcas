@@ -160,8 +160,7 @@ runs the whole suite, including `test/manual_test.rb`, which executes every
 
 - [MANUAL.md](MANUAL.md): the user manual, with a table of contents,
   worked examples for every feature, a reference of functions, and
-  appendices on typeset output, `rcas-chat` and `rcas-app`. `MANUAL-de.md`
-  is the same manual in German.
+  appendices on typeset output, `rcas-chat` and `rcas-app`.
 - `LICENSE`: MIT.
 
 ## How and why?
