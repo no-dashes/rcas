@@ -233,7 +233,7 @@ module RCAS
     def vector(space, entries: nil, denominators: nil, nonzero: false, random: nil)
       rng = source(random)
       TRIES.times do
-        v = space.unchecked(Array.new(space.dim) { coefficient(space.domain, entries, denominators, rng) })
+        v = space.unchecked(Array.new(space.dim) { coefficient(space.base, entries, denominators, rng) })
         return v unless nonzero && v.zero?
       end
       refuse("vector", "non-zero vector")
@@ -276,7 +276,7 @@ module RCAS
         return 0 if shape[:triangular] == :lower && i < j
         return 0 if shape[:antisymmetric] && i == j
         return 0 if shape[:density] && rng.rand > shape[:density]
-        coefficient(space.domain, entries, denominators, rng)
+        coefficient(space.base, entries, denominators, rng)
       end
       rows = Array.new(space.rows) { |i| Array.new(space.cols) { |j| rng_entry.call(i, j) } }
       if shape[:symmetric] || shape[:antisymmetric]
@@ -301,7 +301,7 @@ module RCAS
       bound = (entries || (-1..1))
       (2 * n).times do
         i, j = (0...n).to_a.sample(2, random: rng)
-        factor = coefficient(space.domain, bound, nil, rng, zero: false)
+        factor = coefficient(space.base, bound, nil, rng, zero: false)
         rows = m.to_a
         rows[i] = rows[i].each_with_index.map { |e, k| Scalar.add(e, Scalar.mul(Scalar.lift(rows[j][k]), Scalar.lift(factor))) }
         m = space.unchecked(rows)
@@ -314,7 +314,7 @@ module RCAS
     def with_determinant(space, det, entries, rng)
       square!(space, "det:")
       n = space.rows
-      rows = Array.new(n) { |i| Array.new(n) { |j| i == j ? (i.zero? ? det : 1) : (i < j ? coefficient(space.domain, entries || (-3..3), nil, rng) : 0) } }
+      rows = Array.new(n) { |i| Array.new(n) { |j| i == j ? (i.zero? ? det : 1) : (i < j ? coefficient(space.base, entries || (-3..3), nil, rng) : 0) } }
       triangular = space.unchecked(rows)
       m = (unimodular_matrix(space, entries, rng) * triangular * unimodular_matrix(space, entries, rng)).simplify
       # each unimodular factor has determinant +-1: a row changes sign when
@@ -358,7 +358,7 @@ module RCAS
       rows = Array.new(n) do |i|
         Array.new(n) do |j|
           if i == j then rng.rand(1..3)
-          elsif i > j then coefficient(space.domain, bound, nil, rng)
+          elsif i > j then coefficient(space.base, bound, nil, rng)
           else 0
           end
         end
@@ -373,8 +373,8 @@ module RCAS
       limit = [space.rows, space.cols].min
       raise ArgumentError, "random matrix: a rank between 0 and #{limit} is needed, not #{rank}" unless (0..limit).cover?(rank)
       return space.zero if rank.zero?
-      left = MatrixSpace.new(space.domain, space.rows, rank)
-      right = MatrixSpace.new(space.domain, rank, space.cols)
+      left = MatrixSpace.new(space.base, space.rows, rank)
+      right = MatrixSpace.new(space.base, rank, space.cols)
       TRIES.times do
         m = (matrix(left, entries: entries, denominators: denominators, random: rng) *
              matrix(right, entries: entries, denominators: denominators, random: rng)).simplify

@@ -66,6 +66,10 @@ module RCAS
 
     # ---- structure --------------------------------------------------------
 
+    # The ring is where the polynomial lives; base is its coefficient domain.
+    def domain = ring
+    def base = ring.base
+
     def zero? = terms.empty?
     def constant? = terms.keys.all? { |e| e.all?(&:zero?) }
     def constant_term = terms[Array.new(ring.vars.size, 0)] || Num.new(0)

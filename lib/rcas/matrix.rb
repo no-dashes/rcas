@@ -1,15 +1,17 @@
 # frozen_string_literal: true
 
 module RCAS
-  # QQ**[2, 3]: matrices with a fixed shape over a domain.
-  class MatrixSpace
-    attr_reader :domain, :rows, :cols
+  # QQ**[2, 3]: matrices with a fixed shape over a domain, and a domain
+  # itself: a matrix answers `domain` with the space it lives in, and the
+  # space answers `base` with the domain its entries come from.
+  class MatrixSpace < Domain
+    attr_reader :base, :rows, :cols
 
-    def initialize(domain, rows, cols = rows)
+    def initialize(base, rows, cols = rows)
       unless rows.is_a?(Integer) && cols.is_a?(Integer) && rows >= 0 && cols >= 0
         raise ArgumentError, "matrix shape must be two non-negative integers"
       end
-      @domain = domain
+      @base = base
       @rows = rows
       @cols = cols
       freeze
@@ -22,9 +24,9 @@ module RCAS
         raise DomainError, "#{self} needs #{rows} rows of #{cols} entries"
       end
       entries = row_arrays.map { |r| r.map { |e| Scalar.lift(e) } }
-      entries = entries.map { |r| r.map { |e| domain.normalize_coefficient(e) } } if domain.respond_to?(:normalize_coefficient)
+      entries = entries.map { |r| r.map { |e| base.normalize_coefficient(e) } } if base.respond_to?(:normalize_coefficient)
       entries.flatten.each do |e|
-        raise DomainError, "#{e} is not in #{domain}" unless domain.include?(e)
+        raise DomainError, "#{e} is not in #{base}" unless base.include?(e)
       end
       Matrix.new(self, entries)
     end
@@ -33,7 +35,7 @@ module RCAS
 
     def include?(obj)
       obj = self[*obj] if obj.is_a?(Array)
-      obj.is_a?(Matrix) && obj.rows == rows && obj.cols == cols && obj.entries.flatten.all? { |e| domain.include?(e) }
+      obj.is_a?(Matrix) && obj.rows == rows && obj.cols == cols && obj.entries.flatten.all? { |e| base.include?(e) }
     rescue DomainError
       false
     end
@@ -48,15 +50,28 @@ module RCAS
     end
 
     def square? = rows == cols
-    def field? = domain.field?
-    def over(other_domain) = MatrixSpace.new(other_domain, rows, cols)
 
-    def ==(other) = other.is_a?(MatrixSpace) && other.domain == domain && other.rows == rows && other.cols == cols
+    # Square matrices over a ring are a ring under multiplication; a shape
+    # that is not square is not, and only the 1 by 1 case can be a field.
+    def ring? = square? && base.ring?
+    def field? = rows == 1 && cols == 1 && base.field?
+
+    def over(other_base) = MatrixSpace.new(other_base, rows, cols)
+
+    # The same shape over a larger base: (ZZ**[2, 2]) < (QQ**[2, 2]).
+    def subset?(other) = other.is_a?(MatrixSpace) && other.rows == rows && other.cols == cols && base.subset?(other.base)
+
+    def join(other)
+      return MatrixSpace.new(base.join(other.base), rows, cols) if other.is_a?(MatrixSpace) && other.rows == rows && other.cols == cols
+      raise DomainError, "no common domain for #{self} and #{other}" if other.is_a?(MatrixSpace) || other.is_a?(VectorSpace)
+      MatrixSpace.new(base.join(other), rows, cols) # a domain of scalars: what scaling gives
+    end
+
+    def ==(other) = other.is_a?(MatrixSpace) && other.base == base && other.rows == rows && other.cols == cols
     alias eql? ==
-    def hash = [MatrixSpace, domain, rows, cols].hash
+    def hash = [MatrixSpace, base, rows, cols].hash
 
-    def to_s = "#{domain}**[#{rows}, #{cols}]"
-    alias inspect to_s
+    def name = "#{base}**[#{rows}, #{cols}]"
   end
 
   class Matrix
@@ -72,13 +87,15 @@ module RCAS
 
     def rows = space.rows
     def cols = space.cols
-    def domain = space.domain
+    # The space is where the matrix lives, base where its entries come from.
+    def domain = space
+    def base = space.base
     def square? = space.square?
     def [](i, j) = entries.fetch(i).fetch(j)
     def to_a = entries.map(&:dup)
 
-    def row(i) = VectorSpace.new(domain, cols).unchecked(entries.fetch(i))
-    def column(j) = VectorSpace.new(domain, rows).unchecked(entries.map { |r| r.fetch(j) })
+    def row(i) = VectorSpace.new(base, cols).unchecked(entries.fetch(i))
+    def column(j) = VectorSpace.new(base, rows).unchecked(entries.map { |r| r.fetch(j) })
     def row_vectors = (0...rows).map { |i| row(i) }
     def column_vectors = (0...cols).map { |j| column(j) }
 
@@ -97,10 +114,10 @@ module RCAS
             (0...cols).map { |k| Scalar.mul(self[i, k], other[k, j]) }.reduce { |s, x| Scalar.add(s, x) } || Num.new(0)
           end
         end
-        MatrixSpace.new(domain.join(other.domain), rows, other.cols).unchecked(product)
+        MatrixSpace.new(base.join(other.base), rows, other.cols).unchecked(product)
       when Vector
         raise ArgumentError, "shape mismatch: #{space} * #{other.space}" unless cols == other.dim
-        VectorSpace.new(domain.join(other.domain), rows).unchecked(entries.map { |r| row_dot(r, other.entries) })
+        VectorSpace.new(base.join(other.base), rows).unchecked(entries.map { |r| row_dot(r, other.entries) })
       else
         scale(other)
       end
@@ -108,19 +125,19 @@ module RCAS
 
     def self.row_times(vector, matrix)
       raise ArgumentError, "shape mismatch: #{vector.space} * #{matrix.space}" unless vector.dim == matrix.rows
-      VectorSpace.new(vector.domain.join(matrix.domain), matrix.cols).unchecked(
+      VectorSpace.new(vector.base.join(matrix.base), matrix.cols).unchecked(
         (0...matrix.cols).map { |j| vector.entries.each_with_index.map { |v, i| Scalar.mul(v, matrix[i, j]) }.reduce { |s, x| Scalar.add(s, x) } }
       )
     end
 
     def /(scalar)
       s = Scalar.lift(scalar)
-      space.over(result_domain(s).fraction_field).unchecked(map_entries { |e| Scalar.div(e, s) })
+      space.over(result_base(s).fraction_field).unchecked(map_entries { |e| Scalar.div(e, s) })
     end
 
     def scale(scalar)
       s = Scalar.lift(scalar)
-      space.over(result_domain(s)).unchecked(map_entries { |e| Scalar.mul(e, s) })
+      space.over(result_base(s)).unchecked(map_entries { |e| Scalar.mul(e, s) })
     end
 
     def coerce(other) = [ScalarProxy.new(other), self]
@@ -140,7 +157,7 @@ module RCAS
       result
     end
 
-    def transpose = MatrixSpace.new(domain, cols, rows).unchecked(entries.transpose)
+    def transpose = MatrixSpace.new(base, cols, rows).unchecked(entries.transpose)
     alias t transpose
 
     def trace
@@ -150,8 +167,8 @@ module RCAS
 
     # ---- elimination ------------------------------------------------------
 
-    # Reduced row echelon form, over the fraction field of the domain.
-    def rref = space.over(domain.fraction_field).unchecked(Elimination.rref(entries).first)
+    # Reduced row echelon form, over the fraction field of the base.
+    def rref = space.over(base.fraction_field).unchecked(Elimination.rref(entries).first)
 
     def rank = Elimination.rref(entries).last.size
 
@@ -168,7 +185,7 @@ module RCAS
     # the adjugate so the entries come out as cofactor/det.
     def inverse
       raise ArgumentError, "inverse needs a square matrix" unless square?
-      target = space.over(domain.fraction_field)
+      target = space.over(base.fraction_field)
       if numeric?
         augmented = entries.each_with_index.map { |r, i| r + Array.new(rows) { |j| Num.new(i == j ? 1 : 0) } }
         reduced, pivots = Elimination.rref(augmented)
@@ -202,7 +219,7 @@ module RCAS
       b = b.entries if b.is_a?(Vector)
       raise ArgumentError, "right-hand side needs #{rows} entries" unless b.size == rows
       if square? && !numeric? && (y = PolyMatrix.solve(entries, b.map { |e| Scalar.lift(e) }))
-        return VectorSpace.new(domain.fraction_field, cols).unchecked(y)
+        return VectorSpace.new(base.fraction_field, cols).unchecked(y)
       end
       augmented = entries.each_with_index.map { |r, i| r + [Scalar.lift(b[i])] }
       reduced, pivots = Elimination.rref(augmented)
@@ -214,18 +231,18 @@ module RCAS
       end
       x = Array.new(cols) { Num.new(0) }
       pivots.each_with_index { |c, i| x[c] = reduced[i][cols] }
-      VectorSpace.new(domain.fraction_field, cols).unchecked(x)
+      VectorSpace.new(base.fraction_field, cols).unchecked(x)
     end
 
     # Basis of the null space, as vectors over the fraction field.
     def kernel
-      space_k = VectorSpace.new(domain.fraction_field, cols)
+      space_k = VectorSpace.new(base.fraction_field, cols)
       if !numeric? && (basis = PolyMatrix.kernel(entries))
         return basis.map { |v| space_k.unchecked(v) }
       end
       reduced, pivots = Elimination.rref(entries)
       free = (0...cols).to_a - pivots
-      space_k = VectorSpace.new(domain.fraction_field, cols)
+      space_k = VectorSpace.new(base.fraction_field, cols)
       free.map do |f|
         v = Array.new(cols) { Num.new(0) }
         v[f] = Num.new(1)
@@ -235,13 +252,13 @@ module RCAS
     end
     alias nullspace kernel
 
-    # Characteristic polynomial det(t*I - A) as an element of domain[t].
+    # Characteristic polynomial det(t*I - A) as an element of base[t].
     def charpoly(var = :x)
       raise ArgumentError, "charpoly needs a square matrix" unless square?
       t = Var.new(var)
       shifted = Array.new(rows) { |i| Array.new(cols) { |j| i == j ? Scalar.sub(t, self[i, j]) : Scalar.neg(self[i, j]) } }
-      ring = (domain.ring? ? domain : ZZ)[var]
-      ring = domain[var] if domain.is_a?(FiniteField)
+      ring = (base.ring? ? base : ZZ)[var]
+      ring = base[var] if base.is_a?(FiniteField)
       ring.call(PolyMatrix.det(shifted) || Elimination.cofactor_det(shifted).expand)
     end
 
@@ -251,7 +268,7 @@ module RCAS
     # factors into pieces of degree <= 2 over QQ, numeric otherwise.
     def eigenvalues
       p = charpoly(:_l)
-      return p.roots if domain.is_a?(FiniteField)
+      return p.roots if base.is_a?(FiniteField)
       Solve.polynomial_roots((0..p.degree).map { |k| p.coeff(k) })
     end
 
@@ -303,14 +320,14 @@ module RCAS
     def zip_with(other, op)
       raise TypeError, "can't apply #{op} to Matrix and #{other.class}" unless other.is_a?(Matrix)
       raise ArgumentError, "shape mismatch: #{space} #{op} #{other.space}" unless rows == other.rows && cols == other.cols
-      MatrixSpace.new(domain.join(other.domain), rows, cols).unchecked(
+      MatrixSpace.new(base.join(other.base), rows, cols).unchecked(
         entries.zip(other.entries).map { |ra, rb| ra.zip(rb).map { |a, b| yield a, b } }
       )
     end
 
-    def result_domain(scalar)
+    def result_base(scalar)
       d = Scalar.domain(scalar)
-      d ? domain.join(d) : domain
+      d ? base.join(d) : base
     end
   end
 

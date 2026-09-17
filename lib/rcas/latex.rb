@@ -489,12 +489,12 @@ module RCAS
 
   class VectorSpace
     include Typeset
-    def to_latex = "#{domain.to_latex}^{#{dim}}"
+    def to_latex = "#{base.to_latex}^{#{dim}}"
   end
 
   class MatrixSpace
     include Typeset
-    def to_latex = "#{domain.to_latex}^{#{rows} \\times #{cols}}"
+    def to_latex = "#{base.to_latex}^{#{rows} \\times #{cols}}"
   end
 
   class Vector

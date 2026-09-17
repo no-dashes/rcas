@@ -190,7 +190,7 @@ module RCAS
     def identity_rows(n) = Array.new(n) { |i| Array.new(n) { |j| Num.new(i == j ? 1 : 0) } }
 
     def field_matrix(matrix, rows, r = nil, c = nil)
-      space = MatrixSpace.new(matrix.domain.fraction_field, r || rows.size, c || rows.first.size)
+      space = MatrixSpace.new(matrix.base.fraction_field, r || rows.size, c || rows.first.size)
       space.unchecked(rows)
     end
 

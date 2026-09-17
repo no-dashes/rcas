@@ -57,6 +57,16 @@ background in `doc`/`/help`, and the manual full of worked transcripts.
   integrated or summed for (`a` in `solve(x**2 - a >= 0, x)`).
 - The API method `Expression#variables` returns the indeterminates; the
   name follows CAS convention and stays. The manual notes this once.
+- **domain and base** (settled 17 Sept 2026, after "`(ZZ**[2,2]).random.domain`
+  answers ZZ. Shouldn't it be ZZ**[2,2]?"): a *value* answers `domain` with
+  the smallest domain rcas knows it to lie in - its ring, space or field,
+  and for an expression the inferred number set (nil when unknown, the one
+  soft case, because a tree has no parent object). A *structure* answers
+  `base` with the domain its entries come from: `ZZ[x].base`,
+  `(ZZ**[2, 2]).base`. `space`, `ring` and `field` stay as the precise
+  accessors, and `Matrix#base`/`Vector#base`/`Polynomial#base` are the
+  shorthand for `domain.base`. Before this, `Matrix#domain` meant the
+  entries' domain and a Polynomial had no `domain` at all.
 
 ## Layout
 
@@ -193,7 +203,16 @@ MANUAL.md                   the user manual (usage); README.md (setup only); ass
 6. **Domains are values, membership is exact where possible.**
    `NumberSet#===` is membership (so never `case domain when ZZ`; use
    `==`). `Domain#join` must handle PolynomialRing/FractionField explicitly
-   (mutual `other.join(self)` recursion has bitten twice).
+   (mutual `other.join(self)` recursion has bitten twice). `MatrixSpace`
+   and `VectorSpace` are `Domain`s too (since 17 Sept 2026): they compare
+   with `subset?`, join with a space of the same shape or with a domain of
+   scalars (which is what scaling gives), and answer `ring?`/`field?`
+   honestly - square matrices over a ring are a ring, a vector space is
+   neither. Their `[]` is the element constructor and shadows
+   `Domain#[]`, so `(QQ**3)[1, 2, 3]` still builds a vector rather than a
+   polynomial ring. Every value answers `in?(domain)` through the
+   `Algebraic` mixin; `Mod` and `GFElement` carry their own one-liner,
+   because that mixin's `rop` refuses the arithmetic they accept.
 7. **Formal nodes**: `Integral`, `Sum`, `Product`, `Limit`, `Derivative`,
    `RootOf` and `Piecewise` are Expressions and atoms to everything else;
    `evaluate` (aliases `doit`, `unhold`) computes them. Printer, LaTeX,

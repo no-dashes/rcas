@@ -105,6 +105,9 @@ module RCAS
 
     attr_reader :field, :poly
 
+    # QQ(alpha) is where an algebraic number lives.
+    def domain = field
+
     def initialize(field, poly)
       @field = field
       @poly = poly

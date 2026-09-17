@@ -646,7 +646,7 @@ module RCAS
     end
 
     def show(out, rows, matrix, text)
-      space = MatrixSpace.new(matrix.domain.fraction_field, matrix.rows, matrix.cols)
+      space = MatrixSpace.new(matrix.base.fraction_field, matrix.rows, matrix.cols)
       line(out, 0, "#{text}\n#{space.unchecked(rows.map(&:dup))}")
     end
 

@@ -7,6 +7,57 @@ class DomainsTest < Minitest::Test
 
   def teardown = RCAS.forget
 
+  # Every value answers `domain` with the structure it lives in; every
+  # structure answers `base` with the domain its entries come from.
+  def test_a_value_knows_where_it_lives
+    m = (RCAS::ZZ**[2, 2]).random(random: Random.new(1))
+    assert_equal "ZZ**[2, 2]", m.domain.to_s
+    assert_equal RCAS::ZZ, m.base
+    assert_equal m.space, m.domain
+    assert_equal "ZZ**3", (RCAS::ZZ**3).random(random: Random.new(1)).domain.to_s
+    f = RCAS::ZZ[:x].random(2, random: Random.new(1))
+    assert_equal RCAS::ZZ[:x], f.domain
+    assert_equal RCAS::ZZ, f.base
+    assert_equal RCAS.GF(9), RCAS.GF(9).random(random: Random.new(1)).domain
+    assert_equal RCAS.GF(7), RCAS.GF(7).random(random: Random.new(1)).domain, "a Mod knows its field"
+    k = RCAS::QQ.adjoin(RCAS.sqrt(2))
+    assert_equal k, k.random(random: Random.new(1)).domain
+    assert_equal RCAS::QQ, RCAS::Num.new(Rational(1, 2)).domain, "an expression still infers its number set"
+  end
+
+  # The spaces are domains like the rest: they compare and they join.
+  def test_spaces_are_domains
+    assert (RCAS::ZZ**[2, 2]) < (RCAS::QQ**[2, 2])
+    refute (RCAS::ZZ**[2, 2]) < (RCAS::QQ**[3, 3])
+    assert (RCAS::ZZ**3) < (RCAS::QQ**3)
+    assert_equal (RCAS::QQ**[2, 2]), (RCAS::ZZ**[2, 2]).join(RCAS::QQ**[2, 2])
+    assert_equal (RCAS::QQ**[2, 2]), (RCAS::ZZ**[2, 2]).join(RCAS::QQ), "joining with a domain of scalars is scaling"
+    assert_raises(RCAS::DomainError) { (RCAS::ZZ**[2, 2]).join(RCAS::ZZ**[3, 3]) }
+    assert_equal RCAS::ZZ, (RCAS::ZZ**[2, 2]).base
+    # a square matrix space is a ring, a shape that is not square is not,
+    # and a vector space is neither
+    assert (RCAS::ZZ**[2, 2]).ring?
+    refute (RCAS::ZZ**[2, 3]).ring?
+    refute (RCAS::QQ**[2, 2]).field?
+    assert (RCAS::QQ**[1, 1]).field?
+    refute (RCAS::QQ**3).ring?
+  end
+
+  # in? is the same question the domain answers with include?, asked of the
+  # value: an expression, a polynomial, a vector, a matrix, a field element.
+  def test_membership_from_the_value
+    m = (RCAS::ZZ**[2, 2]).random(random: Random.new(1))
+    assert m.in?(RCAS::ZZ**[2, 2])
+    assert m.in?(RCAS::QQ**[2, 2])
+    refute m.in?(RCAS::ZZ**[3, 3])
+    assert_equal (RCAS::ZZ**[2, 2]).include?(m), m.in?(RCAS::ZZ**[2, 2])
+    assert (RCAS::ZZ**3).random(random: Random.new(1)).in?(RCAS::ZZ**3)
+    assert RCAS::ZZ[:x].random(2, random: Random.new(1)).in?(RCAS::ZZ[:x])
+    assert RCAS.GF(9).random(random: Random.new(1)).in?(RCAS.GF(9))
+    refute RCAS.GF(7).random(random: Random.new(1)).in?(RCAS.GF(9))
+    assert (RCAS::Var.new(:x)**2 + 1).in?(RCAS::ZZ[:x])
+  end
+
   def test_membership_of_numbers
     assert NN.include?(3)
     assert NN.include?(0)

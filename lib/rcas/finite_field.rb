@@ -8,6 +8,11 @@ module RCAS
   class Mod
     attr_reader :value, :p
 
+    # GF(p) is where an element modulo p lives; x.in?(GF(7)) asks the same
+    # question the other way round, as for every other value.
+    def domain = FiniteField.of(p)
+    def in?(domain) = domain.include?(self)
+
     def initialize(value, p)
       @p = p
       @value = value % p
@@ -79,6 +84,9 @@ module RCAS
   # irreducible polynomial. coeffs: Integers mod p, index = power of the generator.
   class GFElement
     attr_reader :coeffs, :field
+
+    def domain = field
+    def in?(domain) = domain.include?(self)
 
     def initialize(coeffs, field)
       @field = field

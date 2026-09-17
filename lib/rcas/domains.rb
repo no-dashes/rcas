@@ -10,6 +10,12 @@ module RCAS
     def rop(op, left)
       raise TypeError, "can't apply #{op} to #{left.class} and #{self.class}"
     end
+
+    # m.in?(ZZ**[3, 3]), f.in?(QQ[x]): the same question an expression
+    # answers with x.in?(RR), and the same answer the domain gives to
+    # include?. Only a variable can be *declared* with `in`, so that stays
+    # on Expression.
+    def in?(domain) = domain.include?(self)
   end
 
   # The double-struck letters. They are always available as input (ℤ[x] is

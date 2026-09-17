@@ -1979,7 +1979,9 @@ expression on the left for that case.
 
 `NN ZZ QQ RR CC` are the number sets (NN includes 0). They answer
 `include?` (`===` too) for numbers and expressions, compare as sets, and
-know which are rings and fields. Membership of a number is by value for
+know which are rings and fields. `v.in?(d)` is the same question asked of
+the value, and every value answers it: an expression, a polynomial, a
+vector, a matrix, a field element. Membership of a number is by value for
 exact types (`4/2r` is an integer) and by type for floats (floats are reals).
 
 ```
@@ -2034,6 +2036,10 @@ rcas> [x.domain, (x + 1).domain, (x / 2).domain, (n - 1).domain, sqrt(n).domain,
 => [ZZ, ZZ, QQ, ZZ, RR, CC]
 rcas> [ZZ.include?(x**2 + 1), ZZ.include?(x / 2), (x / 2).in?(QQ)]
 => [true, false, true]
+rcas> [(QQ**[2, 2]).identity.in?(ZZ**[2, 2]), ((QQ**[2, 2]).identity / 2).in?(ZZ**[2, 2])]
+=> [true, false]
+rcas> ZZ[x].(x**2 - 1).in?(QQ[x])
+=> true
 rcas> (t + 1).domain
 => nil
 rcas> assumptions
@@ -2512,11 +2518,24 @@ rcas> V.basis
 build elements with the domain inferred from the entries; pass it first
 to choose: `vector(QQ, 1, 2, 3)`.
 
+A space is a domain like any other, so it compares with `<`, joins, and is
+what its elements answer `domain` with - the same word an expression uses
+for the smallest number set that must contain it. `base` is the other
+direction: the domain the entries come from. A square space of matrices is
+a ring, a shape that is not square is not one, and a space of vectors is
+neither (it is a module).
+
 ```
 rcas> vector([1, 2, 3]).space
 => ZZ**3
 rcas> vector(QQ, 1, 2, 3).space
 => QQ**3
+rcas> vector([1, 2, 3]).domain
+=> ZZ**3
+rcas> vector([1, 2, 3]).base
+=> ZZ
+rcas> [(ZZ**3) < (QQ**3), (ZZ**[2, 2]).ring?, (QQ**[2, 2]).field?]
+=> [true, true, false]
 ```
 
 `v * w` is the dot product. Result spaces follow the scalars: dividing an
