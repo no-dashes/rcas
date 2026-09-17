@@ -658,6 +658,9 @@ names one without a session-wide assumption.
   excluded, because it holds for some k.
 - `RCAS.assumption(name)` is the number set, `RCAS.signs[name]` the sign;
   they are two tables, and `assume` only ever puts a NumberSet in the first.
+  `assume(...) { }` scopes both to the block (Mathematica's `Assuming`,
+  Maple's `assuming`), by saving and restoring the whole of both tables, so
+  an `assume` or a `forget` inside the block is local as well.
 - The filter is at the one funnel (`solve`), not inside `univariate`, which
   recurses through the case splits.
 
@@ -697,6 +700,9 @@ names one without a session-wide assumption.
   `sqrt(1 - x**2)`: test those with points of your own inside (-1, 1).
 - Tests that call `RCAS.assume` must `forget` in a teardown; a leak shows
   up only under some seeds as `has no free variables to build a ring`.
+  The block form `assume(x: ZZ) { ... }` (17 Sept 2026, the user's idea)
+  cannot leak - it saves both tables and puts them back in an `ensure` -
+  so prefer it in a test that needs an assumption for one calculation.
 - The chat REPL treats a line that parses but is incomplete (`what is 2 +`)
   as a continuation and waits for more input; use a real syntax error
   (`what is )`) when a test needs one.

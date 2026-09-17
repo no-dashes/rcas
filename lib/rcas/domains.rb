@@ -168,7 +168,16 @@ module RCAS
   class << self
     # RCAS.assume(x: ZZ, y: RR) declares domains, RCAS.assume(x > 0) a sign.
     # Both may be given at once: assume(x > 0, n: ZZ).
-    def assume(*facts, **table)
+    #
+    # With a block the assumptions hold for that block alone and whatever
+    # was declared before comes back afterwards, however the block ends:
+    #
+    #   assume(x: ZZ) { solve(eq(x/3, 1/2), x) }   # => []
+    #
+    # which is Mathematica's Assuming and Maple's `assuming`, written the
+    # way Ruby scopes anything else. The value is the block's.
+    def assume(*facts, **table, &block)
+      return assuming(facts, table, &block) if block
       facts.each do |fact|
         raise TypeError, "#{fact.inspect} is not a domain or a sign like x > 0" unless fact.is_a?(Inequality)
         assume_sign(fact)
@@ -180,6 +189,19 @@ module RCAS
         @assumptions[name] = domain
       end
       true
+    end
+
+    # The whole table is saved and put back, so that an assume or a forget
+    # inside the block is local to it too - the dynamic scoping Mathematica
+    # gives $Assumptions.
+    def assuming(facts, table)
+      saved_assumptions = @assumptions.dup
+      saved_signs = @signs.dup
+      assume(*facts, **table)
+      yield
+    ensure
+      @assumptions.replace(saved_assumptions)
+      @signs.replace(saved_signs)
     end
 
     # x > 0, x <= 0: the sign of a variable, which simplification and abs use.

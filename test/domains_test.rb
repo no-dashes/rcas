@@ -7,6 +7,31 @@ class DomainsTest < Minitest::Test
 
   def teardown = RCAS.forget
 
+  # assume(x: ZZ) { ... } holds for the block and puts back what was there.
+  def test_an_assumption_can_be_scoped_to_a_block
+    x = RCAS::Var.new(:x)
+    assert_empty RCAS.assume(x: RCAS::ZZ) { RCAS.solve(RCAS.eq(x / 3, Rational(1, 2)), :x) },
+                 "3/2 is not an integer, and the block's value comes back"
+    assert_empty RCAS.assumptions, "nothing leaks out"
+
+    RCAS.assume(x: RCAS::RR)
+    assert_equal RCAS::ZZ, RCAS.assume(x: RCAS::ZZ) { RCAS.assumption(:x) }
+    assert_equal RCAS::RR, RCAS.assumption(:x), "what was there before is restored, not forgotten"
+
+    assert_raises(RuntimeError) { RCAS.assume(x: RCAS::NN) { raise "boom" } }
+    assert_equal RCAS::RR, RCAS.assumption(:x), "even when the block raises"
+
+    assert_equal RCAS::QQ, RCAS.assume(x: RCAS::ZZ) { RCAS.assume(x: RCAS::QQ) { RCAS.assumption(:x) } }
+    assert_equal RCAS::RR, RCAS.assumption(:x), "and they nest"
+
+    RCAS.assume(x: RCAS::ZZ) { RCAS.forget }
+    assert_equal RCAS::RR, RCAS.assumption(:x), "a forget inside the block is local too"
+
+    assert_equal ["2"], RCAS.assume(x > 0) { RCAS.solve(x**2 - 4, :x).map(&:to_s) }, "a sign is scoped the same way"
+    assert_empty RCAS.signs
+    RCAS.forget
+  end
+
   # Every value answers `domain` with the structure it lives in; every
   # structure answers `base` with the domain its entries come from.
   def test_a_value_knows_where_it_lives

@@ -585,8 +585,9 @@ module RCAS
     def dsolve(equation, y, x) = ODE.dsolve(equation, y, x)
 
     # assume(x: ZZ, y: RR) declares variable domains; assumptions lists them.
-    # assume(x: ZZ) declares a domain, assume(x > 0) a sign; assumptions lists both
-    def assume(*facts, **table) = RCAS.assume(*facts, **table)
+    # assume(x: ZZ) declares a domain, assume(x > 0) a sign; assumptions lists both.
+    # With a block - assume(x: ZZ) { solve(f, x) } - they hold for the block alone
+    def assume(*facts, **table, &block) = RCAS.assume(*facts, **table, &block)
     def forget(*names) = RCAS.forget(*names)
     def assumptions = RCAS.assumptions
 

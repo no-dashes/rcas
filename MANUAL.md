@@ -2091,6 +2091,26 @@ rcas> forget
 => true
 ```
 
+An assumption that is only meant for one calculation takes a block. It
+holds inside, and whatever was declared before comes back afterwards -
+however the block ends, and including an `assume` or a `forget` made
+inside it. The value is the block's, so it reads as one expression.
+
+```
+rcas> assume(x: ZZ) { solve(eq(x/3, 1/2r), x) }
+=> []
+rcas> assumptions
+=> {}
+rcas> assume(x: RR)
+=> true
+rcas> assume(x: ZZ) { assumptions }
+=> {:x=>ZZ}
+rcas> assumptions
+=> {:x=>RR}
+rcas> forget
+=> true
+```
+
 ### 1.6 Polynomial rings
 
 `ZZ[x]`, `QQ[x, y]`, `RR[t]` are polynomial rings. `R.(expr)` converts an
