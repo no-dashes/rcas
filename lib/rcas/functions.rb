@@ -430,7 +430,7 @@ module RCAS
 
     # eq(x**2, 4) builds an equation; solve(eq(x**2, 4), x) solves it.
     def eq(lhs, rhs) = Equation.new(lhs, rhs)
-    def solve(target, vars = nil, all: false) = Solve.solve(target, vars, all: all)
+    def solve(target, vars = nil, all: false, domain: nil) = Solve.solve(target, vars, all: all, domain: domain)
 
     # groebner([x**2 + y**2 - 1, x - y], [x, y]): reduced Gröbner basis; order: :lex (default), :grlex, :grevlex
     def groebner(polys, vars = nil, order: :lex) = Groebner.groebner(polys, vars, order: order)

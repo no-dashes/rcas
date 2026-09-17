@@ -1891,6 +1891,49 @@ rcas> solve(tan(x) - 1, x, all: true)
 => [pi/4 + pi*k]
 ```
 
+Where the unknown lives is part of the question. A domain declared with
+`assume` (or named for one call with `domain:`) keeps out the solutions
+that demonstrably do not lie in it, and a declared sign does the same:
+`x**2 = 4` has one solution for a positive `x`, and `sin(x) = 0` has one
+for an integer one, since `pi` is not an integer. Nothing is dropped on a
+guess - a solution rcas cannot place stays in the list, which is why the
+family with a parameter in it survives a declared `ZZ` (it does hold for
+`k = 0`).
+
+```
+rcas> assume(x: ZZ)
+=> true
+rcas> solve(hold { sin(x) == 0 }, x)
+=> [0]
+rcas> solve(x**2 - 2, x)
+=> []
+rcas> solve(x**2 - 4, x)
+=> [2, -2]
+rcas> forget
+=> true
+rcas> solve(x**2 - 2, x, domain: ZZ)
+=> []
+rcas> solve(x**2 + 1, x, domain: RR)
+=> []
+rcas> solve(x**2 - 4, x, domain: NN)
+=> [2]
+rcas> assume(x > 0)
+=> true
+rcas> solve(x**2 - 4, x)
+=> [2]
+rcas> forget
+=> true
+rcas> solve(hold { sin(x) == 0 }, x, all: true, domain: ZZ)
+=> [2*pi*k, pi + 2*pi*k]
+```
+
+Membership is decided exactly where it can be: `1/2` is not an integer by
+its value, `2**(1/2)` is irrational because its minimal polynomial has
+degree two, and `pi` and `e` are irrational because they are
+transcendental. A constant rcas cannot place - `log(2)`, whose
+irrationality it has no way to state - is left in the list rather than
+thrown away.
+
 Roots of irreducible polynomials of degree three or more are exact
 `RootOf` objects, except for binomials `a*x**n + b` and biquadratics
 `a*x**4 + b*x**2 + c`, which come out in radicals; `evalf` gives the

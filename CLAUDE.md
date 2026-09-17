@@ -114,7 +114,7 @@ lib/rcas/decompositions.rb  Decompositions + Matrix#lu/qr/cholesky/diagonalize/j
 lib/rcas/laplace.rb         Laplace.transform (table + first shift + multiplication by t) and .inverse (partial fractions)
 lib/rcas/hypothesis.rb      Hypothesis: ttest/ztest/chisquare_test/ftest/binomial_test (exact), confidence_interval, proportion_interval; TestResult prints one line
 lib/rcas/combinatorics.rb   factorial/binomial/gamma values, factorial cancellation, known power series
-lib/rcas/solve.rb           Equation, Solve (polynomial, transcendental, abs/sign by case split + verify, systems: linear, lex Gröbner + triangular, resultants for parameters), polynomial_roots (binomial, biquadratic, RootOf)
+lib/rcas/solve.rb           Equation, Solve (polynomial, transcendental, abs/sign by case split + verify, systems: linear, lex Gröbner + triangular, resultants for parameters), polynomial_roots (binomial, biquadratic, RootOf); `restrict` drops the answers that contradict the unknown's declared domain or sign (`Infer.excluded?`, `domain:` for one call)
 lib/rcas/groebner.rb        Groebner: Buchberger (product criterion), reduce, interreduce, zero_dimensional?; orders :lex :grlex :grevlex
 lib/rcas/named_polynomials.rb  Poly: the named families (chebyshev_t/u, legendre, hermite/hermite_prob, laguerre, gegenbauer, jacobi, bernoulli, euler, cyclotomic, swinnerton_dyer, abel, fibonacci, lucas, bell) as coefficient lists, handed back expanded; a namespace, registered in `Constants` (so all three front ends see `Poly`), never bare names - `legendre`/`bernoulli`/`fibonacci` are taken
 lib/rcas/interpolate.rb     Interpolate.newton (divided differences over Scalar arithmetic; PolyMatrix keeps its own Rational-only copy)
@@ -637,6 +637,29 @@ on the structures, with a real vocabulary of keywords rather than a bare
 - `Docs::STRUCTURES` was added for this: `doc(:random)` and `/help random`
   find a method of a ring or a space, which doc knew nothing about before
   (it had functions, Poly.*, expression methods and constants).
+
+## What a declared domain means (17 Sept 2026)
+
+`assume(x: ZZ)` used to change what `simplify` and `Infer` did and nothing
+else, so `solve(sin(x) == 0, x)` answered `[0, pi]` for an integer x. Now
+`Solve.restrict` filters every univariate answer (and every solution of a
+system) by the unknown's domain *and* its sign, and `solve(f, x, domain: ZZ)`
+names one without a session-wide assumption.
+
+- **`Infer.excluded?(value, domain)` is one-sided on purpose.** It answers
+  true only when the value is *demonstrably* outside: exactly for a `Num`,
+  by the minimal polynomial for an algebraic constant (`2**(1/2)` is not
+  rational), by transcendence for a rational multiple of `pi` or `e`, and
+  numerically for integrality (`TOLERANCE = 1e-6`, and only after the exact
+  routes have failed). `log(2)` is irrational and rcas cannot say why, so
+  it survives a declared QQ - and should. A wrong answer kept is better
+  than a right one dropped, and the manual says so.
+- A family with a parameter in it (`2*pi*k` from `all: true`) is never
+  excluded, because it holds for some k.
+- `RCAS.assumption(name)` is the number set, `RCAS.signs[name]` the sign;
+  they are two tables, and `assume` only ever puts a NumberSet in the first.
+- The filter is at the one funnel (`solve`), not inside `univariate`, which
+  recurses through the case splits.
 
 ## Traps we have hit (so you do not hit them again)
 

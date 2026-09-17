@@ -289,6 +289,41 @@ module RCAS
       a.join(b)
     end
 
+    # How far from an integer a Float has to be before it is one no longer.
+    TOLERANCE = 1e-6
+
+    # Is `value` demonstrably outside `domain`? Membership is decided where
+    # it can be and left open where it cannot, so `false` means "not shown
+    # to be outside" and never "inside": a solution dropped by mistake is
+    # worse than one that should not be there. Solve filters its answers
+    # with this, so that a declared domain is respected.
+    def excluded?(value, domain)
+      return false unless domain.is_a?(NumberSet)
+      value = Expression.lift(value).simplify
+      return !domain.include?(value.value) if value.is_a?(Num)
+      return false unless value.variables.empty? # a parameter decides nothing
+      return true if domain <= QQ && irrational?(value)
+      numeric = value.evalf
+      return false unless numeric.is_a?(Numeric)
+      return domain <= RR if numeric.is_a?(Complex) && !numeric.imaginary.to_f.abs.zero?
+      real = numeric.is_a?(Complex) ? numeric.real.to_f : numeric.to_f
+      return true if domain == NN && real.negative?
+      domain <= ZZ && (real - real.round).abs > TOLERANCE
+    end
+
+    # Irrational for a reason rcas can name: an algebraic number whose
+    # minimal polynomial has degree above one (2**(1/2), a real RootOf), or
+    # a rational multiple of pi or e, which their transcendence settles.
+    # Everything else (pi + log(2)) is left open, as it is in the literature.
+    def irrational?(value)
+      algebraic = Algebraic.exact(value)
+      return !algebraic.poly.constant? if algebraic
+      coeff, factors = Simplify.factorize(value)
+      return false if coeff.zero? || factors.size != 1
+      base, exponent = factors.first
+      exponent == 1 && (base == PI || base == E)
+    end
+
     def no_naturals(d) = d == NN ? ZZ : d
 
     def power(expr)

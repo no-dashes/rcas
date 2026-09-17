@@ -207,8 +207,8 @@ module RCAS
 
       # ---- equations -------------------------------------------------------------
       solve: {
-        maths: "Exact solutions. A polynomial of degree n has n complex roots with multiplicity, but only degrees 1 to 4 have general radical formulas, so a root that cannot be written in radicals is returned as an exact RootOf object you can still compute with.",
-        method: "Factor over QQ, then radicals for linear, quadratic, binomial and biquadratic factors, RootOf otherwise; transcendental equations by substituting an atom and inverting; abs and sign by the case split, every candidate substituted back; linear systems by row reduction; polynomial systems by a lex Gröbner basis, which is triangular, then back-substitution [CLO15]."
+        maths: "Exact solutions. A polynomial of degree n has n complex roots with multiplicity, but only degrees 1 to 4 have general radical formulas, so a root that cannot be written in radicals is returned as an exact RootOf object you can still compute with. Where the unknown is declared to live is part of the question: over ZZ the equation x**2 = 2 has no solution at all.",
+        method: "Factor over QQ, then radicals for linear, quadratic, binomial and biquadratic factors, RootOf otherwise; transcendental equations by substituting an atom and inverting; abs and sign by the case split, every candidate substituted back; linear systems by row reduction; polynomial systems by a lex Gröbner basis, which is triangular, then back-substitution [CLO15]. The answers are then filtered by the domain and the sign the unknown was declared with: exactly for a number, by the minimal polynomial for an algebraic constant, by transcendence for a multiple of pi or e, and numerically for integrality. What none of those decides stays in the list."
       },
       groebner: {
         maths: "A Gröbner basis generates the same ideal but with a unique remainder on division, so it answers ideal membership and, in the lex order, triangularizes a polynomial system the way row reduction triangularizes a linear one.",

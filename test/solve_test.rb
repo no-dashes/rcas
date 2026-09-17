@@ -5,7 +5,68 @@ require_relative "test_helper"
 class SolveTest < Minitest::Test
   include RCAS::Sets
 
-  def s(*a) = RCAS.solve(*a)
+  def s(*a, **kw) = RCAS.solve(*a, **kw)
+
+  def teardown = RCAS.forget
+
+  X = RCAS::Var.new(:x)
+
+  # What the unknown was declared to be keeps the answers honest: a solution
+  # that demonstrably does not lie in the domain is not a solution of the
+  # question that was asked.
+  def test_a_declared_domain_restricts_the_solutions
+    RCAS.assume(x: ZZ)
+    assert_equal ["0"], s(RCAS.sin(X).eq(0), :x).map(&:to_s), "pi is not an integer"
+    assert_empty s(X**2 - 2, :x), "and neither is 2**(1/2)"
+    assert_empty s(2 * X - 1, :x)
+    assert_equal %w[2 -2], s(X**2 - 4, :x).map(&:to_s)
+    RCAS.forget
+    RCAS.assume(x: NN)
+    assert_equal ["2"], s(X**2 - 4, :x).map(&:to_s), "NN drops the negative one"
+    RCAS.forget
+    RCAS.assume(x: RR)
+    assert_empty s(X**2 + 1, :x), "the complex roots go"
+    assert_equal %w[-2**(1/2) 2**(1/2)], s(X**2 - 2, :x).map(&:to_s), "an irrational real stays"
+  end
+
+  # domain: says it for one call, without a session-wide assumption.
+  def test_the_domain_can_be_named_in_the_call
+    assert_empty s(X**2 - 2, :x, domain: ZZ)
+    assert_equal ["2"], s(X**2 - 4, :x, domain: NN).map(&:to_s)
+    assert_equal ["1/2"], s(2 * X - 1, :x, domain: QQ).map(&:to_s)
+    assert_equal ["pi/4"], s(RCAS.tan(X) - 1, :x, domain: RR).map(&:to_s)
+    assert_equal %w[-2**(1/2) 2**(1/2)], s(X**2 - 2, :x).map(&:to_s), "and nothing is remembered"
+  end
+
+  def test_a_declared_sign_restricts_them_too
+    RCAS.assume(X > 0)
+    assert_equal ["2"], s(X**2 - 4, :x).map(&:to_s)
+    assert_equal ["2**(1/2)"], s(X**2 - 2, :x).map(&:to_s)
+    assert_empty s(X**2, :x), "zero is not positive"
+    RCAS.forget
+    RCAS.assume(X >= 0)
+    assert_equal ["0"], s(X**2, :x).map(&:to_s), "but it is non-negative"
+  end
+
+  # Nothing is dropped on a guess: a family with a parameter in it, or a
+  # constant rcas cannot place, stays in the list.
+  def test_what_cannot_be_decided_stays
+    RCAS.assume(x: ZZ)
+    assert_equal ["2*pi*k", "pi + 2*pi*k"], s(RCAS.sin(X).eq(0), :x, all: true).map(&:to_s),
+                 "the family holds for k = 0, so it is not excluded"
+    assert_equal ["log(2)"], s(RCAS.exp(X) - 2, :x, domain: QQ).map(&:to_s),
+                 "log(2) is irrational, but not for a reason rcas can state"
+  end
+
+  def test_a_system_respects_the_domains_of_its_unknowns
+    y = RCAS::Var.new(:y)
+    RCAS.assume(x: ZZ)
+    solutions = s([X + y - 3, X * y - 2], [:x, :y])
+    assert_equal [["1", "2"], ["2", "1"]], solutions.map { |sol| [sol[X].to_s, sol[y].to_s] }.sort
+    RCAS.forget
+    RCAS.assume(x: NN)
+    assert_empty s([X + y, X - y - 4], [:x, :y]).select { |sol| sol[X].to_s == "-2" }, "x = -2 is not in NN"
+  end
   def strs(list) = list.map(&:to_s)
   def eq(a, b) = RCAS::Equation.new(a, b)
 

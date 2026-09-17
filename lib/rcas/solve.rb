@@ -73,17 +73,50 @@ module RCAS
 
     # all: true adds the period of the trigonometric functions, so that the
     # answer is the whole family rather than the solutions in one period.
-    def solve(target, vars = nil, all: false)
+    # The unknown's declared domain (assume(x: ZZ), or domain: here) keeps
+    # out the solutions that demonstrably do not lie in it.
+    def solve(target, vars = nil, all: false, domain: nil)
       if target.equal?(true) || target.equal?(false)
         raise ArgumentError, "solve: `==` compares structurally in Ruby and this one is already #{target}; " \
                              "write solve(eq(lhs, rhs), x) or solve(hold { lhs == rhs }, x)"
       end
       return Inequalities.solve(target, vars) if target.is_a?(Inequality) || (target.is_a?(Array) && target.any? { |t| t.is_a?(Inequality) })
-      return system(target, vars) if target.is_a?(Array)
+      return system(target, vars, domain: domain) if target.is_a?(Array)
       return piecewise(target, vars) if piecewise?(target)
       f = to_zero(target).simplify
       x = variable(f, vars)
-      dedupe(univariate(f, x, 0, all: all))
+      restrict(dedupe(univariate(f, x, 0, all: all)), x, domain)
+    end
+
+    # Drop the solutions that contradict what the unknown was declared to
+    # be - a number set, a sign, or both. What cannot be decided stays
+    # (Infer.excluded?), so an answer is never lost to a guess.
+    def restrict(roots, x, domain)
+      wanted = domain || RCAS.assumption(x.name)
+      sign = RCAS.signs[x.name]
+      return roots if wanted.nil? && sign.nil?
+      roots.reject do |root|
+        (wanted && Infer.excluded?(root, wanted)) || (sign && wrong_sign?(root, sign))
+      end
+    end
+
+    # What each declared sign allows a root to be.
+    ALLOWED_SIGNS = { positive: %i[positive], nonnegative: %i[positive zero],
+                      negative: %i[negative], nonpositive: %i[negative zero] }.freeze
+
+    def wrong_sign?(root, sign)
+      found = root_sign(root)
+      !found.nil? && !ALLOWED_SIGNS.fetch(sign, %i[positive negative zero]).include?(found)
+    end
+
+    # The sign of a constant root, or nil when it is not decided: a root
+    # with a parameter in it, or one that is not real.
+    def root_sign(root)
+      return nil unless root.variables.empty?
+      return :zero if Scalar.zero?(root)
+      value = Analysis.numeric(root)
+      return nil if value.nil?
+      value.positive? ? :positive : :negative
     end
 
     # An integer parameter for the periodic solutions, avoiding the names in use.
@@ -486,19 +519,31 @@ module RCAS
 
     # ---- systems ---------------------------------------------------------------------
 
-    def system(targets, vars)
+    def system(targets, vars, domain: nil)
       fs = targets.map { |t| to_zero(t).simplify }
       unknowns = Array(vars).map { |v| Expression.lift(v) }
       raise ArgumentError, "solve: list the unknowns, e.g. solve([...], [x, y])" if unknowns.empty?
 
-      if fs.all? { |f| linear_in?(f, unknowns) }
-        linear_system(fs, unknowns)
-      elsif (solutions = polynomial_system(fs, unknowns))
-        solutions
-      elsif fs.size == 2 && unknowns.size == 2
-        polynomial_pair(fs, unknowns)
-      else
-        raise NotImplementedError, "only linear systems and polynomial systems with rational coefficients are supported"
+      solutions =
+        if fs.all? { |f| linear_in?(f, unknowns) }
+          linear_system(fs, unknowns)
+        elsif (found = polynomial_system(fs, unknowns))
+          found
+        elsif fs.size == 2 && unknowns.size == 2
+          polynomial_pair(fs, unknowns)
+        else
+          raise NotImplementedError, "only linear systems and polynomial systems with rational coefficients are supported"
+        end
+      restrict_system(solutions, unknowns, domain)
+    end
+
+    # A solution of a system survives when every unknown in it does.
+    def restrict_system(solutions, unknowns, domain)
+      wanted = unknowns.to_h { |x| [x, domain || RCAS.assumption(x.name)] }.compact
+      return solutions if wanted.empty?
+      solutions.reject do |solution|
+        next false unless solution.is_a?(Hash)
+        solution.any? { |x, value| wanted[x] && Infer.excluded?(value, wanted[x]) }
       end
     end
 
