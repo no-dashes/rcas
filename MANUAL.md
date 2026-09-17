@@ -22,6 +22,14 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
 `RCAS.solve`), or `include RCAS::Functions`, `RCAS::Sets` and
 `RCAS::Constants` to get the bare names used below.
 
+If you would rather watch first:
+[rcas-tour.mp4](https://github.com/no-dashes/rubyCAS/releases/download/screencasts/rcas-tour.mp4)
+is a seven-minute screencast that follows section 1 below chapter by chapter
+(it is attached to the releases, not kept in the repository), and
+[assets/rcas-intro.gif](assets/rcas-intro.gif) is a one-minute version. Both
+are recorded from a real session by [tools/screencast](tools/screencast), the
+same way the transcripts here are checked - nothing in them is typed by hand.
+
 <!-- toc -->
 - [Sessions and setup](#sessions-and-setup)
 - [Courses](#courses)
@@ -4132,7 +4140,7 @@ rcas> ZZ[x].(x**6 - 1).factor.to_latex
 rcas> QQ[x, y].to_latex
 => "\\mathbb{Q}[x, y]"
 rcas> matrix([[1, 2], [3, 4]]).inverse.to_latex
-=> "\\begin{pmatrix} -2 & 1 \\\\ \\displaystyle \\frac{3}{2} & \\displaystyle -\\frac{1}{2} \\end{pmatrix}"
+=> "\\begin{pmatrix} -2 & 1 \\\\[0.8em] \\displaystyle \\frac{3}{2} & \\displaystyle -\\frac{1}{2} \\end{pmatrix}"
 rcas> (2 * PI * x).to_latex
 => "2 \\pi x"
 rcas> eq(D(y, x), 2 * x * y).to_latex

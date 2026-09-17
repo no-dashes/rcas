@@ -422,6 +422,7 @@ module RCAS
     def width(latex)
       s = latex.dup
       s.gsub!(/\\(left|right|displaystyle|quad|qquad|begin\{[a-z*]+\}|end\{[a-z*]+\})/, "")
+      s.gsub!(/\[[0-9.]+em\]/, "")   # the row leading of a matrix, not a glyph
       s.gsub!(/\\[,;!]/, "")
       3.times { s.gsub!(/\\frac\{([^{}]*)\}\{([^{}]*)\}/) { "x" * [Regexp.last_match(1).size, Regexp.last_match(2).size].max } }
       s.gsub!(/\\[a-zA-Z]+/, "M")
@@ -442,14 +443,22 @@ module RCAS
 
     def matrix(rows)
       return '\left[\,\right]' if rows.empty? || rows.first.empty?
-      body = rows.map { |r| r.map { |e| cell(e) }.join(" & ") }.join(' \\\\ ')
-      "\\begin{pmatrix} #{body} \\end{pmatrix}"
+      cells = rows.map { |r| r.map { |e| cell(e) } }
+      "\\begin{pmatrix} #{cells.map { |r| r.join(' & ') }.join(leading(cells))} \\end{pmatrix}"
     end
 
     # Fractions in a matrix are set at display size so they stay legible.
     def cell(entry)
       s = of(entry)
       s.include?('\frac') ? "\\displaystyle #{s}" : s
+    end
+
+    # An array sets its rows on one fixed baseline distance, which a
+    # display-size fraction is taller than: two of them in a column collide
+    # (KaTeX draws them overlapping, TeX complains). Ask for the leading they
+    # need, and only then - an ordinary matrix of numbers wants none.
+    def leading(cells)
+      cells.flatten.any? { |c| c.start_with?('\displaystyle') } ? ' \\\\[0.8em] ' : ' \\\\ '
     end
 
     def vector(entries)

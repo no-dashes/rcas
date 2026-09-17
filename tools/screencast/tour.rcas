@@ -1,0 +1,217 @@
+# rcas is a computer algebra system written in plain Ruby.
+# Ruby symbols are the indeterminates, Ruby operators build the
+# expression tree, and irb is the REPL. No new language, no new parser.
+
+# Expressions
+# -----------
+# An undefined name is its own symbol, so you just write the mathematics.
+x + 1
+e = (x + 1) * (1 - x)
+
+# Construction never rewrites. It changes when you ask, and not before.
+e.expand
+(x + x + 3 * x**2 - x**2).simplify
+factor(x**2 - 5*x + 6)
+
+# Substitute into an expression, or evaluate it:
+f = x**2 + y
+f.subs(x: 3).simplify
+
+# Numbers
+# -------
+# Arithmetic is exact - integers, rationals, radicals, never a float
+# by accident.
+2/3r + 1/6r
+sqrt(32)
+(2**100).to_s.size
+
+# Complex parts, primes, factorizations of integers:
+[re(3 + 2*I), im((1 + I)**2), conj(2 - 3*I)]
+factor(360)
+factor(2**67 - 1)
+[nextprime(100), prevprime(100), divisors(12), totient(12)]
+
+# Calculus
+# --------
+# Derivatives, including the ones that need more than the power rule:
+(x**3 + sin(x)).diff(x)
+(x**x).diff(x)
+
+# Antiderivatives: a table, then Hermite and Lazard-Rioboo-Trager for
+# the rational part, then a Risch-Norman heuristic.
+integrate(1/(x**2 - 1), x)
+integrate(x/(x**4 + x**2 + 1), x)
+integrate(abs(x), x)
+
+# Definite, and improper:
+integrate(sin(x), x: 0..PI)
+integrate(1 / (1 + x**2), x: -oo..oo)
+
+# Some integrals have names rather than elementary answers.
+integrate(sin(x)/x, x)
+integrate(exp(-x**2), x)
+
+# And when rcas cannot do one, it says so. It never guesses.
+integrate(sin(x)/log(x), x)
+
+# Limits, Taylor series, and formal power series:
+limit(sin(x) / x, x, 0)
+limit((1 + 1/x)**x, x, oo)
+series(exp(x), x, 0, 5)
+fps(sin(x), x)
+
+# The whole curve sketch - the German Kurvendiskussion - at once:
+extrema(x**3 - 3*x, x)
+asymptotes((x**2 + 1)/x, x)
+
+# Several variables:
+gradient(x**2*y, [x, y])
+hessian(x**2*y, [x, y])
+
+# Line and surface integrals, with Green, Stokes and Gauss:
+line_integral([-y, x], [cos(t), sin(t)], t: 0..2*pi)
+green([-y, x], x: 0..1, y: 0..1)
+
+# Sums and products - Faulhaber, Gosper and Zeilberger underneath:
+sum(k**2, k, 1, n)
+sum(binomial(n, k)**2, k: 0..n)
+product(2*k - 1, k: 1..n)
+
+# Fourier series:
+fourier(x, x: -pi..pi)
+
+# Arbitrary precision, for when the symbols run out:
+evalf(pi, 50)
+nsolve(cos(x) - x, x: 0..1)
+nintegrate(exp(-x**2), x: -oo..oo)
+
+# Equations
+# ---------
+solve(x**2 - 3*x + 2, x)
+solve(x**2 - 2, x)
+solve(x**3 - 8, x)
+solve(sin(x) - 1/2r, x, all: true)
+
+# Inequalities answer with sets, not just numbers:
+solve(x**2 < 4, x)
+solve((x - 1) / (x + 1) >= 0, x)
+
+# Domains
+# -------
+# Where a value lives is itself a value.
+[ZZ.include?(-3), QQ === 1/2r, NN < ZZ]
+[ZZ.ring?, ZZ.field?, QQ.field?]
+ZZ[x]
+
+# An assumption changes which answers may stand:
+assume(x: ZZ) { solve(eq(x/3, 1/2r), x) }
+assume(a > 0) { sqrt(a**2*x**2).simplify }
+
+# Polynomials
+# -----------
+QQ[x].(x**4 - 1).factor
+[gcd(2*x + 2, 4*x**2 - 4), quo(x**3 - 1, x - 1)]
+groebner([x**2 + y**2 - 1, x - y], [x, y])
+interpolate([[0, 1], [1, 3], [2, 7]], x)
+
+# The named families live in their own namespace:
+Poly.legendre(4, x)
+Poly.cyclotomic(12, x)
+
+# Algebraic numbers and finite fields:
+minpoly(sqrt(2) + sqrt(3))
+(1 / (1 + sqrt(2))).rationalize
+GF(25).primitive_element
+
+# Linear algebra
+# --------------
+# A vector space and a matrix space are domains you can name:
+V = QQ**3
+M = QQ**[3, 3]
+
+# Their [] is the element constructor, so you build from the space:
+v = V[1, 2, 3]
+w = V[1/2r, 0, -1]
+v + w
+v.cross(w)
+v.norm
+
+m = M[[2, 1, 0], [1, 2, 1], [0, 1, 2]]
+m.det
+m.inverse
+m.eigenvalues
+M.identity
+
+# Spaces nest and compare as the mathematics says they should - square
+# matrices over a ring are a ring, a vector space is neither.
+[M.base, M.ring?, M.field?]
+[(ZZ**3) < V, (ZZ**[2, 2]).ring?, (QQ**[2, 2]).field?]
+
+# And a value knows where it lives:
+[v.domain, m.domain, m.base]
+
+(QQ**[2, 3])[[1, 2, 3], [2, 4, 6]].rref
+matrix([[2, 1], [1, 2]]).diagonalize
+least_squares(matrix([[1, 1], [1, 2], [1, 3]]), vector(1, 2, 4))
+
+# Differential equations
+# ----------------------
+dsolve(eq(D(y, x), 2*x*y), y, x)
+dsolve(D(y, x, 2) - 3*D(y, x) + 2*y, y, x)
+dsolve([eq(D(x, t), y), eq(D(y, t), -x)], [x, y], t)
+
+# Recurrences are solved the same way - here, Fibonacci:
+rsolve(eq(u(n + 2), u(n + 1) + u(n)), u, n, init: {0 => 0, 1 => 1})
+
+# The Laplace transform, both directions:
+laplace(t*sin(t), t, s)
+inverse_laplace(1/(s**2 + 2*s + 5), s, t)
+
+# Geometry and statistics
+# -----------------------
+[distance(point(0, 0), point(4, 0)), area(point(0, 0), point(4, 0), point(0, 3))]
+data = [2, 4, 4, 4, 5, 5, 7, 9]
+[mean(data), median(data), variance(data)]
+linreg([1, 2, 3], [2, 4, 7], x)
+ttest([5.1, 4.9, 5.6, 5.2, 5.0], mu: 5)
+confidence_interval([5.1, 4.9, 5.6, 5.2, 5.0])
+
+# Plots
+# -----
+# In a terminal a plot is braille art; elsewhere it is a picture.
+plot(sin(x), x: 0..2*PI, width: 40, height: 8)
+polar(1 + cos(t), width: 40, height: 12, title: "r = 1 + cos(t)")
+histogram([2, 4, 4, 5, 5, 5, 6, 6, 7, 9, 3, 5], bins: 4, width: 40, height: 7)
+
+# The q-analogues
+# ---------------
+qbinomial(4, 2, q)
+qsum(qbinomial(n, k, q), q, k: 0..n)
+
+# Worked solutions
+# ----------------
+# rcas can show its working, naming the rule at every step.
+steps { integrate(x*exp(x), x) }
+
+# Random objects, for when you want something to fiddle with:
+RCAS.random = 2026
+(ZZ**[3, 3]).random(unimodular: true)
+ZZ[x].random(6, terms: 3, monic: true)
+
+# OpenMath
+# --------
+# Expressions travel as OpenMath objects - in XML, or in POPCORN.
+popcorn(2*x*(1 - x))
+
+# Typeset output
+# --------------
+# The chat front end can typeset its answers.
+/output typeset
+sum(k**2, k, 1, n)
+integrate(x*exp(x), x)
+solve(x**2 - 2, x)
+m.inverse
+fourier(x, x: -pi..pi, formal: true)
+
+# Every line here is valid Ruby, so this script is itself a session
+# you can paste straight into rcas.

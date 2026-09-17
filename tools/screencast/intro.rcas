@@ -1,0 +1,29 @@
+# rcas is a computer algebra system written in plain Ruby.
+# Ruby symbols are the indeterminates - no new language, no new parser.
+(x + 1) * (1 - x)
+
+# Nothing is rewritten until you ask for it.
+((x + 1) * (1 - x)).expand
+
+# Arithmetic stays exact - never a float by accident.
+1/3r + 1/6r
+sqrt(8)
+
+# Calculus, the way you would write it on paper:
+diff(sin(x**2), x)
+integrate(1/(x**2 + 1), x)
+
+# And when rcas cannot do it, it says so. It never guesses.
+integrate(sin(x)/log(x), x)
+
+# Equations are solved exactly, radicals and all:
+solve(x**2 - 2, x)
+factor(x**4 - 1)
+
+# The chat front end can typeset its answers.
+/output typeset
+sum(k**2, k, 1, n)
+integrate(x*exp(x), x)
+
+# Every line above is valid Ruby - this script is itself
+# a session you can paste straight into rcas.

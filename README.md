@@ -20,6 +20,19 @@ rcas> solve(x**2 - 2, x)
 => [-2**(1/2), 2**(1/2)]
 ```
 
+A minute of it, from exact arithmetic to typeset answers:
+
+<p align="center">
+  <img src="assets/rcas-intro.gif" alt="a minute of rcas: exact arithmetic, calculus, solving, typeset output" width="840">
+</p>
+
+The longer tour through everything rcas can do is a seven-minute video,
+[rcas-tour.mp4](https://github.com/no-dashes/rubyCAS/releases/download/screencasts/rcas-tour.mp4)
+(kept with the releases rather than in the repository, so a clone stays
+small). Both are built from a script of input lines by
+[tools/screencast](tools/screencast) - the script is replayed against a real
+session, so what you see is what rcas prints.
+
 This file covers installation and getting a session running. Everything
 about *using* rcas, from expressions and calculus to polynomial rings,
 finite fields, linear algebra and differential equations, is in

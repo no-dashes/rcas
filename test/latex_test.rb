@@ -74,11 +74,14 @@ class LatexTest < Minitest::Test
   end
 
   def test_vectors_and_matrices
-    assert_equal '\begin{pmatrix} 1 \\\\ \displaystyle \frac{1}{2} \\\\ -1 \end{pmatrix}', (QQ**3)[1, 1/2r, -1].to_latex
+    # A display-size fraction is taller than one baseline distance, so a
+    # matrix holding one asks for extra leading; a matrix of numbers does not.
+    assert_equal '\begin{pmatrix} 1 \\\\[0.8em] \displaystyle \frac{1}{2} \\\\[0.8em] -1 \end{pmatrix}',
+                 (QQ**3)[1, 1/2r, -1].to_latex
     assert_equal '\begin{pmatrix} 1 & 2 \\\\ 3 & 4 \end{pmatrix}', (QQ**[2, 2])[[1, 2], [3, 4]].to_latex
     RCAS.assume(t: RR)
     inv = RR.matrix([[:t, 1], [1, :t]]).inverse
-    assert_equal '\begin{pmatrix} \displaystyle \frac{t}{-1 + t^{2}} & \displaystyle -\frac{1}{-1 + t^{2}} \\\\ ' \
+    assert_equal '\begin{pmatrix} \displaystyle \frac{t}{-1 + t^{2}} & \displaystyle -\frac{1}{-1 + t^{2}} \\\\[0.8em] ' \
                  '\displaystyle -\frac{1}{-1 + t^{2}} & \displaystyle \frac{t}{-1 + t^{2}} \end{pmatrix}', inv.to_latex
     assert_equal '\left[\,\right]', (QQ**[0, 0])[].to_latex
   end
