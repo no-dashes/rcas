@@ -86,6 +86,7 @@ lib/rcas/recurrence.rb      Recurrence.rsolve: u(n + k) as Fn(:u), characteristi
 lib/rcas/complex_parts.rb   ComplexParts: re/im/conj/arg by expansion; variables are real only when assumed so
 lib/rcas/statistics.rb      Statistics: mean/median/mode/variance(sample: n-1)/quantile (HF96 type 7)/moments/covariance/correlation/linreg, exact and symbolic
 lib/rcas/distributions.rb   Distributions::{Normal Uniform Exponential Bernoulli Binomial Poisson Geometric DiscreteUniform StudentT ChiSquare FRatio}: pdf cdf quantile moments probability expectation sample; not Expressions (to_latex hook)
+lib/rcas/random.rb          Randoms + a `random` method on NumberSet/PolynomialRing/FractionField/VectorSpace/MatrixSpace/FiniteField/AlgebraicField (reopened there, as decompositions.rb reopens Matrix); `RCAS.random` is the session's source and `RCAS.random = 42` pins it (Distributions#sample defaults to it too)
 lib/rcas/special.rb         Special.gamma_p/gamma_q/beta_i: incomplete gamma and beta, Floats only (series + Lentz continued fractions)
 lib/rcas/precision.rb       Decimal (a Numeric that carries its digit count) and Precision.evalf(expr, digits): the tree walked in BigDecimal/BigMath with GUARD=10 guard digits. Also erf/Si/Ci/Ei/li by series (with adaptive guard digits for the cancellation, MAX_CANCELLATION), zeta by Euler-Maclaurin over Summation.bernoulli, euler_gamma by Brent-McMillan, quadrature by tanh-sinh (three maps: finite, exp_sinh, sinh_sinh) and refine for roots. nsolve/nintegrate take digits: and come here; Unsupported names whatever is left
 lib/rcas/background.rb      (titles verified against the Wikipedia API 2026-09-14; re-check with
@@ -334,7 +335,8 @@ scale, theme, wrap, plotstyle, unicode, numbered, model, fallbacks;
 `sessions/*.json`. Pictures go to `/tmp/rcas` (`RCAS_CACHE_DIR`) and the
 ones a process created are deleted at exit (`Render.cleanup!`).
 Precedence: settings.json < env vars < flags < `/commands`. `bin/rcas`
-and the library keep no state apart from the session's results. Claude is used for exactly one thing: plain
+and the library keep no state apart from the session's results and
+`RCAS.random`, the source of randomness a seed pins. Claude is used for exactly one thing: plain
 language questions in `rcas-chat` (`ANTHROPIC_API_KEY`); without it the
 chat shows no trace of it: no model line, no `/ask` in `/help`, no
 mention in errors (the user wants non-AI users to see a plain CAS).
@@ -574,6 +576,49 @@ module is small and the decisions are all about honesty:
   Gauss against the flux through the six faces of a cube). That is the
   property check for this file - there is no antiderivative to differentiate.
 
+## Random objects (random.rb)
+
+The user asked for these in Sept 2026 ("you need random matrices,
+polynomials etc. all the time when fiddling around") and chose the shape:
+on the structures, with a real vocabulary of keywords rather than a bare
+`random_matrix`. So `random` sits beside `zero`, `one`, `gen`, `basis` and
+`identity`, and the domain decides what an element looks like.
+
+- **Two kinds of keyword, and the difference matters.** A *shape* (monic,
+  symmetric, triangular, diagonal, a density of zeros, homogeneous) is
+  built directly. A *property* is either constructed - unimodular from row
+  operations, `det:` from a triangular matrix between two unimodular ones,
+  `eigenvalues:` as P*D*P**-1, `definite:` as L*L.transpose, `roots:` and
+  `factors:` as products - or sampled and checked (`irreducible:`,
+  `squarefree:`, `invertible:`, `rank:`). Sampling gives up after
+  `TRIES` with a message: "no such object" and "unlucky" look the same
+  from in here, and a CAS that spins for ever is worse than one that says
+  no.
+- **Small entries are the point.** A unimodular matrix is the identity
+  after 2n row operations with multipliers +-1 and a shuffle; with +-3 and
+  3n operations (the first cut) a 3x3 with given eigenvalues had entries
+  in the hundreds, which is no use to anyone working by hand. `det:` fixes
+  the sign afterwards, because each unimodular factor may have determinant
+  -1. And `eigenvalues:` redraws while the answer is triangular, which
+  would show the eigenvalues on the diagonal.
+- **`case domain when ZZ` bit again** (invariant 6): `NumberSet#===` is
+  membership, so the number generator compares with `==`. It is written
+  out in a comment there.
+- **QQ and CC come back as `Num`**, NN/ZZ as Integer and RR as Float: a
+  Rational inspects as `(-1/3)` and a Complex as `3-9i`, and the manual
+  transcripts are `inspect` output. `Randoms.number` returns the raw Ruby
+  value; the lifting happens in `NumberSet#random`, because the same
+  generator fills polynomial coefficients and matrix entries, where a Num
+  would be wrapped twice.
+- **Manual transcripts seed per code block** (`RCAS.random = 2026` as the
+  first line of each), never once for the section: manual_test runs every
+  block of the manual in one workspace and in file order, so a seed set in
+  an earlier section would make these depend on every random call before
+  them.
+- `Docs::STRUCTURES` was added for this: `doc(:random)` and `/help random`
+  find a method of a ring or a space, which doc knew nothing about before
+  (it had functions, Poly.*, expression methods and constants).
+
 ## Traps we have hit (so you do not hit them again)
 
 - `RCAS::IRB::AutoSymbol` turns an undefined `name(args)` with Expression,
@@ -753,7 +798,9 @@ github.com/symcomp/org.symcomp.openmath - which is the user's own library:
 POPCORN is Horn & Roozemond, CICM 2009, so check the grammar there rather
 than guessing, and ask rather than reconstruct), and then line and surface
 integrals with Green, Stokes and Gauss (17 Sept 2026, on the parametric
-curves that had just landed: vector_calculus.rb). ODEs with variable
+curves that had just landed: vector_calculus.rb), and then random objects
+(17 Sept 2026, "we need some more parameters": on the structures, with the
+keywords that make an object worth fiddling with). ODEs with variable
 coefficients (Bernoulli, Riccati, exact equations, Cauchy-Euler, and
 Frobenius series solutions, which are fps.rb run backwards) are the most
 requested-adjacent remaining item; a `steps`/`explain` layer that narrates

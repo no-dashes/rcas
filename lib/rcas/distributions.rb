@@ -76,10 +76,13 @@ module RCAS
 
       def moment(k, var = :x) = expectation(Expression.lift(var)**k, var)
 
-      # Random draws (Float, or Integer for discrete distributions); numeric parameters only.
-      def sample(n = nil, random: Random.new)
+      # Random draws (Float, or Integer for discrete distributions); numeric
+      # parameters only. Without `random:` the session's RCAS.random draws,
+      # so RCAS.random = 42 pins these as it pins every other random object.
+      def sample(n = nil, random: nil)
         values = numeric_params
-        n.nil? ? draw(values, random) : Array.new(n) { draw(values, random) }
+        rng = random || RCAS.random
+        n.nil? ? draw(values, rng) : Array.new(n) { draw(values, rng) }
       end
 
       def numeric_params

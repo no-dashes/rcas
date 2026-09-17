@@ -94,7 +94,8 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
     - [q-summation](#q-summation)
     - [q-difference equations](#q-difference-equations)
   - [1.13 Worked solutions](#113-worked-solutions)
-  - [1.14 Performance notes](#114-performance-notes)
+  - [1.14 Random objects](#114-random-objects)
+  - [1.15 Performance notes](#115-performance-notes)
 - [2. Reference](#2-reference)
 - [3. Files](#3-files)
 - [4. Sources](#4-sources)
@@ -3459,7 +3460,125 @@ for numbers and for polynomials; and the whole curve discussion
 (1.3 Calculus, The whole discussion). The result is a `Derivation`, which
 prints as above and typesets as an aligned block in `rcas-chat`.
 
-### 1.14 Performance notes
+### 1.14 Random objects
+
+Fiddling needs something to fiddle with. Every structure answers `random`
+beside `zero`, `one`, `gen` and `identity`, so there is nothing new to
+learn about where to ask: the domain already knows what its elements look
+like, and the keywords say what kind of one you want. `RCAS.random = 42`
+fixes the source of randomness for a whole session, and every call takes
+`random:` for a generator of its own, so a random example can be repeated
+exactly - which is how the transcripts below are tested.
+
+```
+rcas> RCAS.random = 2026
+=> 2026
+rcas> ZZ.random(1..100)
+=> 2
+rcas> QQ.random
+=> -1/3
+rcas> ZZ.random(100..999, prime: true)
+=> 433
+rcas> ZZ[x].random(3)
+=> -7 + 3*x + 4*x**2 - 4*x**3
+rcas> ZZ[x].random(6, terms: 3, monic: true)
+=> -2 - 9*x**3 + x**6
+rcas> QQ[x, y].random(2)
+=> -5/2 - x/6 - 9*y/4 + 7*x**2/2 + 6*x*y/5 - 5*y**2/4
+rcas> GF(5)[x].random(3)
+=> 3 + 3*x + 2*x**2 + x**3
+rcas> (ZZ**3).random
+=> (-6, 0, -3)
+rcas> GF(9).random
+=> a
+```
+
+A polynomial takes its degree (a number or a range to choose from),
+`terms:` for how many monomials it should have, `coefficients:` for the
+range they come from, and `monic:` or `primitive:` for the usual
+normalisations. The interesting keywords are the ones that ask for a
+property rather than a shape: `irreducible:` and `squarefree:` are
+sampled for and checked, `roots:` multiplies out linear factors, so that
+the result really factors over ZZ, and `factors: 3` is a product of three
+random irreducible ones - the exercise, rather than a polynomial that
+turns out to be prime.
+
+```
+rcas> RCAS.random = 7
+=> 7
+rcas> ZZ[x].random(4, irreducible: true)
+=> -5 - 6*x - 3*x**2 + 5*x**3 + 5*x**4
+rcas> ZZ[x].random(3, roots: true)
+=> 84 + 86*x - 2*x**3
+rcas> Out[-1].factor
+=> -2*(-7 + x)*(1 + x)*(6 + x)
+rcas> ZZ[x].random(5, factors: 3).factor
+=> -2*(-2 + x)*(-5 + x)*(-6 + x - 2*x**2 + x**3)
+rcas> ZZ[x].random(4, squarefree: true)
+=> -7 - 4*x + 8*x**2 - 8*x**3 - 5*x**4
+```
+
+Matrices have the same two kinds of keyword. `symmetric:`,
+`antisymmetric:`, `diagonal:`, `triangular:` and `density:` shape the
+entries; `invertible:`, `singular:`, `rank:`, `det:`, `eigenvalues:`,
+`unimodular:` and `definite:` ask for a property, and are built rather
+than waited for. A unimodular matrix (determinant 1 or -1) is the one to
+ask for when the inverse should stay over the integers, and
+`eigenvalues:` gives a matrix whose characteristic polynomial you already
+know - it is P*D*P**-1 for a unimodular P, and never a triangular matrix,
+which would show the answer on its diagonal.
+
+```
+rcas> RCAS.random = 21
+=> 21
+rcas> (ZZ**[2, 3]).random
+=> [0 6 -5]
+   [7 7 -6]
+rcas> m = (ZZ**[3, 3]).random(unimodular: true)
+=> [1  0  1]
+   [0  1  1]
+   [0 -1 -2]
+rcas> m.det
+=> -1
+rcas> m.inverse
+=> [1  1  1]
+   [0  2  1]
+   [0 -1 -1]
+rcas> (ZZ**[3, 3]).random(eigenvalues: [1, 2, 2])
+=> [-2 -4 -2]
+   [ 6  8  3]
+   [-6 -6 -1]
+rcas> Out[-1].eigenvalues
+=> [1, 2, 2]
+rcas> (ZZ**[3, 4]).random(rank: 2).rank
+=> 2
+rcas> (ZZ**[4, 4]).random(density: 0.5)
+=> [0 -9  0 0]
+   [0 -2  0 0]
+   [0  0  0 5]
+   [0  9 -9 0]
+```
+
+The same for a matrix an exercise on the Cholesky factorization needs:
+`definite: true` builds L*L.transpose for a lower triangular L, which is
+symmetric and positive definite by construction.
+
+```
+rcas> RCAS.random = 5
+=> 5
+rcas> m = (ZZ**[3, 3]).random(definite: true)
+=> [9  6  9]
+   [6 13 -3]
+   [9 -3 22]
+rcas> cholesky(m)
+=> [3  0 0]
+   [2  3 0]
+   [3 -3 2]
+rcas> m.det
+=> 324
+```
+
+### 1.15 Performance notes
 
 `expand` and polynomial conversion combine like terms while multiplying,
 so a product of many sums never materialises more terms than the result
@@ -3514,6 +3633,7 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | sequences | `bernoulli fibonacci harmonic` |
 | statistics | `mean median mode variance stdev quantile quartiles iqr moment skewness kurtosis geometric_mean harmonic_mean frequencies covariance correlation linreg` |
 | distributions | `Normal Uniform Exponential Bernoulli Binomial Poisson Geometric DiscreteUniform StudentT ChiSquare FRatio pdf cdf probability` |
+| random objects | `ZZ.random(1..100)`, `ZZ[x].random(3, irreducible: true)`, `(ZZ**[3, 3]).random(unimodular: true)`, `GF(9).random`; `RCAS.random = 42` repeats a session |
 | tests and intervals | `ttest ztest chisquare_test ftest binomial_test confidence_interval proportion_interval` |
 | plotting | `plot parametric polar scatter histogram boxplot barchart` |
 | geometry | `point line circle distance midpoint angle area perimeter collinear? centroid intersect circumcircle perpendicular_bisector parallel_through perpendicular_through` |
@@ -3578,6 +3698,7 @@ lib/rcas/recurrence.rb      rsolve: linear recurrences with constant coefficient
 lib/rcas/complex_parts.rb   re, im, conj, arg
 lib/rcas/statistics.rb      descriptive statistics, covariance, correlation, linreg
 lib/rcas/distributions.rb   Normal, Uniform, Exponential, Bernoulli, Binomial, Poisson, Geometric, DiscreteUniform, StudentT, ChiSquare, FRatio
+lib/rcas/random.rb          random elements of every structure: ZZ[x].random, (ZZ**[3, 3]).random
 lib/rcas/special.rb         incomplete gamma and beta, numerically
 lib/rcas/hypothesis.rb      t, z, chi-square, F and binomial tests; confidence intervals
 lib/rcas/numerics.rb        nsolve and nintegrate: numbers when the symbols run out
@@ -3679,6 +3800,7 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | incomplete gamma and beta by series and continued fractions (Lentz) | special.rb | [AS64, §6.5, §26.5]; [PTVF07, §6.2, §6.4]; [Len76] |
 | t, chi-square and F tests, exact binomial test, confidence intervals | hypothesis.rb | [Ros14, ch. 8-9]; Welch's degrees of freedom [Wel47]; Wilson's score interval [Wil27] |
 | gamma variates for sampling (Marsaglia-Tsang) | distributions.rb | [MT00] |
+| random objects: irreducible polynomials by rejection, unimodular and positive definite matrices by construction | random.rb | [vzGG13, §14.9]; [Str16, ch. 2, 6] |
 | plotting: braille canvas (the technique of drawille and UnicodePlots.jl), line drawing | plot.rb | [Bre65] |
 | histogram bin count, box plot whiskers at 1.5 interquartile ranges | plot.rb | [Stu26]; [Tuk77] |
 | Gaussian integrals: exp(quadratic) by completing the square, x**n exp(quadratic) by reduction | integrate_substitutions.rb | [AS64, §7.1, §7.4] |

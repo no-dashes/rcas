@@ -53,7 +53,7 @@ module RCAS
     def doc(name)
       key = name.is_a?(Symbol) || name.is_a?(String) ? name.to_s : name.to_s
       key = key.sub(/\A[A-Z]+::/, "").delete_prefix("RCAS::")
-      found = function(key) || namespaced(key) || expression_method(key) || constant(key)
+      found = function(key) || namespaced(key) || expression_method(key) || structure_method(key) || constant(key)
       raise NotFound, "nothing known about #{key}#{suggestion(key)}" if found.nil?
       found
     end
@@ -73,12 +73,26 @@ module RCAS
     # `Poly.legendre` is the polynomial, the bare `legendre` the symbol.
     NAMESPACES = %w[Poly].freeze
 
+    # The structures and how one is written down, for a method that belongs
+    # to a ring or a space rather than to an expression: ZZ[x].random.
+    STRUCTURES = { "PolynomialRing" => "ZZ[x]", "FractionField" => "Frac(ZZ[x])", "MatrixSpace" => "(ZZ**[2, 2])",
+                   "VectorSpace" => "(ZZ**3)", "NumberSet" => "ZZ", "FiniteField" => "GF(9)",
+                   "AlgebraicField" => "QQ.adjoin(sqrt(2))" }.freeze
+
     # Every name doc knows about.
     def names
       functions = Functions.instance_methods(false).map(&:to_s)
       methods = Expression.public_instance_methods(false).map(&:to_s)
       constants = RCAS.constants.map(&:to_s)
-      (functions + methods + constants + namespaced_names).uniq.sort
+      (functions + methods + constants + namespaced_names + structure_names).uniq.sort
+    end
+
+    def structure_names
+      STRUCTURES.keys.flat_map { |name| structure_methods(name).map(&:to_s) }
+    end
+
+    def structure_methods(name)
+      RCAS.const_get(name).public_instance_methods(false) - Object.instance_methods
     end
 
     def namespaced_names
@@ -131,6 +145,18 @@ module RCAS
       return nil unless Expression.method_defined?(name)
       info = from_source(Expression.instance_method(name), name)
       Documentation.new(key, :method, "e.#{info[:signature]}", info[:lines], "a method on expressions", sections(key), Background[key], sources_for(key), Background.reading(key))
+    end
+
+    # A method of a ring, a field or a space, shown the way one is written:
+    # ZZ[x].random. The other structures that answer it are named beside it.
+    def structure_method(key)
+      name = key.to_sym
+      homes = STRUCTURES.keys.select { |c| structure_methods(c).include?(name) }
+      return nil if homes.empty?
+      info = from_source(RCAS.const_get(homes.first).instance_method(name), name)
+      also = homes.drop(1).map { |c| "#{STRUCTURES[c]}.#{name}" }
+      Documentation.new(key, :method, "#{STRUCTURES[homes.first]}.#{info[:signature]}", info[:lines],
+                        also.empty? ? nil : also.join(", "), sections(key), Background[key], sources_for(key), Background.reading(key))
     end
 
     def constant(key)

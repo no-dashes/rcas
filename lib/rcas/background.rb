@@ -355,6 +355,10 @@ module RCAS
         method: "The mixed derivatives are compared; the potential is found by integrating the first component and correcting it with what each further component still misses [MT12, ch. 8]."
       },
       potential: :conservative?,
+      random: {
+        maths: "A random element of a structure: a number of a set, a polynomial of a ring, a matrix or a vector of a space. What makes one useful is rarely uniformity but a property - an irreducible polynomial, a matrix whose inverse is integral, a symmetric positive definite one - so the keywords name the property and the object is built or drawn to have it.",
+        method: "Shapes (monic, symmetric, triangular, a density of zeros) are built directly; so are the properties that have a construction: a unimodular matrix is the identity after 2n row operations and a shuffle, one with a given determinant is that with a triangular matrix between two of them, one with given eigenvalues is P*D*P**-1 for such a P, a positive definite one is L*L.transpose, a polynomial with roots is a product of linear factors. What has no construction is sampled and checked - an irreducible polynomial by rejection, which is quick because a 1/n-th of them are [vzGG13, §14.9] - and refused after a fixed number of tries rather than looped on [Str16, ch. 2, 6]."
+      },
       point: { maths: "Analytic geometry: a point is a pair of coordinates, a line the solutions of a*x + b*y + c = 0, a circle the points at a fixed distance from a centre. Geometry becomes algebra, which is what makes it computable.", method: "Exact coordinates throughout, so a distance is a square root and a right angle is exactly pi/2." },
       line: :point, circle: :point,
       distance: { maths: "Between two points the Pythagorean length; from a point to a line the shortest one, along the perpendicular; between parallel lines the constant gap.", method: "The Pythagorean formula, and for a line the normal form |a*x + b*y + c| divided by the length of (a, b)." },
@@ -670,6 +674,7 @@ module RCAS
       jacobian: ["Jacobian matrix and determinant"],
       divergence: ["Divergence", "Curl (mathematics)", "Laplace operator"],
       lagrange: ["Lagrange multiplier"],
+      random: ["Rejection sampling", "Unimodular matrix", "Definite matrix", "Irreducible polynomial"],
       line_integral: ["Line integral", "Arc length"],
       surface_integral: ["Surface integral", "Parametric surface"],
       enclosed_area: ["Shoelace formula", "Green's theorem"],
