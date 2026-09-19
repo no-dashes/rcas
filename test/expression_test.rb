@@ -85,6 +85,17 @@ class ExpressionTest < Minitest::Test
     assert_equal formal.hash, RCAS::Integral.new(RCAS::Var.new(:x), RCAS::Var.new(:x)).hash
   end
 
+  # Combining the children's hashes with a multiply needs a mask, or the
+  # hash grows about five bits per level: the hash of a 20 000-term sum was
+  # a 99 000-bit integer and the sum itself 390 MB.
+  def test_a_hash_is_a_fixnum_however_deep_the_tree
+    deep = (1..2000).reduce(RCAS::Num.new(0)) { |acc, i| RCAS::Add.new(acc, RCAS::Num.new(i)) }
+    assert_operator deep.hash.bit_length, :<=, 64
+    nested = (1..2000).reduce(RCAS::Var.new(:x)) { |acc, _| RCAS::Fn.new(:sin, [acc]) }
+    assert_operator nested.hash.bit_length, :<=, 64
+    assert_operator ((RCAS::Var.new(:x) + 1) * (RCAS::Var.new(:y) - 2)).hash.bit_length, :<=, 64
+  end
+
   # constant? stops at the first Var instead of collecting them all.
   def test_constant
     x = RCAS::Var.new(:x)

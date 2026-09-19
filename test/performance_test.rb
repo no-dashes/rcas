@@ -8,12 +8,20 @@ class PerformanceTest < Minitest::Test
 
   # A tripwire, not a benchmark: the bounds are generous enough for a slow
   # machine and would still catch a hundredfold regression, which the shape
-  # assertions below would not.
-  def timed(limit, what)
+  # assertions below would not. Allocations as well as time - though the
+  # regression that got through this file was neither: a hash that grew
+  # with the depth of the tree turned a 20 000-term sum into 390 MB of
+  # bignums, which is *fewer* objects and only a few times slower. The size
+  # of a node's hash is asserted directly below for that reason.
+  def timed(limit, what, objects: nil)
+    GC.start
+    before = GC.stat(:total_allocated_objects)
     started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     result = yield
     elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+    allocated = GC.stat(:total_allocated_objects) - before
     assert_operator elapsed, :<, limit, "#{what} took #{elapsed.round(2)} s"
+    assert_operator allocated, :<, objects, "#{what} allocated #{allocated} objects" if objects
     result
   end
 
@@ -49,7 +57,10 @@ class PerformanceTest < Minitest::Test
   end
 
   def test_long_sums_stay_shallow
-    big = (1..20_000).map { |i| i * :x**i }.sum
+    # the building is inside the tripwire: that is where the hash
+    # regression landed, and timing only the simplify let it through
+    big = timed(3, "building a 20 000-term sum", objects: 1_500_000) { (1..20_000).map { |i| i * :x**i }.sum }
+    assert_operator big.hash.bit_length, :<=, 64, "a node's hash is a fixnum, however deep the tree"
     s = timed(3, "simplify of a 20 000-term sum") { big.simplify }
     assert_equal 20_000, s.each_node.count { |n| n.is_a?(RCAS::Var) }
     assert s.to_s.start_with?("x + 2*x**2 + 3*x**3")

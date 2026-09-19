@@ -82,6 +82,12 @@ module RCAS
     # combination is by hand because building the array cost more than the
     # walk saved - a node is constructed far more often than it is hashed.
     # A node class that does not set it (the formal ones) falls back.
+    #
+    # FIXNUM is what keeps the combination from growing: multiplying a
+    # child's hash by 31 at every level made the hash of a 20000-term sum a
+    # 99000-bit integer and the sum itself 390 MB.
+    FIXNUM = 0x3fff_ffff_ffff_ffff
+
     def hash = @hash || [self.class, *children].hash
 
     # Total order used for canonical sorting; see Simplify.sort_key.
@@ -400,7 +406,7 @@ module RCAS
     def initialize(left, right)
       @left = left
       @right = right
-      @hash = (left.hash * 31 + right.hash) ^ self.class.hash
+      @hash = ((left.hash * 31 + right.hash) ^ self.class.hash) & FIXNUM
       freeze
     end
 
@@ -424,7 +430,7 @@ module RCAS
     def initialize(name, args)
       @name = name.to_sym
       @args = args.map { |a| Expression.lift(a) }.freeze
-      @hash = @args.reduce(@name.hash ^ Fn.hash) { |h, a| h * 31 + a.hash }
+      @hash = @args.reduce(@name.hash ^ Fn.hash) { |h, a| (h * 31 + a.hash) & FIXNUM }
       freeze
     end
 

@@ -174,7 +174,14 @@ MANUAL.md                   the user manual (usage); README.md (setup only); ass
    rely on it). The hash is computed in the constructor before the node is
    frozen and combined by hand, no array: a node is built far more often
    than it is hashed, and recomputing walked the whole subtree every time.
-   A new node class that sets no `@hash` falls back to that walk.
+   A new node class that sets no `@hash` falls back to that walk. **Mask
+   the combination with `Expression::FIXNUM`**: `left.hash * 31 +
+   right.hash` grows about five bits per level, and without the mask the
+   hash of a 20000-term sum was a 99000-bit integer and the sum 390 MB
+   (found by the second pass of the review, 19 Sept 2026;
+   `performance_test` asserts `hash.bit_length <= 64` now, because the
+   regression showed up in neither the clock nor the object count - a
+   bignum is one object).
    Mathematical equality = compare canonical forms, or
    `Scalar.zero?(a - b)`. Inside `hold { }`, `==` builds an `Equation`,
    `!=` an `Inequality` and `in?` a `Membership` - three
