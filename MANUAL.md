@@ -1886,6 +1886,33 @@ rcas> solve(x + sqrt(x) - 6, x)
 => [4]
 ```
 
+Real solutions come back in ascending order, and `0 = 0` - which every
+number solves - answers with the set rather than an error.
+
+```
+rcas> solve(x**4 - 5*x**2 + 4, x)
+=> [-2, -1, 1, 2]
+rcas> solve(x - x, x)
+=> (-oo, oo)
+```
+
+An equation with one radical is squared, one with several logarithms is
+combined into one, and both are then checked against the equation they
+came from: raising to a power and merging logarithms invent solutions, and
+the check is the step a student is told not to skip.
+
+```
+rcas> solve(eq(sqrt(x + 1), x - 1), x)
+=> [3]
+rcas> solve(eq(sqrt(x + 3), x + 1), x)
+=> [1]
+rcas> solve(eq(log(x) + log(x - 3), 1), x)
+=> [3/2 + (9 + 4*e)**(1/2)/2]
+```
+
+(`x = 0` solves `x + 1 = (x - 1)**2` and `x = -2` solves `x + 3 = (x +
+1)**2`; neither solves the equation with the radical in it.)
+
 Polynomials are solved exactly by factoring over the rationals, the
 quadratic formula, k-th roots for binomials and the symbolic quadratic
 formula; an irreducible factor of degree three or more with numeric
@@ -1905,7 +1932,7 @@ rcas> solve(log(x) - 2, x)
 rcas> solve(sin(x) - 1/2r, x)
 => [pi/6, 5*pi/6]
 rcas> solve(cos(x), x)
-=> [pi/2, -pi/2]
+=> [-pi/2, pi/2]
 ```
 
 An equation with `abs` or `sign` in it is split into its cases - `|u|` is
@@ -1916,13 +1943,13 @@ in the case they came from survive.
 
 ```
 rcas> solve(abs(x) - 1, x)
-=> [1, -1]
+=> [-1, 1]
 rcas> solve(abs(x - 2) - 3, x)
-=> [5, -1]
+=> [-1, 5]
 rcas> solve(abs(x**2 - 4) - 1, x)
-=> [-5**(1/2), 5**(1/2), -3**(1/2), 3**(1/2)]
+=> [-5**(1/2), -3**(1/2), 3**(1/2), 5**(1/2)]
 rcas> solve(abs(x) + abs(x - 1) - 3, x)
-=> [2, -1]
+=> [-1, 2]
 rcas> solve(abs(x) + 1, x)
 => []
 ```
@@ -1994,7 +2021,7 @@ rcas> solve(hold { sin(x) == 0 }, x)
 rcas> solve(x**2 - 2, x)
 => []
 rcas> solve(x**2 - 4, x)
-=> [2, -2]
+=> [-2, 2]
 rcas> forget
 => true
 rcas> solve(x**2 - 2, x, domain: ZZ)
@@ -2029,7 +2056,7 @@ number, and arithmetic with `RootOf` is exact (see algebraic numbers below).
 rcas> solve(x**3 - x - 1, x)
 => [RootOf(-1 - x + x**3, 0), RootOf(-1 - x + x**3, 1), RootOf(-1 - x + x**3, 2)]
 rcas> solve(x**4 - 4*x**2 + 1, x)
-=> [-(2 - 3**(1/2))**(1/2), (2 - 3**(1/2))**(1/2), -(2 + 3**(1/2))**(1/2), (2 + 3**(1/2))**(1/2)]
+=> [-(2 + 3**(1/2))**(1/2), -(2 - 3**(1/2))**(1/2), (2 - 3**(1/2))**(1/2), (2 + 3**(1/2))**(1/2)]
 ```
 
 Equation objects support sidewise arithmetic, `subs`, `swap`, `holds?`,
@@ -2472,7 +2499,7 @@ rcas> integrate(Poly.legendre(2, x)*Poly.legendre(3, x), x: -1..1)
 rcas> integrate(Poly.legendre(3, x)**2, x: -1..1)
 => 2/7
 rcas> solve(Poly.legendre(3, x), x)
-=> [0, -15**(1/2)/5, 15**(1/2)/5]
+=> [-15**(1/2)/5, 0, 15**(1/2)/5]
 rcas> nsolve(Poly.legendre(5, x), x: 0.9)
 => 0.9061798459386641
 rcas> (diff(Poly.chebyshev_t(4, x), x) - 4*Poly.chebyshev_u(3, x)).simplify

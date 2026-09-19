@@ -97,7 +97,7 @@ class GroebnerTest < Minitest::Test
 
   def test_biquadratic_roots
     roots = RCAS.solve(X**4 - 4 * X**2 + 1, X)
-    assert_equal ["-(2 - 3**(1/2))**(1/2)", "(2 - 3**(1/2))**(1/2)", "-(2 + 3**(1/2))**(1/2)", "(2 + 3**(1/2))**(1/2)"], roots.map(&:to_s)
+    assert_equal ["-(2 + 3**(1/2))**(1/2)", "-(2 - 3**(1/2))**(1/2)", "(2 - 3**(1/2))**(1/2)", "(2 + 3**(1/2))**(1/2)"], roots.map(&:to_s)
     roots.each { |r| assert_in_delta 0.0, (r**4 - 4 * r**2 + 1).evalf.abs, 1e-12 }
     assert_equal ["-1", "-i", "1", "i"], RCAS.solve(X**4 - 1, X).map(&:to_s).sort
   end

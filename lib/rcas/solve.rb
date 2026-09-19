@@ -85,7 +85,25 @@ module RCAS
       return piecewise(target, vars) if piecewise?(target)
       f = to_zero(target).simplify
       x = variable(f, vars)
-      restrict(dedupe(univariate(f, x, 0, all: all)), x, domain)
+      # 0 = 0 holds for every value of x. That is an answer, and a set is
+      # what says it; raising made a true statement look like a failure.
+      return RealSet.reals if Scalar.zero?(f)
+      ordered(restrict(dedupe(univariate(f, x, 0, all: all)), x, domain))
+    end
+
+    # Real roots ascending, then the rest in the order they were found. The
+    # order a method happens to produce is not an answer about the roots.
+    def ordered(roots)
+      keys = roots.each_with_index.to_h do |root, i|
+        value = begin
+          root.evalf
+        rescue StandardError
+          nil
+        end
+        value = value.value if value.is_a?(Num)
+        [root, value.is_a?(Numeric) && value.real? ? [0, value.to_f, i] : [1, 0.0, i]]
+      end
+      roots.sort_by { |root| keys[root] }
     end
 
     # Drop the solutions that contradict what the unknown was declared to
@@ -417,7 +435,79 @@ module RCAS
         return values.map { |v| (v**q).simplify }
       end
 
-      raise NotImplementedError, "can't solve #{f} = 0 for #{x}"
+      radicals = radical_equation(f, x, depth)
+      return radicals if radicals
+
+      logs = logarithmic_equation(f, x, depth)
+      return logs if logs
+
+      raise NotImplementedError, "can't solve #{f} = 0 for #{x}; nsolve(#{f}, #{x}: a..b) finds a root numerically"
+    end
+
+    # sqrt(u) = v: the radical on one side, both sides to the q-th power,
+    # and the answers kept only where the original equation is defined.
+    # Raising to a power invents roots, and `verify` drops those.
+    def radical_equation(f, x, depth)
+      constant, terms = Simplify.termize(f)
+      with, without = terms.partition { |factors, _| root_index(factors, x) }
+      return nil unless with.size == 1
+      q = root_index(with.first.first, x)
+      return nil if q.nil? || q > 3
+      side = Simplify.rebuild_sum(0, with.to_h)
+      rest = Simplify.rebuild_sum(-constant, without.to_h.transform_values { |c| -c })
+      g = (Expand.expand(Simplify.power_node(side, q)) - Expand.expand(Simplify.power_node(rest, q))).simplify
+      return nil if root_denominator(g, x) > 1 || g.each_node.any? { |n| root_index_of(n, x) }
+      defined_roots(f, x, univariate(g, x, depth + 1))
+    rescue NotImplementedError
+      nil
+    end
+
+    # log(u) + log(v) = c: one logarithm instead of two, which the atom
+    # substitution can then invert.
+    def logarithmic_equation(f, x, depth)
+      logs = f.each_node.count { |n| n.is_a?(Fn) && n.name == :log && depends?(n, x) }
+      return nil unless logs > 1
+      combined = Trigonometry.logcombine(f).simplify
+      return nil if combined == f
+      defined_roots(f, x, univariate(combined, x, depth + 1))
+    rescue NotImplementedError
+      nil
+    end
+
+    # The denominator of a fractional exponent on a base that involves x.
+    def root_index(factors, x)
+      factors.filter_map { |base, exp| root_index_of(Simplify.power_node(base, exp), x) }.max
+    end
+
+    def root_index_of(node, x)
+      return nil unless node.is_a?(Pow) && node.exponent.is_a?(Num)
+      value = node.exponent.value
+      return nil unless value.is_a?(Rational) && value.denominator > 1 && depends?(node.base, x)
+      value.denominator
+    end
+
+    # A root of the squared equation is a root of this one only where this
+    # one is defined: a logarithm needs a positive argument and an even root
+    # a non-negative one. That is the check a student is told to make.
+    def defined_roots(f, x, roots)
+      conditions = Analysis.domain_conditions(f, x)
+      return roots if conditions.empty?
+      roots.select do |root|
+        conditions.all? do |condition|
+          value = begin
+            Expression.lift(condition.lhs - condition.rhs).evalf(x.name => root.evalf)
+          rescue StandardError
+            nil
+          end
+          next true unless value.is_a?(Numeric) && value.real?
+          case condition.op
+          when :> then value > 1e-9
+          when :>= then value > -1e-9
+          when :!= then value.abs > 1e-9
+          else true
+          end
+        end
+      end
     end
 
     def transcendental_atom?(n)

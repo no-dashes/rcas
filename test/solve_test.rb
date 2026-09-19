@@ -19,7 +19,7 @@ class SolveTest < Minitest::Test
     assert_equal ["0"], s(RCAS.sin(X).eq(0), :x).map(&:to_s), "pi is not an integer"
     assert_empty s(X**2 - 2, :x), "and neither is 2**(1/2)"
     assert_empty s(2 * X - 1, :x)
-    assert_equal %w[2 -2], s(X**2 - 4, :x).map(&:to_s)
+    assert_equal %w[-2 2], s(X**2 - 4, :x).map(&:to_s)
     RCAS.forget
     RCAS.assume(x: NN)
     assert_equal ["2"], s(X**2 - 4, :x).map(&:to_s), "NN drops the negative one"
@@ -77,10 +77,12 @@ class SolveTest < Minitest::Test
     assert_equal ["-1/2 - i*3**(1/2)/2", "-1/2 + i*3**(1/2)/2"], strs(s(:x**2 + :x + 1, :x))
     assert_equal ["-i", "i"], strs(s(eq(:x**2, -1), :x))
     assert_equal ["2", "-1 - i*3**(1/2)", "-1 + i*3**(1/2)"], strs(s(:x**3 - 8, :x))
-    assert_equal ["1", "-1", "-i", "i"], strs(s(:x**4 - 1, :x))
+    assert_equal ["-1", "1", "-i", "i"], strs(s(:x**4 - 1, :x))
     assert_equal [1], s((:x - 1)**3, :x), "multiple roots reported once"
     assert_equal [], s(:x**2 + 1 - :x**2 + 1, :x)
-    assert_raises(ArgumentError) { s(:x - :x, :x) }
+    # 0 = 0 is a true statement, not a failure: every real number solves it
+    assert_equal RCAS::RealSet.reals, RCAS.solve(:x - :x, :x)
+    assert_equal "(-oo, oo)", RCAS.solve(:x - :x, :x).to_s
   end
 
   def test_irreducible_cubics_give_root_of
@@ -115,7 +117,7 @@ class SolveTest < Minitest::Test
     assert_equal ["exp(2)"], strs(s(RCAS.log(:x) - 2, :x))
     assert_equal [3], s(2**:x - 8, :x)
     assert_equal ["pi/6", "5*pi/6"], strs(s(RCAS.sin(:x) - Rational(1, 2), :x))
-    assert_equal ["pi/2", "-pi/2"], strs(s(RCAS.cos(:x), :x))
+    assert_equal ["-pi/2", "pi/2"], strs(s(RCAS.cos(:x), :x))
     assert_equal ["pi/4"], strs(s(RCAS.tan(:x) - 1, :x))
   end
 
@@ -200,19 +202,19 @@ class SolveTest < Minitest::Test
   def test_a_ruby_comparison_is_explained
     error = assert_raises(ArgumentError) { RCAS.solve(:x**2 == 4, :x) }
     assert_includes error.message, "eq(lhs, rhs)"
-    assert_equal [2, -2], RCAS.solve(RCAS::Equation.new(:x**2, 4), :x).map { |r| r.to_s.to_i }
+    assert_equal [-2, 2], RCAS.solve(RCAS::Equation.new(:x**2, 4), :x).map { |r| r.to_s.to_i }
   end
   def test_absolute_values_and_sign_are_split_into_cases
     abs = ->(e) { RCAS.abs(e) }
-    assert_equal ["1", "-1"], strs(s(abs[:x] - 1, :x))
-    assert_equal ["5", "-1"], strs(s(abs[:x - 2] - 3, :x))
+    assert_equal ["-1", "1"], strs(s(abs[:x] - 1, :x))
+    assert_equal ["-1", "5"], strs(s(abs[:x - 2] - 3, :x))
     assert_empty s(abs[:x] + 1, :x), "|x| = -1 has no solution"
-    assert_equal ["-5**(1/2)", "5**(1/2)", "-3**(1/2)", "3**(1/2)"], strs(s(abs[:x**2 - 4] - 1, :x))
-    assert_equal ["2", "-1"], strs(s(abs[:x] + abs[:x - 1] - 3, :x)), "two absolute values, four cases"
+    assert_equal ["-5**(1/2)", "-3**(1/2)", "3**(1/2)", "5**(1/2)"], strs(s(abs[:x**2 - 4] - 1, :x))
+    assert_equal ["-1", "2"], strs(s(abs[:x] + abs[:x - 1] - 3, :x)), "two absolute values, four cases"
     assert_equal ["2"], strs(s(:x * abs[:x] - 4, :x)), "the root of the other branch does not lie in it"
     assert_equal ["0"], strs(s(RCAS.sign(:x), :x)), "sign vanishes where its argument does"
-    assert_equal ["1", "-1"], strs(s(RCAS.sign(:x) * :x - 1, :x))
-    assert_equal ["pi/6", "5*pi/6", "-pi/6", "7*pi/6"], strs(s(abs[RCAS.sin(:x)] - Rational(1, 2), :x))
+    assert_equal ["-1", "1"], strs(s(RCAS.sign(:x) * :x - 1, :x))
+    assert_equal ["-pi/6", "pi/6", "5*pi/6", "7*pi/6"], strs(s(abs[RCAS.sin(:x)] - Rational(1, 2), :x))
   end
 
   def test_a_whole_branch_of_solutions_says_so
@@ -220,6 +222,34 @@ class SolveTest < Minitest::Test
     assert_equal "every x with x >= 0 solves abs(x) - x = 0", error.message
     error = assert_raises(ArgumentError) { s(RCAS.sign(:x) - 1, :x) }
     assert_equal "every x with x > 0 solves -1 + sign(x) = 0", error.message
+  end
+
+  # Two school-standard equations that used to raise NotImplementedError.
+  # Squaring and combining logarithms both invent roots, so the answers are
+  # kept only where the original equation is defined and true.
+  def test_radical_and_logarithmic_equations
+    x = RCAS::Var.new(:x)
+    assert_equal ["3"], strs(RCAS.solve(RCAS.eq(RCAS.sqrt(x + 1), x - 1), x))
+    assert_equal ["4"], strs(RCAS.solve(RCAS.eq(RCAS.sqrt(x), 2), x))
+    assert_equal ["1"], strs(RCAS.solve(RCAS.eq(RCAS.sqrt(x + 3), x + 1), x)), "x = -2 solves the square, not this"
+    assert_empty RCAS.solve(RCAS.eq(RCAS.sqrt(x), -1), x)
+    assert_equal ["3/2 + (9 + 4*e)**(1/2)/2"], strs(RCAS.solve(RCAS.eq(RCAS.log(x) + RCAS.log(x - 3), 1), x))
+    assert_equal ["4"], strs(RCAS.solve(RCAS.eq(RCAS.log(x) - RCAS.log(x - 3), RCAS.log(4)), x))
+  end
+
+  # The order roots happen to be found in is not an answer about them.
+  def test_real_roots_come_back_in_order
+    x = RCAS::Var.new(:x)
+    assert_equal ["-2", "-1", "1", "2"], strs(RCAS.solve(x**4 - 5 * x**2 + 4, x))
+    assert_equal ["0", "1"], strs(RCAS.solve(x**2 - x, x))
+    assert_equal ["-i", "i"], strs(RCAS.solve(x**2 + 1, x)), "no order to impose on these"
+    assert_equal ["1", "-1/2 - i*3**(1/2)/2", "-1/2 + i*3**(1/2)/2"], strs(RCAS.solve(x**3 - 1, x))
+  end
+
+  # An equation rcas cannot solve says where the numbers are.
+  def test_the_message_points_at_nsolve
+    e = assert_raises(NotImplementedError) { RCAS.solve(RCAS.cos(:x) - :x, :x) }
+    assert_match(/nsolve/, e.message)
   end
 
 end
