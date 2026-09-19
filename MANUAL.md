@@ -1636,9 +1636,9 @@ nothing else applies.
 
 ```
 rcas> sum(k, k: 1..n)
-=> n/2 + n**2/2
+=> n*(1 + n)/2
 rcas> sum(k**2, k, 1, n)
-=> n/6 + n**2/2 + n**3/3
+=> n*(1 + 2*n)*(1 + n)/6
 rcas> sum(2**k, k: 0..n)
 => -1 + 2*2**n
 rcas> sum(k * 2**k, k: 1..n)
@@ -1680,14 +1680,14 @@ rcas> rsolve(Out[-1], s, n, init: {0 => 1})
 ```
 
 `sum` does the same by itself when nothing simpler works, so the closed
-form of a definite hypergeometric sum comes out in one step; here it is
-`binomial(2*n, n)` written with the gamma function (section 1.3,
-*Factorials, binomials, gamma*, says why products of linear factors come
-out this way).
+form of a definite hypergeometric sum comes out in one step. The gammas
+that the algorithm leaves are read back as a binomial coefficient where
+one fits: the shape is guessed and then checked at several integers, so
+the name on the answer is one rcas has verified.
 
 ```
 rcas> sum(binomial(n, k)**2, k: 0..n)
-=> 2**(2*n)*gamma(1/2 + n)/(pi**(1/2)*n!)
+=> binomial(2*n, n)
 rcas> Out[-1].subs(n => 5).simplify
 => 252
 ```
@@ -1738,7 +1738,7 @@ rcas> product(2*k, k: 1..n)
 rcas> product(2*k - 1, k: 1..n)
 => 2**n*gamma(1/2 + n)/pi**(1/2)
 rcas> product(a**k, k: 1..n)
-=> a**(n/2 + n**2/2)
+=> a**(n*(1 + n)/2)
 rcas> product((k + 1)/k, k: 1..n)
 => 1 + n
 rcas> product(k + b, k: 1..n)

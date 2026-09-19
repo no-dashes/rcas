@@ -104,6 +104,68 @@ module RCAS
       end
     end
 
+    # A closed form built out of gammas and factorials is often a binomial
+    # coefficient wearing a disguise: the sum of binomial(n, k)**2 comes
+    # back as 2**(2*n)*gamma(1/2 + n)/(pi**(1/2)*n!), which is
+    # binomial(2*n, n). The shape is guessed - one of a handful of linear
+    # arguments - and then checked at several integers, which is what makes
+    # guessing safe (fps offers its coefficient in three forms and lets the
+    # same kind of check decide). nil when nothing fits.
+    UPPER = [1, 2].freeze
+    LOWER = [0, 1, 2].freeze
+    SHIFTS = [0, 1, -1, 2, -2].freeze # nearest first, so binomial(2*n, n) wins over 2*binomial(2*n - 1, n - 1)
+    SAMPLES = [3, 4, 5, 6].freeze
+
+    def as_binomial(expr, var)
+      expr = Expression.lift(expr)
+      return nil unless expr.each_node.any? { |n| n.is_a?(Fn) && %i[gamma factorial].include?(n.name) }
+      values = SAMPLES.map { |m| numeric_at(expr, var, m) }
+      return nil if values.any? { |v| v.nil? || v.zero? }
+
+      UPPER.each do |a|
+        LOWER.each do |c|
+          next if c > a
+          SHIFTS.each do |b|
+            SHIFTS.each do |d|
+              ratio = constant_ratio(values, a, b, c, d)
+              next unless ratio
+              form = (Expression.lift(ratio) * Fn.new(:binomial, [(a * var + b).simplify, (c * var + d).simplify])).simplify
+              return form
+            end
+          end
+        end
+      end
+      nil
+    end
+
+    # The same rational multiple of binomial(a*m + b, c*m + d) at every
+    # sample, or nil. A "nice" rational only: a ratio that needs sixty digits
+    # is the numerics talking, not an identity.
+    def constant_ratio(values, a, b, c, d)
+      first = nil
+      SAMPLES.each_with_index do |m, i|
+        top = a * m + b
+        bottom = c * m + d
+        return nil if bottom.negative? || top < bottom
+        binomial = (0...bottom).reduce(1) { |acc, j| acc * (top - j) } / (1..bottom).reduce(1, :*)
+        return nil if binomial.zero?
+        ratio = values[i] / binomial.to_f
+        rational = Rational(ratio).rationalize(Rational(1, 10**9))
+        return nil if rational.numerator.abs > 64 || rational.denominator > 64
+        first ||= rational
+        return nil unless (ratio - first).abs < 1e-9 * [1.0, ratio.abs].max
+      end
+      first
+    end
+
+    def numeric_at(expr, var, m)
+      value = expr.evalf(var.name => m)
+      value = value.value if value.is_a?(Num)
+      value.is_a?(Numeric) && value.real? && value.finite? ? value.to_f : nil
+    rescue StandardError
+      nil
+    end
+
     # sum_k binomial(n, k)*x**k is a polynomial when n is a non-negative
     # integer and otherwise converges only for |x| < 1. Without the test
     # sum((-1)**k, k, 0, oo) came back as 1/2 - the value the formula gives

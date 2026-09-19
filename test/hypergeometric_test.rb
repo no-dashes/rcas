@@ -160,7 +160,7 @@ class ZeilbergerTest < Minitest::Test
   # sum() reaches for creative telescoping when nothing else works.
   def test_definite_sums_get_a_closed_form
     value = RCAS.sum(binomial(N, K)**2, K, 0, N)
-    assert_equal "2**(2*n)*gamma(1/2 + n)/(pi**(1/2)*n!)", value.to_s
+    assert_equal "binomial(2*n, n)", value.to_s, "the gammas read back as the binomial they are"
     (0..6).each do |i|
       expected = (0..i).sum { |l| RCAS.binomial(i, l).value**2 }
       assert_equal expected, value.subs(n: i).simplify.value, "n = #{i}"

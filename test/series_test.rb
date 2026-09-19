@@ -118,8 +118,8 @@ class SeriesTest < Minitest::Test
   end
 
   def test_polynomial_sums
-    assert_equal "n/2 + n**2/2", RCAS.sum(:k, :k, 1, :n).to_s
-    assert_equal "n/6 + n**2/2 + n**3/3", RCAS.sum(:k**2, :k, 1, :n).to_s
+    assert_equal "n*(1 + n)/2", RCAS.sum(:k, :k, 1, :n).to_s
+    assert_equal "n*(1 + 2*n)*(1 + n)/6", RCAS.sum(:k**2, :k, 1, :n).to_s
     assert_equal 3025, RCAS.sum(:k**3, :k, 1, 10)
     assert_equal "n**2", RCAS.sum(2 * :k - 1, :k, 1, :n).to_s
     assert_equal "5*n", RCAS.sum(5, :k, 1, :n).to_s
@@ -157,7 +157,7 @@ class SeriesTest < Minitest::Test
     assert_equal "zeta(3)", RCAS.sum(1 / :n**3, n: 1..).to_s
     assert_in_delta 1.2020569031595942, RCAS.zeta(3).evalf, 1e-11
     assert_equal (1..100).sum { |n| Rational(1, n * n) }, RCAS.sum(1 / :n**2, n: 1..100)
-    assert_equal "-n/2 + n**2/2", RCAS.sum(:k, k: 1...:n).to_s
+    assert_equal "n*(-1 + n)/2", RCAS.sum(:k, k: 1...:n).to_s
     assert_equal 2, RCAS.sum(1 / 2**:k, k: 0..Float::INFINITY)
     assert_equal "oo", RCAS.zeta(1).to_s
     assert_raises(ArgumentError) { RCAS.sum(:k, k: ..5) }
@@ -188,6 +188,34 @@ class SeriesTest < Minitest::Test
     assert_equal "limit(floor(x), x, 0)", RCAS.limit(RCAS.floor(x), x, 0).to_s
     assert_equal "limit(u(x), x, 0)", RCAS.limit(RCAS.unknown_function(:u, [x]), x, 0).to_s
     assert_equal "1", RCAS.limit(RCAS.sin(x) / x, x, 0).to_s
+  end
+
+  # A closed form reads better factored - that is the shape a course writes
+  # - and the gammas a hypergeometric algorithm leaves are read back as the
+  # binomial coefficient they are, after a check at several integers.
+  def test_closed_forms_are_tidied
+    k = RCAS::Var.new(:k)
+    n = RCAS::Var.new(:n)
+    assert_equal "n*(1 + n)/2", RCAS.sum(k, k, 1, n).to_s
+    assert_equal "n**2*(1 + n)**2/4", RCAS.sum(k**3, k, 1, n).to_s
+    assert_equal "n*(1 + 2*n)*(1 + n)/6", RCAS.sum(k**2, k, 1, n).to_s
+    assert_equal "385", RCAS.sum(k**2, k, 1, 10).to_s, "a number stays the number it is"
+    assert_equal "binomial(2*n, n)", RCAS.sum(RCAS.binomial(n, k)**2, k, 0, n).to_s
+    # the values are what they always were
+    (1..6).each do |m|
+      assert_equal (1..m).sum { |i| i**3 }, RCAS.sum(k**3, k, 1, n).subs(n: m).simplify.value
+      assert_equal (0..m).sum { |i| RCAS.binomial(m, i).value**2 },
+                   RCAS.sum(RCAS.binomial(n, k)**2, k, 0, n).subs(n: m).simplify.value
+    end
+  end
+
+  # The guess is only as good as its check.
+  def test_the_binomial_form_is_checked
+    n = RCAS::Var.new(:n)
+    assert_nil RCAS::Combinatorics.as_binomial(RCAS.factorial(n), n)
+    assert_nil RCAS::Combinatorics.as_binomial((n**2 + 1).simplify, n), "no gamma, nothing to read back"
+    assert_equal "binomial(n, 2)",
+                 RCAS::Combinatorics.as_binomial((RCAS.gamma(n + 1) / (RCAS.gamma(RCAS::Num.new(3)) * RCAS.gamma(n - 1))).simplify, n).to_s
   end
 
 end

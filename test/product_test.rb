@@ -40,8 +40,8 @@ class ProductTest < Minitest::Test
     assert_product (K + 1) / K, 1, "1 + n"
     assert_product 1 + 1 / K, 1, "1 + n"
     assert_product RCAS::Num.new(2), 1, "2**n"
-    assert_product 3**K, 0, "3**(n/2 + n**2/2)"
-    assert_equal "a**(n/2 + n**2/2)", product(RCAS::Var.new(:a)**K, 1, N).to_s
+    assert_product 3**K, 0, "3**(n*(1 + n)/2)"
+    assert_equal "a**(n*(1 + n)/2)", product(RCAS::Var.new(:a)**K, 1, N).to_s
     assert_equal "x**n", product(RCAS::Var.new(:x), 1, N).to_s
     assert_equal "0", product(K, 0, N).to_s
   end

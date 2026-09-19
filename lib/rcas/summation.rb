@@ -44,6 +44,10 @@ module RCAS
       k = Expression.lift(k)
       from = Expression.lift(from)
       to = Expression.lift(to)
+      hypergeometric_form(summed(f, k, from, to), to)
+    end
+
+    def summed(f, k, from, to)
       return (f * (to - from + 1)).simplify unless f.variables.include?(k.name)
 
       coeffs = Solve.polynomial_coefficients(f, k)
@@ -188,7 +192,26 @@ module RCAS
         s = power_sum(j)
         total += c * (s.call(n: to) - s.call(n: from - 1))
       end
-      total.expand
+      tidy(total.expand)
+    end
+
+    # A hypergeometric closed form is often a binomial coefficient in
+    # disguise: the sum of binomial(n, k)**2 comes back from the gammas as
+    # 2**(2*n)*gamma(1/2 + n)/(pi**(1/2)*n!), which is binomial(2*n, n).
+    def hypergeometric_form(value, to)
+      return value unless to.is_a?(Var)
+      Combinatorics.as_binomial(value, to) || value
+    end
+
+    # A closed form reads better factored, which is the form a course
+    # writes: n**2*(1 + n)**2/4 rather than n**2/4 + n**3/2 + n**4/4. A
+    # number stays the number it is, and a polynomial that does not factor
+    # comes back as it went in.
+    def tidy(value)
+      return value if value.is_a?(Num) || value.variables.empty?
+      value.factor.simplify
+    rescue StandardError, NotImplementedError
+      value
     end
 
     # S_j(n) = 1**j + 2**j + ... + n**j as a polynomial in n.
