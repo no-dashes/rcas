@@ -2225,6 +2225,15 @@ rcas> forget
 
 ### 1.6 Polynomial rings
 
+The brackets name indeterminates, so `ZZ[x]` is a polynomial ring and not
+an element of `ZZ`; for the element write `ZZ.(3)`, the same spelling a
+polynomial ring and a finite field use.
+
+```
+rcas> [ZZ.(3), QQ.(1/2r)]
+=> [3, 1/2]
+```
+
 `ZZ[x]`, `QQ[x, y]`, `RR[t]` are polynomial rings. `R.(expr)` converts an
 expression into a ring element, an `RCAS::Polynomial` stored as a map from
 exponents to coefficients. Rings are sets as well.

@@ -86,4 +86,18 @@ class DistributionsTest < Minitest::Test
     assert_equal RCAS::RR, RCAS.erf(X).tap { RCAS.assume(x: RCAS::RR) }.domain
     RCAS.forget
   end
+  # A parameter that cannot be one is refused when the distribution is
+  # built: Binomial(10, 1.5).pdf(3) was -3.1640625, a negative probability.
+  def test_impossible_parameters_are_refused
+    d = RCAS::Distributions
+    [[d::Binomial, [10, 1.5]], [d::Binomial, [2.5, 0.5]], [d::Normal, [0, 0]], [d::Normal, [0, -1]],
+     [d::Uniform, [2, 1]], [d::Poisson, [-1]], [d::Exponential, [0]], [d::Bernoulli, [2]],
+     [d::ChiSquare, [0]], [d::StudentT, [-1]], [d::FRatio, [1, 0]]].each do |klass, params|
+      assert_raises(ArgumentError, "#{klass}#{params.inspect}") { klass.new(*params) }
+    end
+    # a symbolic parameter is not a number and is left alone
+    assert_equal "Normal(mu, sigma)", d::Normal.new(:mu, :sigma).to_s
+    assert_equal "Binomial(n, p)", d::Binomial.new(:n, :p).to_s
+  end
+
 end

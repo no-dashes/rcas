@@ -23,17 +23,22 @@ module RCAS
 
     def to_s
       return "0.0" if value.zero?
-      exponent = value.exponent
-      return scientific if exponent > digits + 6 || exponent < -5 # 1.0e-20, not 0.1e-19
-      whole, fraction = value.to_s("F").split(".")
-      keep = digits - whole.delete("-").sub(/\A0\z/, "").size
+      rounded = value.mult(1, digits) # rounded to `digits` significant digits, still a BigDecimal
+      exponent = rounded.exponent
+      return scientific(rounded) if exponent > digits + 6 || exponent < -5 # 1.0e-20, not 0.1e-19
+      whole, fraction = rounded.to_s("F").split(".")
+      integer_digits = whole.delete("-").sub(/\A0\z/, "").size
+      # The zeros after the point of a number below 1 are not significant
+      # digits and must not be charged to the budget: evalf(1/3000, 20) lost
+      # one digit per leading zero.
+      keep = digits - integer_digits + (integer_digits.zero? ? fraction[/\A0*/].size : 0)
       fraction = fraction[0, [keep, 1].max].to_s
       "#{whole}.#{fraction.empty? ? '0' : fraction}"
     end
 
     # One digit before the point, the exponent after the e.
-    def scientific
-      sign, mantissa, _, exponent = value.split
+    def scientific(rounded = value)
+      sign, mantissa, _, exponent = rounded.split
       mantissa = mantissa[0, digits]
       tail = mantissa[1..].to_s.sub(/0+\z/, "")
       "#{'-' if sign.negative?}#{mantissa[0]}.#{tail.empty? ? '0' : tail}e#{exponent - 1}"

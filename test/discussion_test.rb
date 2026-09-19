@@ -204,4 +204,13 @@ class DiscussionTest < Minitest::Test
     return low + 1.0 if high.infinite?
     (low + high) / 2
   end
+  # "not determined" must mean the library said so, not that any error at
+  # all was swallowed on the way.
+  def test_undecided_is_a_named_list_of_errors
+    assert_includes RCAS::Discussion::UNDECIDED, ArgumentError
+    assert_includes RCAS::Discussion::UNDECIDED, RCAS::DomainError
+    refute_includes RCAS::Discussion::UNDECIDED, StandardError
+    refute_includes RCAS::Discussion::UNDECIDED, NoMethodError
+  end
+
 end

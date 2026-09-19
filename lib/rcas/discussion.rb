@@ -150,11 +150,17 @@ module RCAS
       nil
     end
 
+    # "Undecided" is an answer here: nil means the row could not be
+    # determined and prints as "not determined". These are the ways the
+    # library says so. A bare `rescue StandardError` said it for a typo or a
+    # genuine bug too, and the tests still passed.
+    UNDECIDED = [ArgumentError, DomainError, ZeroDivisionError, NotImplementedError, SeriesError].freeze
+
     # A derivative reads better cancelled: the second derivative of
     # (x**2 + 1)/x is 2/x**3, not a quotient of quartics.
     def tidy(e)
       Fraction.cancel(e)
-    rescue StandardError
+    rescue *UNDECIDED
       e.simplify
     end
 
@@ -180,7 +186,7 @@ module RCAS
       difference = a - b
       return true if Scalar.zero?(difference.simplify)
       Scalar.zero?(Fraction.cancel(difference))
-    rescue StandardError
+    rescue *UNDECIDED
       false
     end
 
@@ -199,7 +205,7 @@ module RCAS
       return nil unless domain.include?(0)
       value = f.subs(x => Num.new(0)).simplify
       Limits.infinite?(value) ? nil : value
-    rescue StandardError
+    rescue *UNDECIDED
       nil
     end
 
@@ -221,7 +227,7 @@ module RCAS
     def one_sided(f, x, point, side)
       value = Limits.limit(f, x, point, side)
       value.is_a?(Limit) ? nil : value
-    rescue StandardError
+    rescue *UNDECIDED
       nil
     end
 
@@ -232,7 +238,7 @@ module RCAS
         value = begin
           found = Limits.limit(f, x, point)
           found.is_a?(Limit) ? nil : found.simplify
-        rescue StandardError
+        rescue *UNDECIDED
           nil
         end
         [point, value]
@@ -244,7 +250,7 @@ module RCAS
     def asymptotes(f, x, domain)
       found = Analysis.asymptotes(f, x, at: ends(domain))
       found.transform_values { |lines| lines.reject { |line| same?(line, f) } }
-    rescue StandardError, NotImplementedError
+    rescue *UNDECIDED
       { vertical: [], horizontal: [], oblique: [] }
     end
 
@@ -317,7 +323,7 @@ module RCAS
       return nil if shared.empty?
       common = shared.reduce(Num.new(1)) { |product, (base, exponent)| (product * Simplify.power_node(base, exponent)).simplify }
       [common, Expand.expand(g / common)]
-    rescue StandardError
+    rescue *UNDECIDED
       nil
     end
 
@@ -330,7 +336,7 @@ module RCAS
       found = Expression.lift(value).evalf
       return true unless found.is_a?(Numeric)
       !found.is_a?(Complex) || found.imaginary.abs < 1e-12
-    rescue StandardError
+    rescue *UNDECIDED
       false
     end
 
@@ -388,7 +394,7 @@ module RCAS
     # and a constant one no monotonicity.
     def constant_zero?(g)
       Scalar.zero?(g.simplify) || Scalar.zero?(Fraction.cancel(g))
-    rescue StandardError
+    rescue *UNDECIDED
       false
     end
 

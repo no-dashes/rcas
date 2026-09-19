@@ -160,6 +160,12 @@ module RCAS
       one_sided(g, side)
     rescue SeriesError, ZeroDivisionError, NotImplementedError
       Limit.new(f, x, a)
+    rescue ArgumentError => e
+      # An integrand rcas cannot differentiate reaches here through the
+      # series expansion; "don't know the derivative of floor" is the
+      # l'Hopital attempt talking, not an answer about the limit.
+      raise unless e.message.start_with?(Integrate::NO_DERIVATIVE)
+      Limit.new(f, x, a)
     end
 
     # ---- helpers -----------------------------------------------------------

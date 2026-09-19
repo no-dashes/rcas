@@ -68,4 +68,11 @@ class StatisticsTest < Minitest::Test
     assert_raises(ArgumentError) { RCAS.linreg([1, 1], [2, 3]) }
     assert_raises(ArgumentError) { RCAS.covariance([1, 2], [1]) }
   end
+  # A constant series has no correlation, and a bare ZeroDivisionError does
+  # not say so.
+  def test_correlation_of_a_constant_series
+    e = assert_raises(ArgumentError) { RCAS::Statistics.correlation([1, 1, 1, 1], [2, 4, 6, 8]) }
+    assert_match(/constant/, e.message)
+  end
+
 end

@@ -180,4 +180,14 @@ class SeriesTest < Minitest::Test
     assert_equal "oo", RCAS.limit(1 / :x, x: 0, dir: :right).to_s
     assert_equal "1 - x**2/2 + O(x**4)", RCAS.series(cos(:x), x: 0, n: 4).to_s
   end
+  # l'Hopital reaching for a derivative it does not have is machinery, not
+  # an answer: limit(floor(x), x, 0) said "don't know the derivative of
+  # floor" instead of staying an unevaluated limit.
+  def test_a_limit_we_cannot_take_stays_a_limit
+    x = RCAS::Var.new(:x)
+    assert_equal "limit(floor(x), x, 0)", RCAS.limit(RCAS.floor(x), x, 0).to_s
+    assert_equal "limit(u(x), x, 0)", RCAS.limit(RCAS.unknown_function(:u, [x]), x, 0).to_s
+    assert_equal "1", RCAS.limit(RCAS.sin(x) / x, x, 0).to_s
+  end
+
 end

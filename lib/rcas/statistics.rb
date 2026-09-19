@@ -141,7 +141,12 @@ module RCAS
 
     def correlation(xs, ys)
       xs, ys = pairs(xs, ys, "correlation")
-      (covariance(xs, ys) / (stdev(xs) * stdev(ys))).simplify
+      sx = stdev(xs)
+      sy = stdev(ys)
+      if Scalar.zero?(sx) || Scalar.zero?(sy)
+        raise ArgumentError, "correlation: undefined when one of the two series is constant"
+      end
+      (covariance(xs, ys) / (sx * sy)).simplify
     end
 
     # Least squares line as an expression in var: a + b*var.

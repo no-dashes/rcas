@@ -176,4 +176,16 @@ class PrecisionTest < Minitest::Test
     assert_equal "6.28318530717958647692528676656", e.call(x: 2).to_s
     assert_equal "-3.14159265358979323846264338328", RCAS::Num.new(-d).to_s
   end
+  # keep = digits - (integer digits) counted only the part before the point,
+  # so the zeros after it ate the budget: evalf(1/3000, 20) had 17 digits.
+  def test_a_number_below_one_keeps_all_its_digits
+    assert_equal "0.00033333333333333333333", RCAS.evalf(RCAS::Num.new(Rational(1, 3000)), 20).to_s
+    assert_equal "0.000031415926535897932385", RCAS.evalf(PI / 100_000, 20).to_s
+    assert_equal "0.33333333333333333333", RCAS.evalf(RCAS::Num.new(Rational(1, 3)), 20).to_s
+    assert_equal "-0.00033333333333333333333", RCAS.evalf(RCAS::Num.new(Rational(-1, 3000)), 20).to_s
+    # and the last digit is rounded, not cut off
+    assert_equal "0.66667", RCAS.evalf(RCAS::Num.new(Rational(2, 3)), 5).to_s
+    assert_equal "1.0", RCAS.evalf(RCAS::Num.new(Rational(99_999, 100_000)), 4).to_s
+  end
+
 end

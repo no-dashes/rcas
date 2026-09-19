@@ -271,4 +271,20 @@ class DomainsTest < Minitest::Test
   ensure
     RCAS.forget
   end
+  # The brackets name indeterminates; an integer in them used to raise
+  # NoMethodError about to_sym. And every domain answers .() with an element.
+  def test_brackets_name_indeterminates
+    [-> { RCAS::ZZ[3] }, -> { RCAS::QQ[1, 2] }, -> { RCAS.GF(7)[3] }].each do |call|
+      e = assert_raises(RCAS::DomainError, &call)
+      assert_match(/the brackets name the indeterminates/, e.message)
+    end
+    assert_equal "ZZ[x]", RCAS::ZZ[:x].to_s
+    assert_equal "3", RCAS::ZZ.(3).to_s
+    assert_equal "1/2", RCAS::QQ.(1r / 2).to_s
+    assert_raises(RCAS::DomainError) { RCAS::ZZ.(1r / 2) }
+    # a space that is not a ring is told that first
+    e = assert_raises(RCAS::DomainError) { RCAS::PolynomialRing.new(RCAS::QQ**3, [:x]) }
+    assert_match(/is not a ring/, e.message)
+  end
+
 end

@@ -21,7 +21,29 @@ module RCAS
 
       def initialize(*params)
         @params = params.map { |p| Expression.lift(p) }
+        validate
         freeze
+      end
+
+      # What the parameters have to be. A symbolic parameter is left alone -
+      # Normal(mu, sigma) is a legitimate object - but a number that cannot
+      # be one is refused here rather than returning a negative probability
+      # later (Binomial(10, 1.5).pdf(3) was -3.1640625).
+      def validate; end
+
+      # Raise unless the numeric value of the parameter passes the block.
+      def positive(param, what) = requires(param, what, "positive") { |v| v.positive? }
+      def nonnegative(param, what) = requires(param, what, "not negative") { |v| !v.negative? }
+      def probability_in(param, what) = requires(param, what, "between 0 and 1") { |v| v >= 0 && v <= 1 }
+
+      def whole(param, what)
+        requires(param, what, "a non-negative whole number") { |v| v.integer? && !v.negative? }
+      end
+
+      def requires(param, what, description)
+        value = param.is_a?(Num) ? param.value : nil
+        return if value.nil? || !value.real?
+        raise ArgumentError, "#{name}: #{what} must be #{description}, got #{param}" unless yield(value)
       end
 
       def name = self.class.name.split("::").last
@@ -124,6 +146,7 @@ module RCAS
     # ---- continuous ----------------------------------------------------------------
 
     class Normal < Distribution
+      def validate = positive(sigma, "the standard deviation")
       def mu = params[0]
       def sigma = params[1]
       def support = [Neg.new(OO), OO]
@@ -165,6 +188,10 @@ module RCAS
     end
 
     class Uniform < Distribution
+      def validate
+        return unless a.is_a?(Num) && b.is_a?(Num) && a.value.real? && b.value.real?
+        raise ArgumentError, "Uniform: the range is empty (#{a} to #{b})" unless a.value < b.value
+      end
       def a = params[0]
       def b = params[1]
       def support = [a, b]
@@ -196,6 +223,7 @@ module RCAS
     end
 
     class Exponential < Distribution
+      def validate = positive(rate, "the rate")
       def rate = params[0]
       def support = [Num.new(0), OO]
 
@@ -252,6 +280,7 @@ module RCAS
     end
 
     class Bernoulli < Discrete
+      def validate = probability_in(p, "the probability")
       def p = params[0]
       def support = [Num.new(0), Num.new(1)]
 
@@ -272,6 +301,10 @@ module RCAS
     end
 
     class Binomial < Discrete
+      def validate
+        whole(n, "the number of trials")
+        probability_in(p, "the probability")
+      end
       def n = params[0]
       def p = params[1]
       def support = [Num.new(0), n]
@@ -289,6 +322,7 @@ module RCAS
     end
 
     class Poisson < Discrete
+      def validate = positive(rate, "the rate")
       def rate = params[0]
       def support = [Num.new(0), OO]
 
@@ -306,6 +340,11 @@ module RCAS
 
     # Failures before the first success: P(X = k) = (1 - p)**k p, k = 0, 1, ...
     class Geometric < Discrete
+      def validate
+        positive(p, "the probability")
+        probability_in(p, "the probability")
+      end
+
       def p = params[0]
       def support = [Num.new(0), OO]
 
@@ -353,6 +392,7 @@ end
 # Student's t with nu degrees of freedom. The CDF is exact for nu = 1
 # (Cauchy) and nu = 2, numeric otherwise (regularized incomplete beta).
 class StudentT < Distribution
+  def validate = positive(nu, "the degrees of freedom")
   def nu = params[0]
   def support = [Neg.new(OO), OO]
 
@@ -382,6 +422,7 @@ end
 
 # Chi-square with k degrees of freedom; the CDF is exact for even k.
 class ChiSquare < Distribution
+  def validate = positive(k, "the degrees of freedom")
   def k = params[0]
   def support = [Num.new(0), OO]
 
@@ -418,6 +459,10 @@ end
 
 # The F (variance ratio) distribution with d1 and d2 degrees of freedom.
 class FRatio < Distribution
+  def validate
+    positive(d1, "the numerator degrees of freedom")
+    positive(d2, "the denominator degrees of freedom")
+  end
   def d1 = params[0]
   def d2 = params[1]
   def support = [Num.new(0), OO]
@@ -449,6 +494,10 @@ class FRatio < Distribution
 end
 
     class DiscreteUniform < Discrete
+      def validate
+        return unless a.is_a?(Num) && b.is_a?(Num) && a.value.real? && b.value.real?
+        raise ArgumentError, "DiscreteUniform: the range is empty (#{a} to #{b})" unless a.value <= b.value
+      end
       def a = params[0]
       def b = params[1]
       def support = [a, b]

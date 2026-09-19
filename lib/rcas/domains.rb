@@ -95,7 +95,14 @@ module RCAS
     def join(_other) = raise(NotImplementedError)
 
     # ZZ[x], QQ[x, y]
-    def [](*vars) = PolynomialRing.new(self, vars)
+    def [](*vars)
+      bad = vars.flatten.reject { |v| v.is_a?(Symbol) || v.is_a?(Var) || v.is_a?(String) }
+      unless bad.empty?
+        raise DomainError, "#{self}[#{bad.first.inspect}]: the brackets name the indeterminates of a " \
+                           "polynomial ring, as in #{self}[x]; for an element of #{self} write #{self}.(#{bad.first})"
+      end
+      PolynomialRing.new(self, vars)
+    end
 
     # QQ**3 is a vector space, QQ**[2, 3] a space of 2x3 matrices.
     def **(shape)
@@ -159,6 +166,15 @@ module RCAS
     def [](*vars)
       raise DomainError, "#{name} is not a ring; use ZZ or a field" unless ring?
       super
+    end
+
+    # ZZ.(3), QQ.(1/2r): the value as an element of this set. The brackets
+    # build a polynomial ring, so this is the way in for an element - the
+    # same spelling a polynomial ring and a finite field already use.
+    def call(value)
+      lifted = Expression.lift(value)
+      raise DomainError, "#{lifted} is not in #{name}" unless include?(lifted)
+      lifted
     end
 
     # Smallest number set containing a Ruby number.
@@ -442,10 +458,10 @@ module RCAS
     attr_reader :base, :vars
 
     def initialize(base, vars)
+      raise DomainError, "#{base} is not a ring" unless base.ring?
       unless base.scalar?
         raise DomainError, "#{base} is not a domain of numbers: polynomial coefficients are scalars"
       end
-      raise DomainError, "#{base} is not a ring" unless base.ring?
       names = vars.flatten.map { |v| v.is_a?(Var) ? v.name : v.to_sym }
       raise ArgumentError, "a polynomial ring needs at least one variable" if names.empty?
       if base.is_a?(PolynomialRing)
