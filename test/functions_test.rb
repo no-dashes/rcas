@@ -88,4 +88,26 @@ class ComplexPartsAndRoundingTest < Minitest::Test
     assert_equal "harmonic(n)", RCAS.harmonic(RCAS::Var.new(:n)).to_s
     assert_equal "fibonacci(n)", RCAS.fibonacci(RCAS::Var.new(:n)).to_s
   end
+  # A typo prints back as an unknown function, which is right - u(n + 1)
+  # works the same way - but a name one letter from a real one says so.
+  def test_a_likely_typo_is_named
+    RCAS.instance_variable_set(:@hinted, nil)
+    hint = capture_io { RCAS.unknown_function(:sqr, [RCAS::Num.new(2)]) }.last
+    assert_match(/sqr is an unknown function/, hint)
+    assert_match(/did you mean sqrt\?/, hint)
+    assert_empty capture_io { RCAS.unknown_function(:sqr, [RCAS::Num.new(2)]) }.last, "said once"
+    assert_empty capture_io { RCAS.unknown_function(:u, [RCAS::Num.new(2)]) }.last, "a short name is left alone"
+    assert_empty capture_io { RCAS.unknown_function(:wobble, [RCAS::Num.new(2)]) }.last, "nothing like it"
+    assert_equal "sqr(2)", RCAS.unknown_function(:sqr, [RCAS::Num.new(2)]).to_s
+  end
+
+  def test_the_suggestion_prefers_the_nearest_name
+    assert RCAS.one_edit_apart?("sqr", "sqrt")
+    refute RCAS.one_edit_apart?("sqr", "cbrt")
+    RCAS.instance_variable_set(:@hinted, nil)
+    assert_match(/did you mean sin\?/, capture_io { RCAS.unknown_function(:sinn, [RCAS::Num.new(2)]) }.last)
+    RCAS.instance_variable_set(:@hinted, nil)
+    assert_match(/did you mean factorial\?/, capture_io { RCAS.unknown_function(:facorial, [RCAS::Num.new(2)]) }.last)
+  end
+
 end

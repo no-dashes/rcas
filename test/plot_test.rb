@@ -220,4 +220,21 @@ end
     assert_raises(ArgumentError) { RCAS.parametric([:t], t: 0..1) }
     assert_raises(ArgumentError) { RCAS.parametric([:t, :t], t: 0..RCAS::OO) }
   end
+  # A segment with both ends outside the picture is the run-up to a pole or
+  # the leap across one; drawing it left a vertical stroke at the frame edge
+  # where the graph has no line at all. And a few samples beside a pole must
+  # not decide the scale for everything else.
+  def test_a_pole_breaks_the_line_and_does_not_set_the_scale
+    x = RCAS::Var.new(:x)
+    plot = RCAS.plot(1 / x, x, -2, 2)
+    assert_operator plot.yhi, :<, 10, "the scale follows the hyperbola, not the pole"
+    assert_operator plot.yhi, :>, 2
+    # the two branches are separate segments in the SVG as well
+    assert_equal 2, plot.send(:segments, plot.curves.first).size
+    # a function without a pole keeps its own range
+    parabola = RCAS.plot(x**2, x, -3, 3)
+    assert_in_delta 9.0, parabola.yhi, 1.0
+    assert_equal 1, parabola.send(:segments, parabola.curves.first).size
+  end
+
 end

@@ -151,7 +151,11 @@ object:
   expressions or numbers, `u(n + 1)` or `f(x)`, is an unknown function
   (the notation `rsolve` uses); with a block or other kinds of arguments
   the usual `NoMethodError` is raised, and `respond_to?` is untouched so
-  Ruby's implicit conversions are unaffected.
+  Ruby's implicit conversions are unaffected. `sqr(2)` is therefore an
+  unknown function called `sqr` and prints back as written - but a name one
+  letter away from one rcas has says so once: "sqr is an unknown function
+  (it prints back as written); did you mean sqrt?". Short names (`u`, `f`,
+  `y`) are the ones people really do mean, and are left alone.
 - The functions of the reference section, the constants `PI E I oo
   UNDEFINED`, the
   number sets `NN ZZ QQ RR CC` and `GF` are in scope, and `hold { ... }`
@@ -3297,8 +3301,13 @@ Kolmogorov-Smirnov), multiple regression and time series.
 needs nothing but a terminal; the result is what `inspect` shows, so a plot
 appears as soon as you type it. The range is `-10..10` unless you give one.
 Values that are complex, infinite or undefined leave a gap, and a jump
-across a pole breaks the line instead of drawing a vertical stroke. The
-axes are dotted guides, drawn when the origin is inside the picture.
+across a pole breaks the line instead of drawing a vertical stroke: a
+segment with both ends outside the picture is not drawn, so the run-up to
+a pole leaves the frame where the graph does and no line is drawn across
+the asymptote. The scale is the range of the values, cut back to Tukey's
+far-out fence when a few samples beside a pole would otherwise flatten
+everything else. The axes are dotted guides, drawn when the origin is
+inside the picture.
 
 ```
 rcas> plot(sin(x), x: 0..2*PI, width: 30, height: 6)
@@ -3311,12 +3320,12 @@ rcas> plot(sin(x), x: 0..2*PI, width: 30, height: 6)
         └──────────────────────────────
          0                        6.283
 rcas> plot(1/x, x: -3..3, width: 30, height: 6)
-=>   9.12 ┤⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢽⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-          │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠝⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-          │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠅⠙⠢⠤⣀⣀⣀⣀⣀⣀⣀⠀⠀⠀⠀
-          │⠓⠒⠓⠒⠓⠒⠓⠒⠓⠒⠧⠤⣅⡀⠁⠅⠁⠀⠁⠀⠁⠀⠁⠀⠁⠈⠉⠉⠉⠉
-          │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠱⡀⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-   -8.194 ┤⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+=>  5.111 ┤⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠍⡆⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+          │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠅⠹⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+          │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠅⠀⠈⠙⠒⠢⠤⠤⠤⠤⢤⣀⣀⣀⣀
+          │⠉⠉⠉⠙⠓⠒⠓⠒⠓⠦⠥⣄⡁⠀⠁⠅⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀⠁⠀
+          │⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⣆⠀⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   -5.105 ┤⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠸⡀⠅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
           └──────────────────────────────
            -3                           3
 ```

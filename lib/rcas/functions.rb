@@ -784,7 +784,45 @@ module RCAS
   # so the caller can raise NoMethodError as usual.
   def self.unknown_function(name, args)
     return nil unless args.all? { |a| a.is_a?(Expression) || a.is_a?(Numeric) || a.is_a?(Symbol) }
+    hint_at_typo(name)
     Fn.new(name, args.map { |a| Expression.lift(a) })
+  end
+
+  # sqr(2) is an unknown function called sqr, and printing it back is the
+  # right answer - u(n + 1) has to work the same way. But a name one letter
+  # away from a function rcas has is more likely a typo than a function of
+  # the user's own, and saying so once costs nothing. Short names (u, f, y)
+  # are the ones people really do use, so they are left alone.
+  def self.hint_at_typo(name)
+    return if name.length < 3
+    @hinted ||= {}
+    return if @hinted[name]
+    @hinted[name] = true
+    known = function_names.select { |k| k != name && k.length > 2 && one_edit_apart?(name.to_s, k.to_s) }
+                          .min_by { |k| [-common_prefix(name.to_s, k.to_s), k.length, k.to_s] }
+    return unless known
+    warn "rcas: #{name} is an unknown function (it prints back as written); did you mean #{known}?"
+  end
+
+  # Everything a session can call: the named functions and the top-level ones.
+  def self.function_names
+    @function_names ||= (Functions::NAMES + Functions.public_instance_methods(false)).uniq.sort
+  end
+
+  def self.common_prefix(a, b)
+    i = 0
+    i += 1 while i < a.size && i < b.size && a[i] == b[i]
+    i
+  end
+
+  # One insertion, deletion or substitution apart.
+  def self.one_edit_apart?(a, b)
+    return false if (a.size - b.size).abs > 1
+    long, short = a.size >= b.size ? [a, b] : [b, a]
+    i = 0
+    i += 1 while i < short.size && long[i] == short[i]
+    return true if long.size == short.size && long[(i + 1)..] == short[(i + 1)..] # substitution
+    long[(i + 1)..] == short[i..] # insertion or deletion
   end
 
   # Kernel's one- and two-letter printers (p, pp, and j, jj from the JSON

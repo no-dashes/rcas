@@ -117,7 +117,10 @@ module RCAS
           canvas.set(px, py)
         elsif curve.marker
           canvas.set(px, py)
-        elsif previous && !jump?(previous, point)
+        elsif previous && !jump?(previous, point) && (inside?(previous[1]) || inside?(y))
+          # A segment with both ends outside the picture is the run-up to a
+          # pole (or the leap across one): drawing it leaves a vertical
+          # stroke at the frame edge where the graph has no line at all.
           canvas.line(pixel_x(previous[0]), pixel_y(previous[1]), px, py)
         elsif inside?(y)
           canvas.set(px, py)
@@ -309,7 +312,7 @@ module RCAS
       current = []
       previous = nil
       curve.points.each do |point|
-        if point.nil? || (previous && jump?(previous, point))
+        if point.nil? || (previous && (jump?(previous, point) || !(inside?(previous[1]) || inside?(point[1]))))
           out << current if current.size > 1
           current = []
         end
@@ -701,8 +704,11 @@ module RCAS
       nil
     end
 
-    # Auto scale, trimmed to the central 96 per cent when a pole would
-    # otherwise flatten the picture.
+    # Auto scale, cut back to Tukey's far-out fence when a pole would
+    # otherwise flatten the picture: a few samples beside a pole are
+    # arbitrarily large, and they must not decide the scale of the rest.
+    # The fence is wider than the data for a well-behaved function, so
+    # taking it together with the true range leaves that one alone.
     def y_range(curves, given)
       if given
         lo = numeric(given.begin)
@@ -715,9 +721,13 @@ module RCAS
       lo = values.first
       hi = values.last
       if values.size > 20
-        low = values[(values.size * 0.02).floor]
-        high = values[(values.size * 0.98).floor]
-        lo, hi = [low, high] if high > low && (hi - lo) > 8 * (high - low)
+        q1 = values[(values.size * 0.25).floor]
+        q3 = values[(values.size * 0.75).floor]
+        spread = q3 - q1
+        if spread.positive? && (hi - lo) > 20 * spread
+          lo = [lo, q1 - 3 * spread].max
+          hi = [hi, q3 + 3 * spread].min
+        end
       end
       if (hi - lo).abs < 1e-12
         [lo - 1, hi + 1]
