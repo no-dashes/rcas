@@ -502,6 +502,10 @@ Load-bearing details, most of them found the hard way:
   integer root of numerator and denominator, which is why
   `u(n + 1) = n*u(n)` comes back as `(n - 1)!` and the q-twin replaces a
   degenerate `(q**(-m); q)_n` by `(q; q)_(n - m - 1)`.
+- `Math.log(-1.0)`, `Math.asin(2.0)` and friends raise `Math::DomainError`,
+  which is not a `StandardError` subclass you want reaching a user:
+  `Functions.math_value` leaves the node alone instead. A divergent sum
+  used to come back as "Numerical argument is out of domain - log".
 - **`NotImplementedError` is a ScriptError**, not a StandardError: a bare
   `rescue` does not catch it (this bit while testing).
 
@@ -547,6 +551,20 @@ What is load-bearing:
   factor whose root is a parameter, generically not inside the range.
   `Combinatorics.binomial_value` now folds `binomial(1/2, 3)` as well, which
   is what lets the sampled check evaluate a parametric answer.
+
+## Definite integrals and poles (19 Sept 2026, from a review)
+
+`Integrate.definite` is not `F(b) - F(a)`: `singular_points` finds the
+poles strictly inside the bounds (`Analysis.denominators`, plus the zeros
+of `cos(u)` under a `tan`), `between` evaluates each piece with a
+one-sided limit at every interior end, and the sum of `+oo` and `-oo` is
+`undefined` because Simplify says so. The direction of each piece follows
+the interval, so reversed bounds are evaluated from the right side. When a
+piece comes out non-real - `log(cos(x))` past `pi/2` - the pieces are
+taken again with `log|u|` (`real_logs`), which is an antiderivative on
+each piece and the one a real integral wants; what is still not real stays
+an `Integral` node. A singularity rcas cannot classify (`:unknown`) also
+stays formal rather than being subtracted through.
 
 ## The integration rule chain
 
@@ -859,6 +877,16 @@ integration), Abramov's rational solutions, hypergeometric solutions of
 q-hypergeometric series as objects of their own; the q-twin of the FPS
 algorithm (q-holonomic equations for q-Taylor coefficients) is the obvious
 next step after fps.rb.
+
+A code review (19 Sept 2026, an artifact the user brought in) found four
+wrong answers, four inputs that never returned, and a list of rough edges;
+all of them are fixed and each has a test. What the review changed about
+the *shape* of answers, so that a future session does not "fix" it back:
+`solve` sorts real roots ascending and answers `0 = 0` with `RealSet`,
+polynomial sums come back factored, a hypergeometric closed form is read
+back as a binomial coefficient where one fits (`Combinatorics.as_binomial`,
+guessed and then checked at four integers), and `nintegrate` without
+`digits:` is the tanh-sinh quadrature, not adaptive Simpson.
 
 The user has asked for feature ideas five times and chose:
 factorials/inequalities/trig/algebraic numbers, then finite fields, then
