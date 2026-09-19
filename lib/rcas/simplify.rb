@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require "prime"
 
 module RCAS
   # Algebraic simplification.
@@ -373,10 +372,24 @@ module RCAS
     # 4 ** (1/2) => 2, 8 ** (2/3) => 4, 2 ** (1/2) => nil (stays symbolic).
     def exact_power(value, exp)
       return nil unless exp.is_a?(Rational) && value.is_a?(Integer) && value >= 0
-      root = Integer.sqrt(value) if exp.denominator == 2
-      root ||= (value**(1.0 / exp.denominator)).round
+      root = integer_root(value, exp.denominator)
       return nil unless root**exp.denominator == value
       pow_number(root, exp.numerator)
+    end
+
+    # The integer n-th root of a non-negative integer, by bisection on the
+    # bit length. value**(1.0/n) overflows to Infinity above 10**308, so
+    # root(10**400, 3) used to raise FloatDomainError.
+    def integer_root(value, n)
+      return Integer.sqrt(value) if n == 2
+      return value if value < 2
+      lo = 1
+      hi = 1 << ((value.bit_length + n - 1) / n) # 2**ceil(bits/n) is past the root
+      while lo < hi
+        mid = (lo + hi + 1) / 2
+        mid**n <= value ? lo = mid : hi = mid - 1
+      end
+      lo
     end
 
     def power_node(base, exp)
@@ -393,10 +406,11 @@ module RCAS
         return nil if num.first == 1 && den.first == 1
         return [Rational(num.first, den.first), normalize_number(Rational(num.last, den.last))]
       end
-      return nil unless value.is_a?(Integer) && value > 1 && value.bit_length <= 64
+      return nil unless value.is_a?(Integer) && value > 1
+      division = NumberTheory.prime_division(value, hard: false) or return nil
       root = 1
       rest = 1
-      Prime.prime_division(value).each do |prime, e|
+      division.each do |prime, e|
         root *= prime**(e / q)
         rest *= prime**(e % q)
       end

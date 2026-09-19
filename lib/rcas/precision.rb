@@ -148,6 +148,11 @@ module RCAS
     # Raised for anything that has no arbitrary-precision implementation.
     class Unsupported < ArgumentError; end
 
+    # The quadrature ran out of levels: the integrand is too hard for the
+    # digits asked, or the integral diverges. Told apart from Unsupported so
+    # that a caller knows retrying in Floats would not help either.
+    class NoConvergence < Unsupported; end
+
     GUARD = 10
     FLOAT_DIGITS = Float::DIG + 1
     MAX_TERMS = 100_000
@@ -540,7 +545,7 @@ module RCAS
         return total.mult(1, prec) if settled && level > 1
         previous = total
       end
-      raise Unsupported, "evalf: the quadrature did not settle to #{prec} digits"
+      raise NoConvergence, "evalf: the quadrature did not settle to #{prec} digits (the integral may diverge)"
     end
 
     # One trapezoidal sum in t, over every k (parity 0) or only the odd ones

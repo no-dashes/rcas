@@ -60,4 +60,19 @@ class CombinatoricsTest < Minitest::Test
     assert_equal 153, RCAS.sum(fact(k), k: 1..5)
     assert_equal "sum(1/k, k, 1, oo)", RCAS.sum(1 / k, k: 1..).to_s, "harmonic series is not log(0)"
   end
+  # The binomial series converges only for |x| < 1 unless the upper index is
+  # a non-negative integer (when it is a polynomial). sum((-1)**k, k, 0, oo)
+  # came back as 1/2, the value the formula gives where it does not hold,
+  # and before that it raised Math::DomainError from inside the limit.
+  def test_a_divergent_series_is_not_summed
+    k = RCAS::Var.new(:k)
+    assert_equal "sum((-1)**k, k, 0, oo)", RCAS.sum((-1)**k, k, 0, RCAS::OO).to_s
+    assert_equal "2", RCAS.sum((1r / 2)**k, k, 0, RCAS::OO).to_s
+    assert_equal "32", RCAS.sum(RCAS.binomial(5, k), k, 0, RCAS::OO).to_s
+    assert_equal "2**n*n/2", RCAS.sum(k * RCAS.binomial(RCAS::Var.new(:n), k), k, 0, RCAS::OO).to_s
+    # and log of a negative float no longer leaves Ruby's error in the open
+    assert_equal "log(-1.0)", RCAS.log(-1.0).to_s
+    assert_equal "asin(2.0)", RCAS.asin(2.0).to_s
+  end
+
 end

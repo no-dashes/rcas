@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require "prime"
 
 module RCAS
   # Integer arithmetic beyond what Ruby ships with: prime factorization,
@@ -27,7 +26,19 @@ module RCAS
   module NumberTheory
     module_function
 
-    SMALL_PRIMES = Prime.first(168).freeze # primes below 1000
+    # The primes below 1000, by sieve: enough to divide out the small
+    # factors before Miller-Rabin and rho take over. (`require "prime"` is
+    # trial division all the way up and cost 27 ms of the load.)
+    SMALL_PRIMES = begin
+      sieve = Array.new(1000, true)
+      sieve[0] = sieve[1] = false
+      (2..31).each { |i| (i * i).step(999, i) { |j| sieve[j] = false } if sieve[i] }
+      sieve.each_index.select { |i| sieve[i] }.freeze
+    end
+
+    # Above this many bits a composite cofactor is left alone when the
+    # caller did not ask for a factorization in the first place.
+    EASY_BITS = 64
 
     # Bases that make Miller-Rabin deterministic below 3 317 044 064 679 887 385 961 981.
     DETERMINISTIC_BASES = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41].freeze
@@ -49,8 +60,19 @@ module RCAS
       end
     end
 
+    # The primes in ascending order, without end: what `Prime.each` was.
+    def each_prime
+      SMALL_PRIMES.each { |p| yield p }
+      p = SMALL_PRIMES.last
+      loop { yield(p = nextprime(p)) }
+    end
+
     # [[prime, multiplicity], ...] in ascending order; [] for 1.
-    def prime_division(n)
+    # With hard: false a large composite cofactor is not pursued and the
+    # answer is nil instead: that is for callers that are only tidying a
+    # number they were handed - sqrt(n), log(n) - and must not disappear
+    # into a factorization nobody asked for.
+    def prime_division(n, hard: true)
       raise ArgumentError, "prime_division: expected a positive integer, got #{n.inspect}" unless n.is_a?(Integer) && n.positive?
       counts = Hash.new(0)
       SMALL_PRIMES.each do |p|
@@ -64,6 +86,7 @@ module RCAS
         if n < SMALL_PRIMES.last**2 || prime?(n)
           counts[n] += 1
         else
+          return nil if !hard && n.bit_length > EASY_BITS
           split_composite(n, counts)
         end
       end

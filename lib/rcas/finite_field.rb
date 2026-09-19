@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require "prime"
 
 module RCAS
   # An element of GF(p): an integer modulo a prime. Lives inside Num, so all
@@ -201,7 +200,7 @@ module RCAS
 
     def self.prime_power(q)
       return nil unless q.is_a?(Integer) && q > 1
-      division = Prime.prime_division(q)
+      division = NumberTheory.prime_division(q)
       return nil unless division.size == 1
       division.first
     end
@@ -241,7 +240,7 @@ module RCAS
       return false if n < 1
       x = [0, 1]
       return false unless Factor::Dense.rem_mod(Factor::Dense.sub(Factor::Dense.powmod(x, p**n, f, p), x), f, p).empty?
-      Prime.prime_division(n).map(&:first).all? do |r|
+      NumberTheory.prime_division(n).map(&:first).all? do |r|
         h = Factor::Dense.sub(Factor::Dense.powmod(x, p**(n / r), f, p), x)
         Factor::Dense.deg(Factor::Dense.gcd_mod(h, f, p)) <= 0
       end
@@ -322,7 +321,7 @@ module RCAS
 
     def element_order(x)
       m = order - 1
-      Prime.prime_division(m).each do |r, _|
+      NumberTheory.prime_division(m).each do |r, _|
         m /= r while (m % r).zero? && (x**(m / r)).one?
       end
       m

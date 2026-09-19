@@ -104,7 +104,7 @@ lib/rcas/background.rb      (titles verified against the Wikipedia API 2026-09-1
 lib/rcas/background.rb      Background::ENTRIES: { maths:, method: } per name (or a Symbol alias) and READING: Wikipedia article titles (ASCII, spaces not underscores; Docs expands the [Key00] citations from MANUAL's bibliography itself); test/docs_test.rb checks the names exist and the [Key00] sources are in MANUAL's bibliography
 lib/rcas/docs.rb            Docs.doc(name) -> Documentation: signature + comment block read from the source, `Docs::NAMESPACES` resolves `Poly.legendre` (and the bare `chebyshev_t` when no top-level function has the name; Background keys them as `"Poly.legendre"`), plus the MANUAL.md headings that mention the name; the chat's /help NAME and the top-level doc() use it. test/docs_test.rb asserts every top-level function has a comment
 lib/rcas/plot.rb            Plot (braille canvas, SVG, PNG via Render.which/run + Chrome) and Plotting.plot/parametric/polar/scatter/histogram/boxplot/barchart (Curve markers: line, :dot, :stem, :bar, :box; ylabels/xlabels name the rows and columns); Plot has no to_latex on purpose, so the chat shows the art. `Plot.style` (:text/:image, RCAS_PLOT_STYLE) is the hook the chat's /plotstyle writes; `picture?`/`picture` draw the inline image
-lib/rcas/numerics.rb        Numerics.nsolve (bisection + Newton), nintegrate (adaptive Simpson, infinite ranges by substitution), resolve (evalf on a definite Integral)
+lib/rcas/numerics.rb        Numerics.nsolve (bisection + Newton, and `pole?` on the answer: a sign change across a pole is not a root), nintegrate (Precision.quadrature at 17 digits, falling back to adaptive Simpson only where arbitrary precision has no route), resolve (evalf on a definite Integral)
 lib/rcas/analysis.rb        Analysis: critical_points/extrema/inflections/asymptotes/tangent/normal/real_domain, gradient/hessian/jacobian/divergence/curl/laplacian/lagrange, arclength/revolution_volume/revolution_surface
 lib/rcas/vector_calculus.rb VectorCalculus: line_integral/surface_integral/flux over a parametrization, enclosed_area, green/stokes/divergence_theorem (each computes the side over the region, the integrals compute the other), conservative?/potential; `norm` takes perfect squares out of the length element with the sign they have on the parameter range
 lib/rcas/discussion.rb      Discussion.discuss -> Report: the whole Kurvendiskussion in one object (domain, symmetry/period, zeros, gaps, limits+asymptotes, extrema, monotonicity, inflections, curvature). Every row comes from the function that owns it; nil means undecided and prints as "not determined", [] means none. Monotonicity/curvature by sign chart (three samples a piece); a periodic f is charted over one period. steps(f, x, :discuss) narrates the same report, and `hold`/`steps { discuss(f, x) }` keep the call as `Fn(:discuss, [f, x])` (in `Hold::FORMAL`; `doit` answers it with the Report, which is not an Expression)
@@ -801,7 +801,12 @@ names one without a session-wide assumption.
   again (that cost 23 s on a 6x6 inverse before it was removed).
 - Ruby's `Integer#prime?` is Miller-Rabin only below about 3.3e24 and
   trial division above; `Prime.prime_division` is trial division always.
-  `NumberTheory` has its own tests for that reason.
+  `NumberTheory` has its own tests for that reason - and since 19 Sept 2026
+  the stdlib `prime` is not loaded at all (it cost 27 ms of a 120 ms load):
+  `SMALL_PRIMES` is a sieve, `each_prime` replaces `Prime.each`, and
+  `sqrt`/`log`/`GF` go through `NumberTheory.prime_division`, which takes
+  `hard: false` for a caller that is only tidying a number and must not
+  disappear into a factorization nobody asked for.
 
 ## Audience sections
 

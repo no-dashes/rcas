@@ -61,4 +61,19 @@ class NumericsTest < Minitest::Test
     assert_in_delta Math::PI, RCAS.nsolve(RCAS.tan(x), x: 3..4), 1e-9
     assert_in_delta 0.7390851332151607, RCAS.nsolve(RCAS.cos(x) - x, x: 0..1), 1e-12
   end
+  # Adaptive Simpson halved the interval down to MAX_DEPTH, so a singular
+  # integrand reached 2**50 subintervals and never returned. The default is
+  # the tanh-sinh quadrature now: accurate at an endpoint singularity, and
+  # it says when it cannot settle instead of subdividing for ever.
+  def test_a_singular_integrand_settles_or_says_so
+    x = RCAS::Var.new(:x)
+    assert_in_delta 2.0, RCAS.nintegrate(1 / RCAS.sqrt(x), x: 0..1), 1e-15
+    assert_in_delta Math.sqrt(Math::PI), RCAS.nintegrate(RCAS.exp(-x**2), x: -RCAS::OO..RCAS::OO), 1e-15
+    assert_in_delta(-1.0, RCAS.nintegrate(RCAS.log(x), x: 0..1), 1e-15)
+    [[1 / x**2, 0..1], [RCAS.tan(x), 0..3.14]].each do |f, range|
+      e = assert_raises(ArgumentError) { RCAS.nintegrate(f, x: range) }
+      assert_match(/did not settle/, e.message)
+    end
+  end
+
 end

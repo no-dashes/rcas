@@ -113,4 +113,29 @@ class NumberTheoryTest < Minitest::Test
     assert_includes RCAS.convergents(Math::PI, 4), Rational(355, 113), "the classic approximation of pi"
     assert_equal [1, 2, 2, 2, 2], RCAS.continued_fraction(Math.sqrt(2), 5), "the square root of two repeats"
   end
+  # Trial division on a 64-bit number is 2**32 divisions: sqrt, GF and log
+  # each hung on 2**61 - 1 until they went through Miller-Rabin and rho.
+  def test_big_integers_do_not_go_through_trial_division
+    m = 2**61 - 1 # a Mersenne prime
+    assert RCAS.isprime(m)
+    assert_equal [[m, 1]], RCAS::NumberTheory.prime_division(m)
+    assert_equal "#{m}**(1/2)", RCAS.sqrt(m).to_s
+    assert_equal "log(#{m})", RCAS.log(m).to_s
+    assert_equal m, RCAS.GF(m).order
+    assert_equal 168, RCAS::NumberTheory::SMALL_PRIMES.size
+    assert_equal 997, RCAS::NumberTheory::SMALL_PRIMES.last
+    first = []
+    RCAS::NumberTheory.each_prime { |p| first << p; break if first.size == 5 }
+    assert_equal [2, 3, 5, 7, 11], first
+  end
+
+  # A number nobody asked to factor is not factored: tidying sqrt(n) and
+  # log(n) stops where the work would start.
+  def test_tidying_does_not_factor_the_unfactorable
+    hard = 1_000_000_000_039 * 1_000_000_000_061 * 1_000_000_000_063
+    assert_nil RCAS::NumberTheory.prime_division(hard, hard: false)
+    assert_equal "#{hard}**(1/2)", RCAS.sqrt(hard).to_s
+    assert_equal [[2, 2], [3, 2]], RCAS::NumberTheory.prime_division(36, hard: false)
+  end
+
 end

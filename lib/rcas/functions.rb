@@ -620,6 +620,16 @@ module RCAS
     ODD = %i[sin tan atan asin sinh sign erf Si].freeze
     EVEN = %i[cos cosh abs].freeze
 
+    # Math.log(-1.0) and Math.asin(2.0) raise Math::DomainError: the value
+    # is outside the reals, so the node stays as it is rather than the error
+    # reaching the user (a divergent sum used to come back as "Numerical
+    # argument is out of domain - log").
+    def self.math_value(fn, value)
+      Num.new(Math.public_send(fn.name, value))
+    rescue Math::DomainError
+      fn
+    end
+
     # Constant folding for function applications; called by Simplify.
     def self.fold(fn)
       if QFunctions::NAMES.include?(fn.name)
@@ -663,7 +673,7 @@ module RCAS
       return exact if exact
 
       case [fn.name, arg]
-      in [_, Num => n] if n.value.is_a?(Float) && Math.respond_to?(fn.name) then Num.new(Math.public_send(fn.name, n.value))
+      in [_, Num => n] if n.value.is_a?(Float) && Math.respond_to?(fn.name) then math_value(fn, n.value)
       in [_, Num => n] if n.value.is_a?(Complex) && (n.value.real.is_a?(Float) || n.value.imaginary.is_a?(Float)) && %i[exp sin cos].include?(fn.name)
         Num.new(CMath_lite.public_send(fn.name, n.value))
       in [:sin, Num => n] if n.zero? then Num.new(0)
@@ -747,8 +757,9 @@ module RCAS
         return nil unless v.is_a?(Integer) && v > 1 && v.even?
         Summation.zeta_even(v)
       when :log
-        return nil unless arg.is_a?(Num) && arg.value.is_a?(Integer) && arg.value > 1 && arg.value.bit_length <= 64
-        division = Prime.prime_division(arg.value)
+        return nil unless arg.is_a?(Num) && arg.value.is_a?(Integer) && arg.value > 1
+        division = NumberTheory.prime_division(arg.value, hard: false)
+        return nil if division.nil?
         k = division.map(&:last).reduce(:gcd)
         return nil if k < 2
         root = division.reduce(1) { |acc, (p, e)| acc * p**(e / k) }

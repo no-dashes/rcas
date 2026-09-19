@@ -989,12 +989,17 @@ rcas> nsolve(cos(x) - x, x: 0..1)
 rcas> nsolve(x**3 - 2*x - 5, x, 2)
 => 2.0945514815423265
 rcas> nintegrate(sin(x)/x, x: 0..1)
-=> 0.9460830703671829
+=> 0.946083070367183
 rcas> nintegrate(exp(-x**2), x: -oo..oo)
-=> 1.7724538509061416
+=> 1.772453850905516
 rcas> integrate(exp(-x**4), x: 0..1).evalf
-=> 0.8448385947571027
+=> 0.8448385947571024
 ```
+
+`nintegrate` is the tanh-sinh quadrature of the `digits:` form run at
+Float precision, so an endpoint singularity is no harder than anything
+else; an integrand it cannot settle is reported rather than subdivided
+for ever.
 
 A function changes sign across a pole as it does across a root, so a
 bracket that contains one is refused rather than answered: `1/x` has no

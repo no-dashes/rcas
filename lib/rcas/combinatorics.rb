@@ -104,6 +104,19 @@ module RCAS
       end
     end
 
+    # sum_k binomial(n, k)*x**k is a polynomial when n is a non-negative
+    # integer and otherwise converges only for |x| < 1. Without the test
+    # sum((-1)**k, k, 0, oo) came back as 1/2 - the value the formula gives
+    # at x = 1, where the series does not converge at all.
+    def binomial_series_converges?(n, x)
+      return true unless n.is_a?(Num) # a symbolic upper index: the terms vanish past k = n
+      return true if n.value.is_a?(Integer) && n.value >= 0
+      value = x.is_a?(Num) ? x.value : (x.variables.empty? ? x.evalf : nil)
+      value = value.value if value.is_a?(Num)
+      return true unless value.is_a?(Numeric) # symbolic: convergence is assumed, as elsewhere here
+      value.abs < 1
+    end
+
     def divergent?(value)
       value.each_node.any? do |n|
         (n.is_a?(Fn) && n.name == :log && n.args.first.is_a?(Num) && n.args.first.zero?) || n == OO
@@ -158,7 +171,9 @@ module RCAS
       if coeffs && coeffs.size == 2
         x = (-coeffs[1]).simplify
         n = (coeffs[0] / x).cancel
-        return [0, ((one + x)**n).simplify] unless [n, x].any? { |v| v.variables.include?(k.name) }
+        if [n, x].none? { |v| v.variables.include?(k.name) } && binomial_series_converges?(n, x)
+          return [0, ((one + x)**n).simplify]
+        end
       end
       _ = two
       nil

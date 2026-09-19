@@ -41,6 +41,16 @@ class SimplifyTest < Minitest::Test
     assert_equal "-oo + oo*x", s(o * :x - o), "two different infinities say nothing"
   end
 
+  # value**(1.0/n) overflows to Infinity above 10**308: root(10**400, 3)
+  # raised FloatDomainError. The integer root is found by bisection.
+  def test_roots_of_very_large_integers
+    assert_equal "#{10**133}*10**(1/3)", RCAS.root(10**400, 3).to_s
+    assert_equal (10**134).to_s, RCAS.root(10**402, 3).to_s
+    assert_equal "#{10**200}", RCAS.sqrt(10**400).to_s
+    assert_equal "#{10**400 + 1}**(1/3)", RCAS.root(10**400 + 1, 3).to_s
+    assert_equal "2", RCAS.cbrt(8).to_s
+  end
+
   def test_identities
     assert_equal "x", s(:x + 0)
     assert_equal "x", s(:x * 1)

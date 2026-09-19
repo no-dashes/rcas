@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require "prime"
 
 module RCAS
   # Exact polynomial factorization over ZZ and QQ.
@@ -362,7 +361,7 @@ module RCAS
         lc = f.last
         chosen = nil
         tried = 0
-        Prime.each do |p|
+        NumberTheory.each_prime do |p|
           next if p == 2 || (lc % p).zero?
           fp = Dense.mod(f, p)
           next unless Dense.deg(Dense.gcd_mod(fp, Dense.derivative(fp), p)).zero?

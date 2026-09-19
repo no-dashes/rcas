@@ -18,6 +18,7 @@ module RCAS
   # the substitutions of [PTVF07, §4.5].
   module Numerics
     TOLERANCE = 1e-12
+    FLOAT_DIGITS = 17 # one more than a Float carries, so the last one is right
     MAX_STEPS = 200
     MAX_DEPTH = 50
 
@@ -171,11 +172,27 @@ module RCAS
       hi = bound(to)
       return -nintegrate(f, var, to, from) if lo > hi
       return 0.0 if lo == hi
+      exact = tanh_sinh(f, var, from, to)
+      return exact if exact
       if lo.infinite? || hi.infinite?
         transformed(f, var, lo, hi)
       else
         simpson(caller_for(f, var), lo, hi)
       end
+    end
+
+    # The same tanh-sinh quadrature the digits: form uses, at Float
+    # precision. Adaptive Simpson halves the interval down to MAX_DEPTH, so
+    # a singular integrand reached 2**50 subintervals and never came back;
+    # this settles or says it did not. nil hands the integrand back to
+    # Simpson when arbitrary precision has no route for it at all.
+    def tanh_sinh(f, var, from, to)
+      value = Precision.quadrature(Expression.lift(f), var, Expression.lift(from), Expression.lift(to), FLOAT_DIGITS)
+      value.to_f
+    rescue Precision::NoConvergence => e
+      raise ArgumentError, "nintegrate: #{e.message.sub('evalf: ', '')}"
+    rescue Precision::Unsupported, ZeroDivisionError
+      nil
     end
 
     def bound(value)
