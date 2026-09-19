@@ -1000,10 +1000,12 @@ rcas> integrate(exp(-x**4), x: 0..1).evalf
 => 0.8448385947571024
 ```
 
-`nintegrate` is the tanh-sinh quadrature of the `digits:` form run at
-Float precision, so an endpoint singularity is no harder than anything
-else; an integrand it cannot settle is reported rather than subdivided
-for ever.
+`nintegrate` tries adaptive Simpson first, with a budget it cannot
+exceed, and falls back to the tanh-sinh quadrature of the `digits:` form
+when that does not settle - so a smooth integrand costs a millisecond and
+an endpoint singularity is still no harder than anything else. An
+integrand neither of them settles is reported rather than subdivided for
+ever.
 
 A function changes sign across a pole as it does across a root, so a
 bracket that contains one is refused rather than answered: `1/x` has no

@@ -19,6 +19,8 @@ module RCAS
   module Numerics
     TOLERANCE = 1e-12
     FLOAT_DIGITS = 17 # one more than a Float carries, so the last one is right
+    SIMPSON_TOLERANCE = 1e-12
+    SIMPSON_DEPTH = 20
     MAX_STEPS = 200
     MAX_DEPTH = 50
 
@@ -33,6 +35,15 @@ module RCAS
       lambda do |value|
         result = tree.call(name => value)
         result = result.value if result.is_a?(Num)
+        unless result.is_a?(Numeric)
+          # Folding puts an exact constant back after floatify: exp(-1.0) is
+          # 1/e again, which is not a number until evalf looks at it. Without
+          # this the integrand has a hole at every such point - x = 1 for
+          # exp(-x**2) - and the quadrature chases a discontinuity that is
+          # not there.
+          result = Expression.lift(result).evalf
+          result = result.value if result.is_a?(Num)
+        end
         result.is_a?(Numeric) && !result.is_a?(Complex) && result.finite? ? result.to_f : nil
       rescue StandardError
         nil
@@ -172,6 +183,16 @@ module RCAS
       hi = bound(to)
       return -nintegrate(f, var, to, from) if lo > hi
       return 0.0 if lo == hi
+      # Adaptive Simpson first: on a smooth integrand it settles in a
+      # millisecond and to the last Float digit, where the doubly
+      # exponential quadrature pays 100 ms for its guard digits. Its budget
+      # is bounded now, so a singular integrand fails fast and goes there
+      # instead of subdividing for ever (MAX_DEPTH = 50 was 2**50
+      # subintervals and never came back).
+      unless lo.infinite? || hi.infinite?
+        quick = bounded_simpson(caller_for(f, var), lo, hi)
+        return quick if quick
+      end
       exact = tanh_sinh(f, var, from, to)
       return exact if exact
       if lo.infinite? || hi.infinite?
@@ -181,11 +202,49 @@ module RCAS
       end
     end
 
+    # nil when the budget runs out before the estimate settles: the caller
+    # then asks the slower quadrature, which is the one that copes with a
+    # singularity. The tolerance follows the size of the integral, so a
+    # large smooth one is not driven to the end of the budget for nothing.
+    def bounded_simpson(g, lo, hi)
+      g = patch_ends(g, lo, hi)
+      whole = simpson_rule(g, lo, hi)
+      return nil unless whole.finite?
+      refine(g, lo, hi, whole, SIMPSON_TOLERANCE * [1.0, whole.abs].max, SIMPSON_DEPTH)
+    end
+
+    # An end the caller cannot evaluate takes the value just inside it -
+    # sin(x)/x at 0 is a hole in the caller, not in the integral, and
+    # reading it as 0 (which is what simpson_rule does with a nil) invents
+    # a discontinuity. The interval itself is not moved, so no area is
+    # lost. An end that is genuinely singular gives a huge value here, does
+    # not settle, and goes to the quadrature below as before.
+    def patch_ends(g, lo, hi)
+      step = (hi - lo) * 1e-8
+      ends = {}
+      ends[lo] = g.call(lo + step) if g.call(lo).nil?
+      ends[hi] = g.call(hi - step) if g.call(hi).nil?
+      return g if ends.empty? || ends.value?(nil)
+      ->(t) { ends.key?(t) ? ends[t] : g.call(t) }
+    end
+
+    def refine(g, lo, hi, whole, tolerance, depth)
+      middle = (lo + hi) / 2.0
+      left = simpson_rule(g, lo, middle)
+      right = simpson_rule(g, middle, hi)
+      return nil unless (left + right).finite?
+      return left + right + (left + right - whole) / 15.0 if (left + right - whole).abs <= 15 * tolerance
+      return nil if depth.zero?
+      a = refine(g, lo, middle, left, tolerance / 2, depth - 1) or return nil
+      b = refine(g, middle, hi, right, tolerance / 2, depth - 1) or return nil
+      a + b
+    end
+
     # The same tanh-sinh quadrature the digits: form uses, at Float
-    # precision. Adaptive Simpson halves the interval down to MAX_DEPTH, so
-    # a singular integrand reached 2**50 subintervals and never came back;
-    # this settles or says it did not. nil hands the integrand back to
-    # Simpson when arbitrary precision has no route for it at all.
+    # precision: the one that copes with an endpoint singularity, and the
+    # one that says when an integral does not settle at all. nil hands the
+    # integrand back to Simpson when arbitrary precision has no route for
+    # it (an unknown function, a value that is not real).
     def tanh_sinh(f, var, from, to)
       value = Precision.quadrature(Expression.lift(f), var, Expression.lift(from), Expression.lift(to), FLOAT_DIGITS)
       value.to_f
