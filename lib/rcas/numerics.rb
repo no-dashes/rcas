@@ -49,7 +49,22 @@ module RCAS
       g = caller_for(expr, var)
       derivative = caller_for(Expression.lift(expr).diff(var), var)
       root = to.nil? ? newton(g, derivative, from, var, expr) : bisect(g, derivative, from, to, var, expr)
+      if pole?(g, root)
+        raise ArgumentError, "nsolve: #{expr} has a pole at #{root}, not a root; give a range on one side of it"
+      end
       digits ? Precision.refine(expr, var, root, digits) : root
+    end
+
+    # A function changes sign across a pole as it does across a root, and
+    # bisection walks straight into it: nsolve(1/x, x: -1..1) used to come
+    # back with 0.0. Closer in, a root gets smaller and a pole gets bigger.
+    def pole?(g, x)
+      return true if g.call(x).nil?
+      near, closer = [1e-6, 1e-10].map do |d|
+        [g.call(x - d), g.call(x + d)].compact.map(&:abs).max
+      end
+      return true if near.nil? || closer.nil? # undefined arbitrarily close by
+      closer > near && closer > 1.0
     end
 
     def arguments(var, guess, range, expr)
@@ -79,16 +94,34 @@ module RCAS
 
       x = (lo + hi) / 2.0
       MAX_STEPS.times do
-        value = g.call(x)
-        return x if value.nil?
+        value = defined_near(g, x, lo, hi)
+        return x if value.nil? # undefined right across the bracket
         slope = derivative.call(x)
         step = slope && !slope.zero? ? x - value / slope : nil
         x = step && step > lo && step < hi ? step : (lo + hi) / 2.0
-        value = g.call(x) || 0.0
+        value = defined_near(g, x, lo, hi)
+        return x if value.nil?
         value * flo > 0 ? (lo = x; flo = value) : (hi = x; fhi = value)
         return x if (hi - lo).abs < TOLERANCE || value.abs < TOLERANCE
       end
       x
+    end
+
+    # The value at x, or at the nearest point inside the bracket where the
+    # function is defined. Reading an undefined value as zero (which is what
+    # `g.call(x) || 0.0` did) hands the sign test a root that is not there.
+    def defined_near(g, x, lo, hi)
+      value = g.call(x)
+      return value unless value.nil?
+      span = (hi - lo).abs
+      [1e-3, 1e-2, 1e-1].each do |fraction|
+        [x + span * fraction, x - span * fraction].each do |y|
+          next unless y > lo && y < hi
+          value = g.call(y)
+          return value unless value.nil?
+        end
+      end
+      nil
     end
 
     # Newton's method from a starting point, with a bracketed retry.

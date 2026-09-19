@@ -996,6 +996,17 @@ rcas> integrate(exp(-x**4), x: 0..1).evalf
 => 0.8448385947571027
 ```
 
+A function changes sign across a pole as it does across a root, so a
+bracket that contains one is refused rather than answered: `1/x` has no
+root between -1 and 1.
+
+```
+rcas> nsolve(1/x - 2, x: 0.1..2)
+=> 0.4999999999999672
+rcas> nsolve(tan(x), x: 3..4)
+=> 3.141592653589797
+```
+
 #### As many digits as you ask for
 
 `evalf(f, 50)` (or `evalf(f, digits: 50)`) computes to that many

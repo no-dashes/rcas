@@ -47,4 +47,18 @@ class NumericsTest < Minitest::Test
     assert_instance_of Float, RCAS.nintegrate(X, x: 0..1)
     assert_raises(ArgumentError) { RCAS.nsolve(X * RCAS::Var.new(:y), x: 0..1) }
   end
+
+  # A function changes sign across a pole as it does across a root, and
+  # bisection walked straight into it: nsolve(1/x, x: -1..1) was 0.0.
+  def test_a_pole_is_not_a_root
+    x = RCAS::Var.new(:x)
+    [[1 / x, -1..1], [RCAS.tan(x), 1..2], [1 / (x - 1r / 2), 0..1]].each do |f, range|
+      e = assert_raises(ArgumentError) { RCAS.nsolve(f, x: range) }
+      assert_match(/has a pole at/, e.message)
+    end
+    # and the roots on either side are still found
+    assert_in_delta 0.5, RCAS.nsolve(1 / x - 2, x: 0.1..2), 1e-9
+    assert_in_delta Math::PI, RCAS.nsolve(RCAS.tan(x), x: 3..4), 1e-9
+    assert_in_delta 0.7390851332151607, RCAS.nsolve(RCAS.cos(x) - x, x: 0..1), 1e-12
+  end
 end

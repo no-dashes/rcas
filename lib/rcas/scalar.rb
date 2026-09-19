@@ -34,7 +34,28 @@ module RCAS
       rescue StandardError
         return false
       end
-      v.is_a?(Numeric) && v.abs < 1e-12
+      return false unless v.is_a?(Numeric) && v.abs < 1e-12
+      vanishes?(a)
+    end
+
+    # 1e-12 is not zero. exp(-100) is 3.7e-44, and a determinant built from
+    # it used to come out as 0. A true zero is cancellation and shrinks as
+    # the precision rises; a small number sits where it is.
+    def vanishes?(expr)
+      coarse = decimal(expr, 20)
+      return true if coarse.nil? || coarse.zero?
+      fine = decimal(expr, 40)
+      return true if fine.nil? || fine.zero?
+      fine < coarse * BigDecimal("1e-15")
+    end
+
+    # nil when arbitrary precision has nothing to say (a complex value, an
+    # unsupported function): the float verdict then stands.
+    def decimal(expr, digits)
+      value = Precision.evalf(expr, digits)
+      value.respond_to?(:to_d) ? value.to_d.abs : nil
+    rescue StandardError, NotImplementedError
+      nil # no more precision to be had: the float verdict stands
     end
     def one?(a) = a.is_a?(Num) && a.value == 1
     def negative?(a) = a.is_a?(Num) && Simplify.negative?(a.value)

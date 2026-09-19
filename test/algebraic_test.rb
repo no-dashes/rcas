@@ -31,6 +31,20 @@ class AlgebraicTest < Minitest::Test
     assert RCAS::Scalar.zero?((I + 1) * (I - 1) + 2)
   end
 
+  # 1e-12 is a tolerance, not zero: exp(-100) is 3.7e-44, and a matrix with
+  # it on the diagonal used to have determinant 0 and rank 0. A true zero
+  # shrinks as the precision rises, a small number stays where it is.
+  def test_a_small_number_is_not_zero
+    small = RCAS.exp(-100)
+    refute RCAS::Scalar.zero?(small)
+    refute RCAS::Scalar.zero?(RCAS.exp(-100) - RCAS.exp(-101))
+    assert RCAS::Scalar.zero?(RCAS.exp(-100) - RCAS.exp(-100) * 1)
+    m = (RR**[2, 2])[[small, 0], [0, 1]]
+    refute RCAS::Scalar.zero?(m.det)
+    assert_equal 2, m.rank
+    assert_equal 1, (RR**[2, 2])[[small, 0], [0, 0]].rank
+  end
+
   def test_rationalize_and_minpoly
     assert_equal "-1 + 2**(1/2)", (1 / (1 + s2)).rationalize.to_s
     assert_equal "-1/2 + 5**(1/2)/2", (1 / (Rational(1, 2) + RCAS.sqrt(5) / 2)).rationalize.to_s

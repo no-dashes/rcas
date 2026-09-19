@@ -241,7 +241,11 @@ MANUAL.md                   the user manual (usage); README.md (setup only); ass
    (2*pw is piecewise(c => 2*v)) before integration and limits.
 8. **`Scalar.zero?`** decides zero for matrix entries: exact for Num, exact
    via `Algebraic.exact` for constants in one radical/RootOf or two square
-   roots, otherwise numeric (1e-12). Symbolic pivots that are not
+   roots, otherwise numeric (1e-12) *confirmed at two precisions*
+   (`vanishes?`, 19 Sept 2026): a true zero is cancellation and shrinks as
+   the digits rise, `exp(-100)` sits at 3.7e-44 and is not zero. A complex
+   value has no arbitrary-precision route here, so there the float
+   tolerance still decides. Symbolic pivots that are not
    identically zero are assumed non-zero (generic case) and this is
    documented.
 9. **Ruby folds before rcas sees anything**: `1/2` is 0, `2**(1/3r)` is a
