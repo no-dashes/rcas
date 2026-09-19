@@ -51,6 +51,29 @@ class SimplifyTest < Minitest::Test
     assert_equal "2", RCAS.cbrt(8).to_s
   end
 
+  # The ordering key of a term is read off its factor map instead of
+  # building rebuild_product(1, factors) to ask it; the two must agree, or
+  # the canonical order of sums changes.
+  def test_the_term_key_agrees_with_the_long_way_round
+    rng = Random.new(11)
+    x = RCAS::Var.new(:x)
+    atoms = [x, RCAS::Var.new(:y), RCAS.sin(x), RCAS.exp(x), x + 1, x * :y - 2, RCAS::PI,
+             RCAS.sqrt(2), RCAS::Num.new(2), RCAS.log(:y), 1 / x, RCAS.sqrt(x), x**:y, RCAS::I]
+    checked = 0
+    2000.times do
+      term = (1..rng.rand(1..4)).map { atoms.sample(random: rng)**[1, 2, -1, 3, 1r / 2, -1r / 2].sample(random: rng) }
+                                .reduce(RCAS::Num.new([1, 2, -3, 1r / 2].sample(random: rng))) { |a, b| a * b }
+      _, factors = RCAS::Simplify.factorize(term, 1, 1, {}, simplify: true)
+      long = RCAS::Simplify.sort_key(RCAS::Simplify.rebuild_product(1, factors))
+      short = RCAS::Simplify.term_key(factors)
+      checked += 1
+      assert_equal long, [short[0], short[1], short[2].text], "key of #{factors.inspect}"
+    rescue ZeroDivisionError
+      next
+    end
+    assert_operator checked, :>, 1500
+  end
+
   def test_identities
     assert_equal "x", s(:x + 0)
     assert_equal "x", s(:x * 1)

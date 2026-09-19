@@ -6,6 +6,17 @@ require_relative "test_helper"
 class PerformanceTest < Minitest::Test
   include RCAS::Sets
 
+  # A tripwire, not a benchmark: the bounds are generous enough for a slow
+  # machine and would still catch a hundredfold regression, which the shape
+  # assertions below would not.
+  def timed(limit, what)
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    result = yield
+    elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+    assert_operator elapsed, :<, limit, "#{what} took #{elapsed.round(2)} s"
+    result
+  end
+
   def random_product(seed, max_degree, factors)
     rng = Random.new(seed)
     (1..factors).reduce(1) do |acc, _|
@@ -15,7 +26,7 @@ class PerformanceTest < Minitest::Test
 
   def test_expand_of_a_product_of_many_sums
     u = random_product(1, 10, 10)
-    e = u.expand
+    e = timed(2, "expand of a product of ten sums") { u.expand }
     poly = ZZ[:x].call(u)
     assert_operator poly.degree, :>, 30
     assert_equal poly.to_expr, e
@@ -25,7 +36,7 @@ class PerformanceTest < Minitest::Test
   def test_factor_recovers_the_product
     u = random_product(1, 6, 6)
     poly = ZZ[:x].call(u)
-    fact = poly.factor
+    fact = timed(5, "factoring a degree-30 product") { poly.factor }
     assert_equal poly, fact.expand
     assert_operator fact.size, :>=, 3
   end
@@ -39,7 +50,7 @@ class PerformanceTest < Minitest::Test
 
   def test_long_sums_stay_shallow
     big = (1..20_000).map { |i| i * :x**i }.sum
-    s = big.simplify
+    s = timed(3, "simplify of a 20 000-term sum") { big.simplify }
     assert_equal 20_000, s.each_node.count { |n| n.is_a?(RCAS::Var) }
     assert s.to_s.start_with?("x + 2*x**2 + 3*x**3")
     assert_equal s, big.simplify

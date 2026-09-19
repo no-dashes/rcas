@@ -16,14 +16,14 @@ module RCAS
     NAMES.each do |name|
       define_method(name) do |arg|
         fn = Fn.new(name, [arg])
-        fn.args.first.variables.empty? ? Functions.fold(fn) : fn
+        fn.args.first.constant? ? Functions.fold(fn) : fn
       end
     end
 
     # sqrt(8) is 2*sqrt(2); sqrt(-4) is 2*i; sqrt(x) stays sqrt(x)
     def sqrt(arg)
       root = Expression.lift(arg)**Rational(1, 2)
-      root.variables.empty? ? root.simplify : root
+      root.constant? ? root.simplify : root
     end
 
     # pi and oo (also π and ∞): the constants PI and OO under bare names
@@ -38,7 +38,7 @@ module RCAS
     # root(2, 3) is the exact cube root; Ruby would turn 2**(1/3r) into a float.
     def root(x, n)
       r = Expression.lift(x)**Rational(1, n)
-      r.variables.empty? ? r.simplify : r
+      r.constant? ? r.simplify : r
     end
 
     # cbrt(8) is 2; cbrt(2) stays 2**(1/3)

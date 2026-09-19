@@ -171,7 +171,11 @@ MANUAL.md                   the user manual (usage); README.md (setup only); ass
    `1 + 2`; operator expressions on constants (`I**2`) still wait for
    `simplify`. `Functions#sin` etc. implement this; `Fn.new` does not fold.
 2. **`==` is structural**, `eql?`/`hash` too (hash keys, `subs` patterns
-   rely on it). Mathematical equality = compare canonical forms, or
+   rely on it). The hash is computed in the constructor before the node is
+   frozen and combined by hand, no array: a node is built far more often
+   than it is hashed, and recomputing walked the whole subtree every time.
+   A new node class that sets no `@hash` falls back to that walk.
+   Mathematical equality = compare canonical forms, or
    `Scalar.zero?(a - b)`. Inside `hold { }`, `==` builds an `Equation`,
    `!=` an `Inequality` and `in?` a `Membership` - three
    statements that are not Expressions and each need their own row in
@@ -184,7 +188,15 @@ MANUAL.md                   the user manual (usage); README.md (setup only); ass
    chains so recursion depth stays logarithmic. `termize`/`factorize` are
    iterative (explicit stacks) and take `simplify: true` to canonicalise
    leaves in one pass. Never reintroduce per-level recursion here: a
-   20000-term sum must simplify in well under a second (performance_test).
+   20000-term sum must simplify in well under a second (performance_test
+   times it now, generously, so a hundredfold regression fails the suite).
+   `rebuild_sum` reads a term's ordering key off its factor map
+   (`term_key`, 19 Sept 2026) rather than building `rebuild_product(1,
+   factors)` to ask it, and the text that breaks a tie is a `LazyText`
+   built only if the comparison gets that far: that was a quarter of the
+   20000-term simplify. `keyable?` says when reading the map is the same as
+   re-factorizing the node - a numeric base, a power, a quotient and an
+   `exp` Fn are not, and take the long way round.
    Radicals of positive integers keep a fractional exponent in (0, 1) and
    move the integer part into the coefficient (`rebuild_product`):
    `1/sqrt(2)` is `2**(1/2)/2`, `2**(3/2)` is `2*2**(1/2)`. This is what

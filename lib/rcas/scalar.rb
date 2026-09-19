@@ -26,7 +26,7 @@ module RCAS
     # a numeric evaluation decides (algebraic numbers have no canonical form here).
     def zero?(a)
       return a.value.zero? if a.is_a?(Num)
-      return false unless a.is_a?(Expression) && a.variables.empty? && a.each_node.none? { |n| n.is_a?(Integral) || n.is_a?(Derivative) }
+      return false unless a.is_a?(Expression) && a.constant? && a.each_node.none? { |n| n.is_a?(Integral) || n.is_a?(Derivative) }
       exact = Algebraic.exact(a)
       return exact.zero? if exact
       v = begin

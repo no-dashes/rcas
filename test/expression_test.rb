@@ -69,4 +69,30 @@ class ExpressionTest < Minitest::Test
     assert_equal "0.5*x**3", (:x**3 / 2).evalf.to_s
     assert_in_delta 1.7320508, (:x**2 + 1).evalf(x: Math.sqrt(2)) - 1.2679492, 1e-6
   end
+  # The hash is computed in the constructor, before the node is frozen; a
+  # node class that does not set it falls back to the walk. Either way it
+  # has to agree with eql?.
+  def test_hashes_are_computed_once_and_agree_with_eql
+    x = RCAS::Var.new(:x)
+    a = (x + 1) * RCAS.sin(x) - 2
+    b = (RCAS::Var.new(:x) + RCAS::Num.new(1)) * RCAS.sin(RCAS::Var.new(:x)) - RCAS::Num.new(2)
+    assert_equal a.hash, b.hash
+    assert a.eql?(b)
+    assert_equal 1, { a => 1 }[b]
+    refute_equal RCAS::Num.new(1).hash, RCAS::Num.new(1.0).hash, "eql? tells them apart, so the hash must too"
+    refute_equal (x + 1).hash, (x - 1).hash
+    formal = RCAS::Integral.new(x, x) # a node class that sets no @hash
+    assert_equal formal.hash, RCAS::Integral.new(RCAS::Var.new(:x), RCAS::Var.new(:x)).hash
+  end
+
+  # constant? stops at the first Var instead of collecting them all.
+  def test_constant
+    x = RCAS::Var.new(:x)
+    assert RCAS::Num.new(3).constant?
+    assert (RCAS.sin(1) + RCAS::PI).constant?
+    refute (RCAS.sin(x) + 1).constant?
+    refute x.constant?
+    assert_equal (RCAS.sin(x) + 1).variables.empty?, (RCAS.sin(x) + 1).constant?
+  end
+
 end

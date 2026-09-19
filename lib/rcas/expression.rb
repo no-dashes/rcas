@@ -76,7 +76,13 @@ module RCAS
 
     def eql?(other) = other.is_a?(Expression) && other.class == self.class && other.children == children
 
-    def hash = [self.class, *children].hash
+    # Nodes are immutable, so the hash is computed once, in the constructor,
+    # before the node is frozen: recomputing it walked the whole subtree on
+    # every lookup, and the term tables are hashes of expressions. The
+    # combination is by hand because building the array cost more than the
+    # walk saved - a node is constructed far more often than it is hashed.
+    # A node class that does not set it (the formal ones) falls back.
+    def hash = @hash || [self.class, *children].hash
 
     # Total order used for canonical sorting; see Simplify.sort_key.
     def <=>(other)
@@ -104,7 +110,12 @@ module RCAS
       self
     end
 
-    def constant? = variables.empty?
+    # No Var anywhere. Asking `variables.empty?` built a Set and sorted it
+    # to throw both away; this stops at the first one.
+    def constant?
+      each_node { |n| return false if n.is_a?(Var) }
+      true
+    end
 
     # Nested-array view of the structure, handy for debugging in irb.
     def to_sexp = [self.class.name.split("::").last.downcase.to_sym, *children.map(&:to_sexp)]
@@ -223,7 +234,7 @@ module RCAS
       digits ||= bindings.delete(:digits)
       return Precision.evalf(self, digits, bindings) if digits
       value = Expression.floatify_tree(self).call(**bindings.transform_values { |v| Expression.floatify(v) })
-      folded = value.is_a?(Expression) && value.variables.empty? ? refloat(value) : nil
+      folded = value.is_a?(Expression) && value.constant? ? refloat(value) : nil
       value = folded if folded
       value = Numerics.resolve(value) if value.is_a?(Expression) && value.each_node.any? { |n| n.is_a?(Integral) }
       value.is_a?(Num) ? value.value : value
@@ -323,6 +334,7 @@ module RCAS
 
     def initialize(name)
       @name = name.to_sym
+      @hash = @name.hash ^ Var.hash
       freeze
     end
 
@@ -335,7 +347,6 @@ module RCAS
     end
 
     def eql?(other) = other.is_a?(Var) && other.name == name
-    def hash = [Var, name].hash
     def to_sexp = name
   end
 
@@ -345,6 +356,7 @@ module RCAS
 
     def initialize(value)
       @value = Simplify.normalize_number(value)
+      @hash = @value.hash ^ Num.hash
       freeze
     end
 
@@ -357,7 +369,6 @@ module RCAS
     end
 
     def eql?(other) = other.is_a?(Num) && other.value.eql?(value)
-    def hash = [Num, value].hash
     def to_sexp = value
     def zero? = value.zero?
     def one? = value == 1
@@ -374,6 +385,7 @@ module RCAS
 
     def initialize(arg)
       @arg = arg
+      @hash = arg.hash ^ Neg.hash
       freeze
     end
 
@@ -388,6 +400,7 @@ module RCAS
     def initialize(left, right)
       @left = left
       @right = right
+      @hash = (left.hash * 31 + right.hash) ^ self.class.hash
       freeze
     end
 
@@ -411,12 +424,12 @@ module RCAS
     def initialize(name, args)
       @name = name.to_sym
       @args = args.map { |a| Expression.lift(a) }.freeze
+      @hash = @args.reduce(@name.hash ^ Fn.hash) { |h, a| h * 31 + a.hash }
       freeze
     end
 
     def children = args
     def rebuild(*args) = Fn.new(name, args)
-    def hash = [Fn, name, *args].hash
     def ==(other) = other.is_a?(Fn) && other.name == name && other.args == args
     alias eql? ==
     def to_sexp = [name, *args.map(&:to_sexp)]

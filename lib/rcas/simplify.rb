@@ -2,6 +2,17 @@
 
 
 module RCAS
+  # The text of a term, built only if the ordering of a sum comes down to
+  # it - which is after the degree and the exponents have tied, and rarely.
+  # Printing every term of a long sum to sort it cost more than the sorting.
+  class LazyText
+    include Comparable
+
+    def initialize(&block) = @block = block
+    def text = (@text ||= @block.call)
+    def <=>(other) = text <=> other.text
+  end
+
   # Algebraic simplification.
   #
   # Sums are flattened into (constant, {factors => coefficient}) and products
@@ -97,7 +108,8 @@ module RCAS
       infinite = terms.reject { |_, c| c.zero? }.select { |factors, _| factors.key?(OO) }
       return rebuild_product(infinite.values.first, infinite.keys.first) if infinite.size == 1
       parts = terms.reject { |_, c| c.zero? }.map do |factors, coeff|
-        [rebuild_product(sign_negative?(coeff) ? -coeff : coeff, factors), sign_negative?(coeff), sort_key(rebuild_product(1, factors))]
+        negative = sign_negative?(coeff)
+        [rebuild_product(negative ? -coeff : coeff, factors), negative, term_key(factors)]
       end
       parts.sort_by! { |_, _, key| key }
       unless constant.zero?
@@ -468,6 +480,46 @@ module RCAS
     # by text as a tie-break.
     def sort_key(expr)
       [degree(expr), exponent_vector(expr), expr.to_s]
+    end
+
+    # The same key for a term of the table, read off its factor map instead
+    # of building rebuild_product(1, factors) to ask it: that second build
+    # was a quarter of the time of a 20 000-term simplify. A numeric base
+    # keeps the long way round, because rebuilding moves the integer part of
+    # its exponent into the coefficient and the map here has not.
+    def term_key(factors)
+      unless factors.keys.all? { |base| keyable?(base) }
+        node = rebuild_product(1, factors)
+        return [degree(node), exponent_vector(node), LazyText.new { node.to_s }]
+      end
+      [factor_degree(factors), factor_exponents(factors), LazyText.new { rebuild_product(1, factors).to_s }]
+    end
+
+    # A base the rebuild hands back unchanged, so that reading the map is
+    # the same as re-factorizing the node. A number moves its exponent's
+    # integer part into the coefficient, and a power or a quotient is
+    # flattened into the map, so those take the long way round.
+    def keyable?(base)
+      case base
+      when Fn then base == exp_base || base.name != :exp # exp(u) is stored as EXP**u
+      when Var, Const, Add, Sub then true
+      else false
+      end
+    end
+
+    def factor_degree(factors)
+      factors.sum do |base, exp|
+        next 0 if exp.is_a?(Numeric) && exp.zero?
+        next degree(base) * exp if exp.is_a?(Integer)
+        exp.is_a?(Numeric) && negative?(exp) ? -1 : 1
+      end
+    end
+
+    def factor_exponents(factors)
+      factors.filter_map do |base, exp|
+        next nil if exp.is_a?(Numeric) && exp.zero?
+        [base.to_s, exp.is_a?(Numeric) && exp.real? ? -exp : 0]
+      end.sort
     end
 
     def exponent_vector(expr)
