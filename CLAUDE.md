@@ -562,8 +562,10 @@ What is load-bearing:
 ## Definite integrals and poles (19 Sept 2026, from a review)
 
 `Integrate.definite` is not `F(b) - F(a)`: `singular_points` finds the
-poles strictly inside the bounds (`Analysis.denominators`, plus the zeros
-of `cos(u)` under a `tan`), `between` evaluates each piece with a
+poles strictly inside the bounds (`Analysis.denominators` and each of
+*their factors*, since `Solve` can name the zeros of `x` and of `log(x)`
+when it can make nothing of `x*log(x)`, plus the zeros of `cos(u)` under a
+`tan`), `between` evaluates each piece with a
 one-sided limit at every interior end, and the sum of `+oo` and `-oo` is
 `undefined` because Simplify says so. The direction of each piece follows
 the interval, so reversed bounds are evaluated from the right side. When a
@@ -571,7 +573,13 @@ piece comes out non-real - `log(cos(x))` past `pi/2` - the pieces are
 taken again with `log|u|` (`real_logs`), which is an antiderivative on
 each piece and the one a real integral wants; what is still not real stays
 an `Integral` node. A singularity rcas cannot classify (`:unknown`) also
-stays formal rather than being subtracted through.
+stays formal rather than being subtracted through, and so does a
+denominator whose zeros `Solve` cannot name when it *changes sign* between
+the bounds (`changes_sign_between?`): "no pole" would be a claim, not an
+answer. `singular_points` says that with `nil`, which the caller has to
+test before splatting it into the bounds - `[from, *nil, to]` is
+`[from, to]` and swallows it (the second pass of the review caught exactly
+that).
 
 ## The integration rule chain
 

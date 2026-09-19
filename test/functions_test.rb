@@ -110,4 +110,21 @@ class ComplexPartsAndRoundingTest < Minitest::Test
     assert_match(/did you mean factorial\?/, capture_io { RCAS.unknown_function(:facorial, [RCAS::Num.new(2)]) }.last)
   end
 
+  # Parity applies to a number as well: cos(-1) is cos(1), which nothing
+  # else folds, so a definite integral over a symmetric range never closed.
+  def test_parity_folds_a_negative_number
+    assert_equal "cos(1)", RCAS.cos(-1).to_s
+    assert_equal "-sin(1)", RCAS.sin(-1).to_s
+    assert_equal "-tan(1)", RCAS.tan(-1).to_s
+    assert_equal "-Si(1)", RCAS.Si(-1).to_s
+    assert_equal "cosh(2)", RCAS.cosh(-2).to_s
+    assert_equal "3", RCAS.abs(-3).to_s
+    assert_equal "-1", RCAS.sign(-3).to_s
+    # and the canonical spelling of a negative constant is unchanged
+    assert_equal "-pi/6", RCAS.asin(-1r / 2).to_s
+    assert_equal "-pi/4", RCAS.atan(-1).to_s
+    assert_equal "2*pi/3", RCAS.acos(-1r / 2).to_s
+    assert_in_delta Math.cos(1), RCAS.cos(-1.0).value, 1e-15
+  end
+
 end

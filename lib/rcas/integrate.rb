@@ -74,8 +74,9 @@ module RCAS
       return Piecewises.definite(f, x, from, to) if f.is_a?(Piecewise)
       antiderivative = integrate(f, x)
       return Integral.new(f, x, from, to) unless complete?(antiderivative)
-      bounds = [from, *singular_points(f, x, from, to), to]
-      return Integral.new(f, x, from, to) if bounds.nil?
+      points = singular_points(f, x, from, to)
+      return Integral.new(f, x, from, to) if points.nil? # a pole we cannot place
+      bounds = [from, *points, to]
       value = between(antiderivative, x, bounds)
       # A logarithm of a negative number means the antiderivative has left
       # the reals: log|u| is one too, on every interval that avoids u = 0,
@@ -115,7 +116,7 @@ module RCAS
     # collects for `discuss`, and tan(u) from the zeros of cos(u).
     # => [] (no interior singularity), the points, or nil (cannot tell).
     def singular_points(f, x, from, to)
-      candidates = Analysis.denominators(f, x)
+      candidates = Analysis.denominators(f, x).flat_map { |d| [d, *vanishing_factors(d, x)] }
       f.each_node do |node|
         next unless node.is_a?(Fn) && node.name == :tan && node.args.first.variables.include?(x.name)
         candidates << Fn.new(:cos, [node.args.first])
@@ -124,18 +125,57 @@ module RCAS
       a, b = real_number(from), real_number(to)
       return [] if a.nil? || b.nil?
       lo, hi = [a, b].minmax
-      points = candidates.uniq.flat_map do |d|
-        begin
+
+      points = []
+      unsolved = []
+      candidates.uniq.each do |d|
+        roots = begin
           Solve.solve(d, x)
         rescue StandardError, NotImplementedError
-          []
+          nil
         end
+        roots.nil? ? unsolved << d : points.concat(roots)
       end
+      known = points.filter_map { |p| real_number(p) }
+      # A denominator whose zeros rcas cannot name may still have one here,
+      # and "no pole" would be a claim rather than an answer.
+      return nil if unsolved.any? { |d| changes_sign_between?(d, x, lo, hi, known) }
+
       inside = points.uniq.select { |p| (v = real_number(p)) && v > lo && v < hi }
       kinds = inside.to_h { |p| [p, singularity(f, x, p)] }
       return nil if kinds.value?(:unknown)
       inside = inside.select { |p| kinds[p] == :pole }.sort_by { |p| real_number(p) }
       a > b ? inside.reverse : inside
+    end
+
+    # The factors of a denominator: a product vanishes where any of them
+    # does, and Solve can often name the zeros of x and of log(x) when it
+    # can make nothing of x*log(x).
+    def vanishing_factors(d, x)
+      _, factors = Simplify.factorize(d)
+      return [] if factors.size < 2
+      factors.filter_map do |base, exponent|
+        next nil unless base.variables.include?(x.name)
+        next nil if exponent.is_a?(Numeric) && exponent.negative?
+        base
+      end
+    end
+
+    SIGN_SAMPLES = 32
+
+    # A sign change of d strictly between the bounds that none of the roots
+    # already found accounts for. One-sided, like every test of this kind
+    # here: it reports a zero it can see, never the absence of one.
+    def changes_sign_between?(d, x, lo, hi, known)
+      points = (0..SIGN_SAMPLES).map { |i| lo + (hi - lo) * i / SIGN_SAMPLES.to_f }
+      values = points.map { |t| real_number(d.subs(x => Num.new(t))) }
+      points.each_cons(2).with_index.any? do |(p, q), i|
+        u = values[i]
+        v = values[i + 1]
+        next false if u.nil? || v.nil?
+        next false unless u.zero? || v.zero? || (u.negative? != v.negative?)
+        known.none? { |r| r >= p && r <= q }
+      end
     end
 
     # :pole (f runs away on at least one side), :finite (a removable gap the
@@ -164,7 +204,9 @@ module RCAS
         if node.is_a?(Num)
           node.value.is_a?(Complex) && !node.value.imaginary.zero?
         elsif node.is_a?(Fn) && node.name == :log
-          (arg = node.args.first).is_a?(Num) && arg.value.is_a?(Numeric) && arg.value.real? && !arg.value.positive?
+          # log(log(1/2)) is not real either, and its argument is not a Num
+          arg = node.args.first
+          arg.variables.empty? && (value = real_number(arg)) && !value.positive?
         end
       end
     end

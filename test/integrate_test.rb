@@ -202,15 +202,41 @@ class IntegrateTest < Minitest::Test
     assert_equal "1", RCAS.integrate(1 / X**2, X, 1, RCAS::OO).to_s
     assert_equal "2", RCAS.integrate(1 / RCAS.sqrt(X), X, 0, 1).to_s
     assert_equal "log(2) - log(3)", RCAS.integrate(1 / (X - 3), X, 0, 1).to_s
-    assert_equal "-Si(-1) + Si(1)", RCAS.integrate(RCAS.sin(X) / X, X, -1, 1).to_s
+    assert_equal "2*Si(1)", RCAS.integrate(RCAS.sin(X) / X, X, -1, 1).to_s, "Si is odd"
   end
 
   # log|u| is the real antiderivative of u'/u; log(u) sends an integral over
   # negative x into the complex numbers and it used to come back that way.
+  # The parity of cos is what makes the symmetric tan integral come out.
   def test_a_real_integral_stays_real
+    assert_equal "0", RCAS.integrate(RCAS.tan(X), X, -1, 1).to_s
     assert_equal "-log(2)", RCAS.integrate(1 / X, X, -2, -1).to_s
     assert_equal "log(1/2)", RCAS.integrate(1 / X, X, -1, -1r / 2).to_s
     assert_equal "0", RCAS.integrate(RCAS.tan(X), X, RCAS::PI * 3 / 4, RCAS::PI * 5 / 4).to_s
+  end
+
+  # "I cannot place the pole" has to reach the caller: the nil said so, but
+  # the caller splatted it into the bounds list, where it vanished.
+  def test_a_pole_we_cannot_place_keeps_the_integral_formal
+    f = 1 / (X - RCAS.cos(X))
+    assert_nil RCAS::Integrate.singular_points(f.simplify, X, RCAS::Num.new(0), RCAS::Num.new(2)),
+               "x - cos(x) vanishes at 0.739 and Solve cannot name it"
+    assert_equal [], RCAS::Integrate.singular_points(f.simplify, X, RCAS::Num.new(1), RCAS::Num.new(2)),
+                 "and does not vanish between 1 and 2"
+    assert_instance_of RCAS::Integral, RCAS.integrate(f, X, 0, 2)
+  end
+
+  # A product in the denominator vanishes where any factor does, even when
+  # Solve can make nothing of the product: 1/(x*log(x)) over 1/2..2 spans
+  # the pole at 1 and used to answer with a complex number.
+  def test_poles_of_a_factored_denominator
+    f = 1 / (X * RCAS.log(X))
+    assert_equal "undefined", RCAS.integrate(f, X, 1r / 2, 2).to_s
+    assert_equal "-log(log(2)) + log(log(3))", RCAS.integrate(f, X, 2, 3).to_s, "no pole between 2 and 3"
+    assert_equal [3], RCAS::Integrate.singular_points((1 / ((X - 3) * RCAS.exp(X))).simplify, X,
+                                                      RCAS::Num.new(0), RCAS::Num.new(5)).map { |r| r.value }
+    assert_equal "undefined", RCAS.integrate(1 / (X * (X - 1)), X, 1r / 2, 3).to_s
+    assert_equal "2*log(2) - log(3)", RCAS.integrate(1 / (X * (X - 1)), X, 2, 3).to_s
   end
 
   def test_helpers

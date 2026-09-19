@@ -3182,6 +3182,12 @@ support, formal when rcas cannot do it), `moment(k)` and `sample(n)`. The
 normal CDF is written with the error function `erf`; its quantile is
 numeric except at `1/2`.
 
+A parameter that is a number is checked when the distribution is built -
+`Binomial(10, 1.5)` and `Normal(0, 0)` are refused rather than answering
+with a negative probability - but a symbolic parameter is not, since
+`Normal(mu, sigma)` is a legitimate object and rcas does not know the sign
+of `sigma` unless you say so.
+
 ```
 rcas> X = Normal(0, 1)
 => Normal(0, 1)

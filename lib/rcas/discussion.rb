@@ -294,7 +294,7 @@ module RCAS
     def factor_solutions(g, x)
       roots = pieces(g, x).flat_map { |piece| Solve.solve(piece, x).select { |root| real?(root) } }
       roots.uniq.select { |root| vanishes?(g, x, root) }
-    rescue NotImplementedError, StandardError
+    rescue *UNDECIDED
       nil
     end
 

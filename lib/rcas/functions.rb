@@ -653,8 +653,10 @@ module RCAS
         return fold(Fn.new(fn.name, [reduced]))
       end
 
-      # odd / even symmetry: sin(-u) = -sin(u), cos(-u) = cos(u)
-      if (ODD.include?(fn.name) || EVEN.include?(fn.name)) && !arg.is_a?(Num)
+      # odd / even symmetry: sin(-u) = -sin(u), cos(-u) = cos(u). A negative
+      # number counts: cos(-1) is cos(1), which is what lets a definite
+      # integral of tan over a symmetric range come out as 0.
+      if ODD.include?(fn.name) || EVEN.include?(fn.name)
         coeff, factors = Simplify.factorize(arg)
         negative = Simplify.negative?(coeff)
         if !negative && (pair = factors.find { |b, e| e == 1 && Simplify.negative_sum?(b) })
@@ -665,7 +667,7 @@ module RCAS
         end
         if negative
           flipped = Fn.new(fn.name, [Simplify.rebuild_product(Simplify.negative?(coeff) ? -coeff : coeff, factors)])
-          return ODD.include?(fn.name) ? Neg.new(fold(flipped)) : fold(flipped)
+          return ODD.include?(fn.name) ? Simplify.negate(fold(flipped)) : fold(flipped)
         end
       end
 
