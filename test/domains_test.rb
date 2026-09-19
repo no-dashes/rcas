@@ -68,6 +68,27 @@ class DomainsTest < Minitest::Test
     refute (RCAS::QQ**3).ring?
   end
 
+  # A square matrix space is a ring, but not a domain of numbers, so no
+  # polynomial ring is built over it - and the shadowed [] says so itself
+  # rather than trying to read a symbol as a row of the matrix.
+  def test_a_space_is_not_a_coefficient_domain
+    assert RCAS::ZZ.scalar?
+    assert RCAS::ZZ[:x].scalar?
+    refute (RCAS::ZZ**[2, 2]).scalar?
+    refute (RCAS::ZZ**3).scalar?
+
+    error = assert_raises(RCAS::DomainError) { RCAS::PolynomialRing.new(RCAS::QQ**[2, 2], [:x]) }
+    assert_includes error.message, "QQ**[2, 2] is not a domain of numbers"
+
+    error = assert_raises(RCAS::DomainError) { (RCAS::QQ**[2, 2])[:x] }
+    assert_includes error.message, "Matrices of polynomials are (QQ[x])**[2, 2]"
+
+    # which is the direction that does work
+    m = (RCAS::ZZ[:t]**[2, 2])[[1, :t], [0, 1]]
+    assert_equal "ZZ[t]**[2, 2]", m.domain.to_s
+    assert_equal RCAS::ZZ[:t], m.base
+  end
+
   # in? is the same question the domain answers with include?, asked of the
   # value: an expression, a polynomial, a vector, a matrix, a field element.
   def test_membership_from_the_value

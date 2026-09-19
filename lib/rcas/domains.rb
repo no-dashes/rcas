@@ -86,6 +86,11 @@ module RCAS
     def field? = false
     def fraction_field = self
 
+    # A domain of numbers: its elements can be polynomial coefficients and
+    # matrix entries. The spaces say no, and that is what keeps a polynomial
+    # ring from being built over them.
+    def scalar? = true
+
     # Smallest standard domain containing both.
     def join(_other) = raise(NotImplementedError)
 
@@ -293,6 +298,7 @@ module RCAS
 
     def numeric_sign(value)
       return nil unless value.is_a?(Numeric) && value.real?
+      return nil if value.respond_to?(:nan?) && value.nan? # undefined has no sign
       return :positive if value.positive?
       return :negative if value.negative?
       :nonnegative
@@ -333,7 +339,7 @@ module RCAS
     def domain(expr)
       case expr
       when Num then expr.finite_field? ? expr.value.field : NumberSet.of(expr.value)
-      when Const then expr.name == :oo ? nil : RR
+      when Const then %i[oo undefined].include?(expr.name) ? nil : RR
       when RootOf then expr.real? ? RR : CC
       when Var then RCAS.assumption(expr.name)
       when Neg then no_naturals(domain(expr.arg))
@@ -436,6 +442,9 @@ module RCAS
     attr_reader :base, :vars
 
     def initialize(base, vars)
+      unless base.scalar?
+        raise DomainError, "#{base} is not a domain of numbers: polynomial coefficients are scalars"
+      end
       raise DomainError, "#{base} is not a ring" unless base.ring?
       names = vars.flatten.map { |v| v.is_a?(Var) ? v.name : v.to_sym }
       raise ArgumentError, "a polynomial ring needs at least one variable" if names.empty?

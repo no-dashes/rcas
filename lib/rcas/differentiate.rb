@@ -8,7 +8,8 @@ module RCAS
 
     def diff(expr, var)
       case expr
-      when Num, Const, RootOf then Num.new(0)
+      when Const then expr.name == :undefined ? expr : Num.new(0)
+      when Num, RootOf then Num.new(0)
       when Var then Num.new(expr == var ? 1 : 0)
       when Neg then Neg.new(diff(expr.arg, var))
       when Add then Add.new(diff(expr.left, var), diff(expr.right, var))

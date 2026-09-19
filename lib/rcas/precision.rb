@@ -218,6 +218,7 @@ module RCAS
 
     def constant(node, prec, state)
       return BigMath.PI(prec) if node.name == :pi
+      unsupported!("undefined", node) if node.name == :undefined
       unsupported!("constant", node) unless node.value.is_a?(Numeric) && node.value.finite?
       float(node.value, state)
     end

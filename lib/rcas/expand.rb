@@ -148,16 +148,20 @@ module RCAS
 
     def term_count((constant, terms)) = terms.size + (constant.zero? ? 0 : 1)
 
+    # A term that cancels is dropped - unless it carries infinity, which
+    # cancels to nothing at all: that one is kept so that Simplify's rebuild
+    # answers `undefined` rather than 0.
     def add_term(terms, factors, coeff)
       c = (terms[factors] || 0) + coeff
-      c.zero? ? terms.delete(factors) : terms[factors] = c
+      c.zero? && !factors.key?(OO) ? terms.delete(factors) : terms[factors] = c
     end
 
     def multiply_factors(fa, fb)
       merged = fa.dup
       fb.each do |base, exp|
         e = Simplify.add_exponents(merged[base] || 0, exp)
-        e.is_a?(Numeric) && e.zero? ? merged.delete(base) : merged[base] = e
+        gone = e.is_a?(Numeric) && e.zero? && base != OO # oo/oo is undefined, not 1
+        gone ? merged.delete(base) : merged[base] = e
       end
       merged
     end

@@ -147,6 +147,7 @@ module RCAS
     # pi as \pi; other named constants like variables.
     def constant(const)
       return "\\infty" if const.name == :oo
+      return "\\mathrm{undefined}" if const.name == :undefined
       const.name == :pi ? '\pi' : variable(const.name)
     end
 

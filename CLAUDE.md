@@ -121,7 +121,7 @@ lib/rcas/interpolate.rb     Interpolate.newton (divided differences over Scalar 
 lib/rcas/inequalities.rb    Inequality, Interval, RealSet (complement/-), Cases, sign charts, Parametric (one-parameter case split)
 lib/rcas/piecewise.rb       Piecewise node + Piecewises: first-match branch selection, diff/integrate (continuity constant)/limit/solve per branch, discontinuities/kinks
 lib/rcas/ode.rb             Derivative node, dsolve (separable, linear 1st order, const-coeff any order: char. roots, undetermined coefficients, variation of parameters) and systems: dsolve([eqs], [y1, y2], t) via eigenvectors + Jordan chains
-lib/rcas/constants.rb       Const (pi, oo), E = exp(1), I = Num(Complex(0,1)), exact trig values
+lib/rcas/constants.rb       Const (pi, oo, undefined), E = exp(1), I = Num(Complex(0,1)), exact trig values
 lib/rcas/domains.rb         NN ZZ QQ RR CC, assumptions, Infer (domain inference, `excluded?`), Membership ("x in ZZ": the statement `hold { x.in?(ZZ) }` keeps, and what `assumptions` lists), PolynomialRing, FractionField
 lib/rcas/polynomial.rb      ring elements: {exponent vector => coefficient}
 lib/rcas/coefficients.rb    degree/ldegree/lcoeff/tcoeff/coeff/coeffs/collect on expressions (via Expand.table)
@@ -213,9 +213,23 @@ MANUAL.md                   the user manual (usage); README.md (setup only); ass
    honestly - square matrices over a ring are a ring, a vector space is
    neither. Their `[]` is the element constructor and shadows
    `Domain#[]`, so `(QQ**3)[1, 2, 3]` still builds a vector rather than a
-   polynomial ring. Every value answers `in?(domain)` through the
+   polynomial ring. Nothing is lost by that: a space answers `scalar?` with
+   false (19 Sept 2026, the user pointed at the collision), so a polynomial
+   ring over it is refused anyway - `Polynomial`'s coefficients are
+   Expressions, and `MatrixSpace#[]` answers a symbol with that message and
+   the direction that works, `(QQ[x])**[2, 2]`. Every value answers `in?(domain)` through the
    `Algebraic` mixin; `Mod` and `GFElement` carry their own one-liner,
    because that mixin's `rop` refuses the arithmetic they accept.
+6a. **Infinity is a value with arithmetic** (19 Sept 2026, from a review):
+   `OO` is an ordinary `Const` and therefore an atom in the term tables, so
+   `Simplify.rebuild_sum`/`rebuild_product` are where it has to be caught -
+   `undefined_term?` answers `oo - oo`, `oo/oo` and `0*oo` with `UNDEFINED`
+   (a `Const` of its own, bare name `undefined`, nums1.NaN in OpenMath),
+   and `absorb_infinity` collapses `2*oo`, `oo**2` and `oo - 2` to `oo`
+   and `1/oo` to 0. `Expand.add_term`/`multiply_factors` keep a cancelling
+   infinity in the table for the same reason. A symbolic coefficient is
+   never absorbed (`x*oo` stays, because `0*oo` is undefined).
+
 7. **Formal nodes**: `Integral`, `Sum`, `Product`, `Limit`, `Derivative`,
    `RootOf` and `Piecewise` are Expressions and atoms to everything else;
    `evaluate` (aliases `doit`, `unhold`) computes them. Printer, LaTeX,
@@ -806,6 +820,9 @@ fourier.rb), group
 theory, ODEs with variable coefficients beyond first
 order, inequalities with 2+ parameters or
 non-polynomial parts, number fields with more than two generators,
+polynomials over a non-commutative base (a matrix ring: `Domain#scalar?` is
+false for `MatrixSpace`/`VectorSpace` and `PolynomialRing` refuses them,
+since `Polynomial`'s coefficients are Expressions),
 infinite products, formal power series whose
 coefficients are not hypergeometric (`tan`, `exp(x)/(1 - x)`, Fibonacci
 generating functions: `fps` refuses rather than guesses). Conway polynomials

@@ -17,8 +17,15 @@ module RCAS
       freeze
     end
 
-    # (QQ**[2, 2])[[1, 2], [3, 4]]
+    # (QQ**[2, 2])[[1, 2], [3, 4]]. This is the element constructor and it
+    # shadows Domain#[], the polynomial ring - which rcas cannot build over a
+    # space anyway, since a coefficient is a number. A symbol therefore has no
+    # meaning here, and saying so is more use than counting rows.
     def [](*row_arrays)
+      if (names = row_arrays.grep(Symbol) + row_arrays.grep(Var).map(&:name)).any?
+        raise DomainError, "#{self} is not a domain of numbers: polynomial coefficients are scalars. " \
+                           "Matrices of polynomials are (#{base}[#{names.join(', ')}])**[#{rows}, #{cols}]"
+      end
       row_arrays = row_arrays.first if row_arrays.size == 1 && row_arrays.first.first.is_a?(Array)
       unless row_arrays.size == rows && row_arrays.all? { |r| r.size == cols }
         raise DomainError, "#{self} needs #{rows} rows of #{cols} entries"
@@ -55,6 +62,9 @@ module RCAS
     # that is not square is not, and only the 1 by 1 case can be a field.
     def ring? = square? && base.ring?
     def field? = rows == 1 && cols == 1 && base.field?
+
+    # Matrices are not numbers: no polynomial has them as coefficients.
+    def scalar? = false
 
     def over(other_base) = MatrixSpace.new(other_base, rows, cols)
 

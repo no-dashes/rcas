@@ -7,6 +7,40 @@ class SimplifyTest < Minitest::Test
 
   def teardown = RCAS.forget
 
+  # Infinity is an atom in the term tables like any other, so a cancelling
+  # one used to come back as a number: oo - oo was 0 and oo/oo was 1.
+  def test_infinity_does_not_cancel
+    o = RCAS::OO
+    assert_equal "undefined", s(o - o)
+    assert_equal "undefined", s(o / o)
+    assert_equal "undefined", s(RCAS::Num.new(0) * o)
+    assert_equal "undefined", s(o * :x / o)
+    assert_equal "undefined", s(o - 2 * o) # 2*oo is oo, so this cancels too
+    assert_equal "undefined", (o - o).expand.to_s
+    assert_equal "undefined", (o / o).expand.to_s
+    assert_equal "undefined", ((:x + o) - (:x + o)).expand.to_s
+    assert_nil RCAS::Infer.domain(RCAS::UNDEFINED)
+    assert_nil RCAS.sign_of(RCAS::UNDEFINED)
+    assert_equal "undefined", RCAS::UNDEFINED.diff(:x).to_s
+    assert_equal "undefined", RCAS::UNDEFINED.evalf.to_s
+  end
+
+  # What infinity does absorb: a numeric factor, a positive power and any
+  # finite term beside it. The sign is all that survives.
+  def test_infinity_absorbs_the_finite
+    o = RCAS::OO
+    assert_equal "oo", s(2 * o)
+    assert_equal "oo", s(o / 2)
+    assert_equal "oo", s(o**2)
+    assert_equal "-oo", s(-3 * o)
+    assert_equal "0", s(1 / o)
+    assert_equal "oo", s(o - 2)
+    assert_equal "oo", s(o + :x)
+    assert_equal "oo", s(o + o)
+    assert_equal "oo*x", s(:x * o), "the sign of x is unknown, so this is not oo"
+    assert_equal "-oo + oo*x", s(o * :x - o), "two different infinities say nothing"
+  end
+
   def test_identities
     assert_equal "x", s(:x + 0)
     assert_equal "x", s(:x * 1)

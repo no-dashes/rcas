@@ -130,7 +130,9 @@ module RCAS
       constant OO, "nums1", "infinity", encode_as: :oo
       constant E,  "nums1", "e"
       constant I,  "nums1", "i"
-      constant Num.new(Float::NAN), "nums1", "NaN"
+      # nums1.NaN is what an undefined value is called there; it decodes to
+      # rcas's own UNDEFINED, which is the node the arithmetic produces.
+      constant UNDEFINED, "nums1", "NaN", encode_as: :undefined
 
       constant NN, "setname1", "N"
       constant ZZ, "setname1", "Z"

@@ -152,7 +152,8 @@ object:
   (the notation `rsolve` uses); with a block or other kinds of arguments
   the usual `NoMethodError` is raised, and `respond_to?` is untouched so
   Ruby's implicit conversions are unaffected.
-- The functions of the reference section, the constants `PI E I oo`, the
+- The functions of the reference section, the constants `PI E I oo
+  UNDEFINED`, the
   number sets `NN ZZ QQ RR CC` and `GF` are in scope, and `hold { ... }`
   can read the source of blocks typed at the prompt.
 - Any name Ruby accepts as an identifier works, Unicode included: `α`,
@@ -602,6 +603,25 @@ rcas> sin(x)
 => sin(x)
 ```
 
+Infinity is a value, not a number: it absorbs what is finite and says so
+when a calculation asks it something it cannot answer. `oo - oo`, `oo/oo`
+and `0*oo` are `undefined`, which is a constant of its own and stays
+undefined through whatever it meets.
+
+```
+rcas> [(2*oo).simplify, (oo/2).simplify, (oo**2).simplify, (1/oo).simplify]
+=> [oo, oo, oo, 0]
+rcas> [(oo - 2).simplify, (oo + oo).simplify]
+=> [oo, oo]
+rcas> [(oo - oo).simplify, (oo/oo).simplify, (0*oo).simplify]
+=> [undefined, undefined, undefined]
+rcas> (x*oo).simplify
+=> oo*x
+```
+
+The last one is not `oo`: the sign of `x` is unknown, and `0*oo` is
+undefined, so the product says nothing until `x` does.
+
 The functions are `sin cos tan asin acos atan exp log sinh cosh sqrt zeta`.
 `sqrt(x)` is `x**(1/2)`, and `exp(a)*exp(b)` merges into `exp(a + b)`.
 
@@ -863,6 +883,35 @@ rcas> integrate(exp(-x**2), x: 0..1)
 => pi**(1/2)*erf(1)/2
 rcas> integrate(exp(-x**2), x: -oo..oo)
 => pi**(1/2)
+```
+
+`F(b) - F(a)` is the answer only where the integrand is continuous, so a
+pole between the bounds splits the integral and each piece is taken to the
+pole as a one-sided limit. A divergent integral comes back as `oo` or
+`undefined` rather than as the number the unsplit subtraction would give
+(`integrate(1/x**2, x, -1, 1)` is not `-2`: the integrand is positive).
+
+```
+rcas> integrate(1/x**2, x, -1, 1)
+=> oo
+rcas> integrate(1/x**3, x, -1, 1)
+=> undefined
+rcas> integrate(1/x, x, -1, 1)
+=> undefined
+rcas> integrate(tan(x), x, 0, PI)
+=> undefined
+rcas> integrate(x, x: -oo..oo)
+=> undefined
+rcas> integrate(1/(x - 3), x, 0, 1)
+=> log(2) - log(3)
+```
+
+The antiderivative used on each piece is the real one: `log(abs(u))`, not
+`log(u)`, so an integral over negative numbers stays real.
+
+```
+rcas> integrate(1/x, x, -2, -1)
+=> -log(2)
 ```
 
 #### Integrals that have names
@@ -2648,6 +2697,22 @@ rcas> [(ZZ**3) < (QQ**3), (ZZ**[2, 2]).ring?, (QQ**[2, 2]).field?]
 => [true, true, false]
 ```
 
+A space is a ring but not a domain of *numbers*, and polynomial
+coefficients are numbers, so there is no `(QQ**[2, 2])[x]`: on a space the
+brackets are the element constructor, and asking for the ring says so. The
+direction that does work is the other one - matrices whose entries are
+polynomials.
+
+```
+rcas> (QQ**[2, 2])[x]
+=> RCAS::DomainError: QQ**[2, 2] is not a domain of numbers: polynomial coefficients are scalars. Matrices of polynomials are (QQ[x])**[2, 2]
+rcas> (ZZ[t]**[2, 2])[[1, t], [0, 1]]
+=> [1 t]
+   [0 1]
+rcas> (ZZ[t]**[2, 2])[[1, t], [0, 1]].base
+=> ZZ[t]
+```
+
 `v * w` is the dot product. Result spaces follow the scalars: dividing an
 integer vector by 2 lands in `QQ**3`. Entries outside the domain are
 rejected, and an undeclared symbolic entry tells you what to declare.
@@ -3744,7 +3809,7 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | integers | `factor ifactor isprime nextprime prevprime divisors totient invmod chrem congruence legendre jacobi order primitive_root continued_fraction convergents` |
 | polynomial structure | `degree ldegree lcoeff tcoeff coeff coeffs collect resultant discriminant interpolate` |
 | named polynomials | `Poly.chebyshev_t Poly.chebyshev_u Poly.legendre Poly.hermite Poly.hermite_prob Poly.laguerre Poly.gegenbauer Poly.jacobi Poly.bernoulli Poly.euler Poly.cyclotomic Poly.swinnerton_dyer Poly.abel Poly.fibonacci Poly.lucas Poly.bell` (a namespace, not bare names) |
-| constants | `PI E I oo` (bare `pi`, `π`, `oo`, `∞`) |
+| constants | `PI E I oo UNDEFINED` (bare `pi`, `π`, `oo`, `∞`, `undefined`) |
 | evaluation | `subs evalf` (`evalf(f, 50)` for fifty digits) |
 | calculus | `integrate diff series taylor fps fourier limit sum product` |
 | case by case | `piecewise discontinuities kinks` |
@@ -3788,7 +3853,8 @@ implicitly rather than by a parametrization, Fourier
 transforms, group theory, differential equations with variable
 coefficients beyond first order, inequalities beyond
 polynomial, rational and absolute-value ones, number fields with more than
-two generators, the associated Legendre functions and the multivariate
+two generators, polynomials whose coefficients are matrices rather than
+numbers, the associated Legendre functions and the multivariate
 (partial) Bell polynomials, hypergeometric solutions of *inhomogeneous* recurrences
 with polynomial coefficients, Abramov's rational solutions, the
 Almkvist-Zeilberger algorithm for hyperexponential integrals,

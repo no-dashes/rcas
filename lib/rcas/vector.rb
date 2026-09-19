@@ -49,6 +49,9 @@ module RCAS
     def ring? = false
     def field? = false
 
+    # Vectors are not numbers: no polynomial has them as coefficients.
+    def scalar? = false
+
     def over(other_base) = VectorSpace.new(other_base, dim)
 
     # The same dimension over a larger base: (ZZ**3) < (QQ**3).

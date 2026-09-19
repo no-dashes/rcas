@@ -19,6 +19,12 @@ module RCAS
   end
 
   PI = Const.new(:pi, Math::PI)
+
+  # What 0*oo, oo - oo and oo/oo are. Infinity is an ordinary atom to the
+  # term tables, so without this it would cancel like any other factor and a
+  # divergent calculation would come back with a number. Anything that
+  # reaches UNDEFINED stays undefined.
+  UNDEFINED = Const.new(:undefined, Float::NAN)
   E = Fn.new(:exp, [Num.new(1)])
   I = Num.new(Complex(0, 1))
 
@@ -27,6 +33,7 @@ module RCAS
     PI = RCAS::PI
     E = RCAS::E
     I = RCAS::I
+    UNDEFINED = RCAS::UNDEFINED
   end
 
   # OO (infinity) is defined in series.rb and added here once loaded.

@@ -88,6 +88,15 @@ module RCAS
     end
 
     def rebuild_sum(constant, terms)
+      # oo - oo is not 0. Infinity is an atom like any other in the term
+      # table, so a cancelling infinite term - or one already undefined -
+      # has to be caught here, before the table is rebuilt into a tree.
+      return UNDEFINED if terms.any? { |factors, coeff| undefined_term?(factors, coeff) }
+      # A finite quantity added to an infinite one changes nothing: oo - 2
+      # is oo. Two different infinite terms are left alone (oo*x - oo says
+      # nothing until x does).
+      infinite = terms.reject { |_, c| c.zero? }.select { |factors, _| factors.key?(OO) }
+      return rebuild_product(infinite.values.first, infinite.keys.first) if infinite.size == 1
       parts = terms.reject { |_, c| c.zero? }.map do |factors, coeff|
         [rebuild_product(sign_negative?(coeff) ? -coeff : coeff, factors), sign_negative?(coeff), sort_key(rebuild_product(1, factors))]
       end
@@ -223,7 +232,12 @@ module RCAS
 
     def rebuild_product(coeff, factors)
       coeff = normalize_number(coeff)
+      # 0*oo and oo/oo have no value either (the second reaches here as an
+      # infinite factor whose exponents have cancelled to zero).
+      return UNDEFINED if undefined_term?(factors, coeff)
       return Num.new(0) if coeff.zero?
+      coeff, factors = absorb_infinity(coeff, factors) if factors.key?(OO)
+      return Num.new(0) if factors.nil?
       return Num.new(coeff) if factors.all? { |_, exp| exp.is_a?(Numeric) && exp.zero? }
       if coeff.is_a?(Complex) && coeff.real.zero?
         factors = factors.merge(Num.new(Complex(0, 1)) => 1)
@@ -286,6 +300,28 @@ module RCAS
     end
 
     # ---- helpers ----------------------------------------------------------
+
+    # A factor map that must not be rebuilt into a value: an infinity that
+    # cancels (against a zero coefficient in a product, against another term
+    # in a sum, or against itself in the exponents), or an undefined factor.
+    def undefined_term?(factors, coeff)
+      return true if factors.key?(UNDEFINED)
+      return false unless factors.key?(OO)
+      exp = factors[OO]
+      coeff.zero? || (exp.is_a?(Numeric) && exp.zero?)
+    end
+
+    # Infinity swallows what multiplies it: 2*oo and oo/2 are oo, oo**2 is
+    # oo, and a number over oo is 0 (nil for the factors says so). Only the
+    # sign of a numeric coefficient survives; a symbolic one is kept, since
+    # x*oo is not oo. The cancellations are caught before this.
+    def absorb_infinity(coeff, factors)
+      exp = factors[OO]
+      return [coeff, factors] unless exp.is_a?(Numeric) && exp.real? && coeff.is_a?(Numeric) && coeff.real?
+      return [coeff, nil] if exp.negative? && factors.size == 1
+      return [coeff, factors] if exp.negative?
+      [coeff.negative? ? -1 : 1, factors.merge(OO => 1)]
+    end
 
     def add_factor(factors, base, exp)
       factors[base] = add_exponents(factors[base] || 0, exp)

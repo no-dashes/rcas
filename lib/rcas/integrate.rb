@@ -74,10 +74,107 @@ module RCAS
       return Piecewises.definite(f, x, from, to) if f.is_a?(Piecewise)
       antiderivative = integrate(f, x)
       return Integral.new(f, x, from, to) unless complete?(antiderivative)
-      upper = endpoint(antiderivative, x, to, :left)
-      lower = endpoint(antiderivative, x, from, :right)
-      return Integral.new(f, x, from, to) if upper.nil? || lower.nil?
-      (upper - lower).simplify
+      bounds = [from, *singular_points(f, x, from, to), to]
+      return Integral.new(f, x, from, to) if bounds.nil?
+      value = between(antiderivative, x, bounds)
+      # A logarithm of a negative number means the antiderivative has left
+      # the reals: log|u| is one too, on every interval that avoids u = 0,
+      # and it is the one a real integral wants (the constant differs per
+      # piece, which is exactly why the pieces are evaluated separately).
+      if real_integrand?(f) && (value.nil? || !real_valued?(value))
+        value = between(real_logs(antiderivative), x, bounds)
+      end
+      return Integral.new(f, x, from, to) if value.nil? || (real_integrand?(f) && !real_valued?(value))
+      value
+    end
+
+    # F(b) - F(a) over each piece, added up: a one-sided limit at every
+    # interior end, since that is where the integrand blows up. The sum of
+    # +oo and -oo is `undefined`, which is the honest answer for a divergent
+    # integral, and Simplify is what says so.
+    def between(antiderivative, x, bounds)
+      pieces = bounds.each_cons(2).map do |p, q|
+        up = ascending?(p, q) # bounds the other way round approach from the other side
+        upper = endpoint(antiderivative, x, q, up ? :left : :right)
+        lower = endpoint(antiderivative, x, p, up ? :right : :left)
+        return nil if upper.nil? || lower.nil?
+        upper - lower
+      end
+      pieces.reduce(:+).simplify
+    end
+
+    def ascending?(p, q)
+      a, b = real_number(p), real_number(q)
+      a.nil? || b.nil? ? true : a <= b
+    end
+
+    # The points strictly between the bounds where f blows up. F(b) - F(a)
+    # is the answer only on an interval where f is continuous; without this,
+    # integrate(1/x**2, x, -1, 1) is -2, a negative area under a positive
+    # integrand. Rational poles come from the denominators Analysis already
+    # collects for `discuss`, and tan(u) from the zeros of cos(u).
+    # => [] (no interior singularity), the points, or nil (cannot tell).
+    def singular_points(f, x, from, to)
+      candidates = Analysis.denominators(f, x)
+      f.each_node do |node|
+        next unless node.is_a?(Fn) && node.name == :tan && node.args.first.variables.include?(x.name)
+        candidates << Fn.new(:cos, [node.args.first])
+      end
+      return [] if candidates.empty?
+      a, b = real_number(from), real_number(to)
+      return [] if a.nil? || b.nil?
+      lo, hi = [a, b].minmax
+      points = candidates.uniq.flat_map do |d|
+        begin
+          Solve.solve(d, x)
+        rescue StandardError, NotImplementedError
+          []
+        end
+      end
+      inside = points.uniq.select { |p| (v = real_number(p)) && v > lo && v < hi }
+      kinds = inside.to_h { |p| [p, singularity(f, x, p)] }
+      return nil if kinds.value?(:unknown)
+      inside = inside.select { |p| kinds[p] == :pole }.sort_by { |p| real_number(p) }
+      a > b ? inside.reverse : inside
+    end
+
+    # :pole (f runs away on at least one side), :finite (a removable gap the
+    # antiderivative sees through), or :unknown, where honesty means an
+    # unevaluated Integral rather than F(b) - F(a).
+    def singularity(f, x, point)
+      sides = %i[left right].map { |dir| Limits.limit(f, x, point, dir) }
+      return :pole if sides.any? { |v| Limits.infinite?(v) }
+      sides.any? { |v| v.is_a?(Limit) } ? :unknown : :finite
+    rescue StandardError
+      :unknown
+    end
+
+    def real_number(expr)
+      value = Expression.lift(expr).evalf
+      value = value.value if value.is_a?(Num)
+      return nil unless value.is_a?(Numeric) && value.real?
+      value.to_f
+    rescue StandardError
+      nil
+    end
+
+    # No imaginary unit, and no logarithm of a number that is not positive.
+    def real_valued?(expr)
+      expr.each_node.none? do |node|
+        if node.is_a?(Num)
+          node.value.is_a?(Complex) && !node.value.imaginary.zero?
+        elsif node.is_a?(Fn) && node.name == :log
+          (arg = node.args.first).is_a?(Num) && arg.value.is_a?(Numeric) && arg.value.real? && !arg.value.positive?
+        end
+      end
+    end
+
+    def real_integrand?(f) = real_valued?(f) && f.each_node.none? { |n| n.is_a?(Num) && n.value.is_a?(Complex) }
+
+    # log(u) => log(abs(u)), the real antiderivative of u'/u.
+    def real_logs(expr)
+      return Fn.new(:log, [RCAS.abs(real_logs(expr.args.first))]) if expr.is_a?(Fn) && expr.name == :log
+      expr.map_children { |c| real_logs(c) }
     end
 
     def endpoint(antiderivative, x, point, dir)

@@ -180,6 +180,39 @@ class IntegrateTest < Minitest::Test
     assert_equal "integral(x*floor(x), x)", RCAS.integrate(:x * RCAS.floor(:x), :x).to_s
   end
 
+  # F(b) - F(a) is the answer only where f is continuous. Without the split
+  # at an interior pole, integrate(1/x**2, x, -1, 1) was -2: a negative area
+  # under a positive integrand.
+  def test_definite_integrals_split_at_interior_poles
+    assert_equal "oo", RCAS.integrate(1 / X**2, X, -1, 1).to_s
+    assert_equal "oo", RCAS.integrate(1 / X**2, X, -2, 3).to_s
+    assert_equal "undefined", RCAS.integrate(1 / X**3, X, -1, 1).to_s, "+oo and -oo"
+    assert_equal "undefined", RCAS.integrate(1 / X, X, -1, 1).to_s
+    assert_equal "undefined", RCAS.integrate(RCAS.tan(X), X, 0, RCAS::PI).to_s
+    assert_equal "undefined", RCAS.integrate(1 / (X - 3), X, 0, 5).to_s
+    # the bounds the other way round are the same integral with a sign
+    assert_equal "-oo", RCAS.integrate(1 / X**2, X, 1, -1).to_s
+    assert_equal "-1/2", RCAS.integrate(1 / X**2, X, 2, 1).to_s
+  end
+
+  # An interval that avoids the pole is untouched, and a removable gap is
+  # not a pole: sin(x)/x integrates across 0 as it always did.
+  def test_definite_integrals_without_an_interior_pole
+    assert_equal "1/2", RCAS.integrate(1 / X**2, X, 1, 2).to_s
+    assert_equal "1", RCAS.integrate(1 / X**2, X, 1, RCAS::OO).to_s
+    assert_equal "2", RCAS.integrate(1 / RCAS.sqrt(X), X, 0, 1).to_s
+    assert_equal "log(2) - log(3)", RCAS.integrate(1 / (X - 3), X, 0, 1).to_s
+    assert_equal "-Si(-1) + Si(1)", RCAS.integrate(RCAS.sin(X) / X, X, -1, 1).to_s
+  end
+
+  # log|u| is the real antiderivative of u'/u; log(u) sends an integral over
+  # negative x into the complex numbers and it used to come back that way.
+  def test_a_real_integral_stays_real
+    assert_equal "-log(2)", RCAS.integrate(1 / X, X, -2, -1).to_s
+    assert_equal "log(1/2)", RCAS.integrate(1 / X, X, -1, -1r / 2).to_s
+    assert_equal "0", RCAS.integrate(RCAS.tan(X), X, RCAS::PI * 3 / 4, RCAS::PI * 5 / 4).to_s
+  end
+
   def test_helpers
     assert_equal "x**3/3", RCAS.integrate(:x**2, :x).to_s
     assert_equal "x**2/2", (:x).to_expr.integrate(:x).to_s

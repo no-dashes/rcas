@@ -32,6 +32,9 @@ module RCAS
     def π = PI
     def ∞ = OO
 
+    # undefined: what 0*oo, oo - oo and oo/oo come back as, under the name it prints
+    def undefined = UNDEFINED
+
     # root(2, 3) is the exact cube root; Ruby would turn 2**(1/3r) into a float.
     def root(x, n)
       r = Expression.lift(x)**Rational(1, n)

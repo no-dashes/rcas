@@ -244,7 +244,7 @@ module RCAS
     # x**2 rather than x**2.0.
     def self.floatify_tree(node)
       case node
-      when Const then Num.new(node.value.to_f)
+      when Const then node.name == :undefined ? node : Num.new(node.value.to_f)
       when RootOf then Num.new(floatify(node.value))
       when Num then node.value.is_a?(Float) || node.finite_field? ? node : Num.new(floatify(node.value))
       when Pow
