@@ -313,6 +313,7 @@ module RCAS
         when Expression  then encode_expression(obj)
         when Equation    then Application.new(OpenMath.sym("relation1", "eq"), encode(obj.lhs), encode(obj.rhs))
         when Membership  then Application.new(OpenMath.sym("set1", "in"), encode(obj.value), encode(obj.domain))
+        when ImageSet    then encode_image_set(obj)
         when Inequality  then encode_inequality(obj)
         when Interval    then encode_interval(obj)
         when NumberSet   then encode_number_set(obj)
@@ -508,6 +509,22 @@ module RCAS
       %w[eq lt leq gt geq neq].each do |name|
         DECODE_APPLY[["relation1", name]] = ->(args, node) { decode_relation(node) }
       end
+
+      # {2*pi*k | k in ZZ} is the image of a number set under a function,
+      # which is what set1.map says: map(lambda k . 2*pi*k, setname1.Z).
+      def encode_image_set(set)
+        unless set.parameters.size == 1
+          raise EncodeError, "no OpenMath encoding for a family with #{set.parameters.size} parameters"
+        end
+        Application.new(OpenMath.sym("set1", "map"), lambda_of(set.parameters.first, set.expr), encode(set.domain))
+      end
+
+      DECODE_APPLY[%w[set1 map]] = lambda { |args, _|
+        next nil unless args.size == 2
+        pair = lambda_parts(args.first)
+        domain = decode(args.last)
+        pair && domain.is_a?(NumberSet) ? ImageSet.new(pair.last, [pair.first], domain) : nil
+      }
 
       # set1.in is a Membership, which is a statement and not an Expression
       # either. The set comes back as the number set it names.

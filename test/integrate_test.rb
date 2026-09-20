@@ -264,8 +264,11 @@ class IntegrateTest < Minitest::Test
       value = RCAS.integrate(f, X, 0, m * RCAS::PI)
       assert_in_delta m * Math::PI / Math.sqrt(3), value.evalf, 1e-9, "over 0..#{m}*PI"
     end
-    assert_nil RCAS::Integrate.instantiate((RCAS::PI + 4 * RCAS::PI * RCAS::Var.new(:k)).simplify,
-                                           X, 0.0, 1000.0 * Math::PI)
+    k = RCAS::Var.new(:k)
+    family = RCAS::ImageSet.new((RCAS::PI + 4 * RCAS::PI * k).simplify, k)
+    assert_nil family.between(0.0, 1000.0 * Math::PI, limit: RCAS::Integrate::MAX_BREAKS),
+               "more members than rcas will count out is not none of them"
+    assert_equal ["pi"], family.between(0.0, 10.0, limit: RCAS::Integrate::MAX_BREAKS).map(&:to_s)
     [254, 260].each do |m|
       assert_instance_of RCAS::Integral, RCAS.integrate(f, X, 0, m * RCAS::PI),
                          "over 0..#{m}*PI there are more breaks than rcas will count out"

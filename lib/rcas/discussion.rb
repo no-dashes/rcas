@@ -281,7 +281,7 @@ module RCAS
       g = Expression.lift(g)
       return [] unless g.variables.include?(x.name)
       begin
-        Solve.solve(g, x).select { |root| real?(root) }
+        Solve.solve(g, x, principal: true).select { |root| real?(root) }
       rescue NotImplementedError, ArgumentError, DomainError
         factor_solutions(g, x)
       end
@@ -292,7 +292,7 @@ module RCAS
     # of exp(-x**2) is -2*x*exp(-x**2), and the exponential is never zero.
     # Every root found this way is checked against g before it is believed.
     def factor_solutions(g, x)
-      roots = pieces(g, x).flat_map { |piece| Solve.solve(piece, x).select { |root| real?(root) } }
+      roots = pieces(g, x).flat_map { |piece| Solve.solve(piece, x, principal: true).select { |root| real?(root) } }
       roots.uniq.select { |root| vanishes?(g, x, root) }
     rescue *UNDECIDED
       nil

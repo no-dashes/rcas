@@ -169,9 +169,9 @@ class SimplifyTest < Minitest::Test
       assert_equal "1", RCAS.cos(2 * RCAS::PI * k).simplify.to_s
       assert_equal "sin(pi*k + x)", RCAS.sin(x + RCAS::PI * k).simplify.to_s, "half a period is not one"
       # the family solve returns checks out against the equation it solves
-      family = RCAS.solve(RCAS.sin(x) - Rational(1, 2), :x, all: true)
-      assert_equal ["pi/6 + 2*pi*k", "5*pi/6 + 2*pi*k"], family.map(&:to_s)
-      assert_equal ["1/2", "1/2"], family.map { |s| RCAS.sin(s).simplify.to_s }
+      family = RCAS.solve(RCAS.sin(x) - Rational(1, 2), :x)
+      assert_equal ["{pi/6 + 2*pi*k | k in ZZ}", "{5*pi/6 + 2*pi*k | k in ZZ}"], family.map(&:to_s)
+      assert_equal ["1/2", "1/2"], family.map { |set| set.map { |e| RCAS.sin(e).simplify }.to_s }
     end
   end
 

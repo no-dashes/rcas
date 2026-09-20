@@ -200,7 +200,7 @@ module RCAS
       when Piecewise::OTHERWISE then RealSet.reals
       when Interval then RealSet.new([cond])
       when RealSet then cond
-      when Equation then RealSet.new(Solve.solve(cond, x.name).map { |r| Interval.point(Expression.lift(r)) })
+      when Equation then RealSet.new(Solve.solve(cond, x.name, principal: true).map { |r| Interval.point(Expression.lift(r)) })
       when Inequality then Inequalities.solve(cond, x)
       end
     end
@@ -397,7 +397,7 @@ module RCAS
       everywhere = []
       located(pw, x).each do |_, set, value|
         found = begin
-          Solve.solve(Equation.new(value, rhs), x.name)
+          Solve.solve(Equation.new(value, rhs), x.name, principal: true)
         rescue ArgumentError => e
           raise unless e.message.include?("every value")
           everywhere << set

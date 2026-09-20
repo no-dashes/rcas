@@ -42,6 +42,78 @@ module RCAS
     def to_latex(wrap: nil) = "#{LaTeX.print(lhs)} = #{LaTeX.print(rhs)}"
   end
 
+  # {2*pi*k | k in ZZ}: a solution that is a family rather than a number.
+  # An equation with infinitely many solutions has no honest answer as a
+  # list of numbers - sin(x) = 0 is solved by every multiple of pi, not by
+  # 0 and pi - and this is the object MuPAD answers such an equation with.
+  # The parameter carries its domain with it, so the answer says what k is
+  # instead of leaving the reader (and `simplify`) to guess.
+  class ImageSet
+    attr_reader :expr, :parameters, :domain
+
+    def initialize(expr, parameters, domain = ZZ)
+      @expr = Expression.lift(expr)
+      @parameters = Array(parameters).map { |p| p.is_a?(Var) ? p : Var.new(p) }
+      @domain = domain
+      freeze
+    end
+
+    # The member at k = i, with one value per parameter: at(0), at(1), ...
+    def at(*values)
+      bindings = parameters.each_with_index.to_h { |p, i| [p.name, Expression.lift(values[i])] }
+      expr.subs(bindings).simplify
+    end
+
+    # The members between two numbers, when they can be counted out.
+    def between(lo, hi, limit: 1024)
+      return nil unless parameters.size == 1
+      base = numeric(at(0))
+      step = base && numeric(at(1))
+      return nil if base.nil? || step.nil? || (step - base).abs < 1e-12
+      first, last = [((lo - base) / (step - base)).floor, ((hi - base) / (step - base)).ceil].minmax
+      return nil if last - first > limit
+      (first..last).map { |i| at(i) }.select { |m| (v = numeric(m)) && v >= lo && v <= hi }
+    end
+
+    def variables = expr.variables - parameters.map(&:name)
+    def to_expr = expr
+
+    # The image of the set under a function of its member: the parameter
+    # keeps its domain while the block runs, so sin of {pi/6 + 2*pi*k | k in
+    # ZZ} folds to 1/2 without anyone declaring k first. A result that no
+    # longer mentions the parameter is not a family any more and comes back
+    # as the value itself.
+    def map
+      inside = RCAS.assume(**parameters.to_h { |p| [p.name, domain] }) { yield(expr) }
+      lifted = Expression.lift(inside)
+      (lifted.variables & parameters.map(&:name)).empty? ? lifted : ImageSet.new(lifted, parameters, domain)
+    end
+
+    def ==(other)
+      other.is_a?(ImageSet) && other.expr == expr && other.parameters == parameters && other.domain == domain
+    end
+    alias eql? ==
+    def hash = [ImageSet, expr, parameters, domain].hash
+
+    def to_s = "{#{expr} | #{parameters.join(', ')} in #{domain}}"
+    alias inspect to_s
+
+    def to_latex(wrap: nil)
+      inside = parameters.map { |p| LaTeX.of(p) }.join(', ')
+      "\\left\\{ #{LaTeX.of(expr)} \\mid #{inside} \\in #{LaTeX.of(domain)} \\right\\}"
+    end
+
+    private
+
+    def numeric(value)
+      found = Expression.lift(value).evalf
+      found = found.value if found.is_a?(Num)
+      found.is_a?(Numeric) && found.real? ? found.to_f : nil
+    rescue StandardError
+      nil
+    end
+  end
+
   # Equation solving.
   #
   #   solve(x**2 - 3*x + 2, x)          # => [1, 2]
@@ -71,11 +143,15 @@ module RCAS
 
     module_function
 
-    # all: true adds the period of the trigonometric functions, so that the
-    # answer is the whole family rather than the solutions in one period.
+    # Every solution, which for a trigonometric equation means a family per
+    # period: the answer is an ImageSet, {2*pi*k | k in ZZ}, rather than a
+    # selection from it. `principal: true` (or the older `all: false`) asks
+    # for the solutions in one period instead, which is what the analysis
+    # inside rcas wants and what a table of exact values shows.
     # The unknown's declared domain (assume(x: ZZ), or domain: here) keeps
     # out the solutions that demonstrably do not lie in it.
-    def solve(target, vars = nil, all: false, domain: nil)
+    def solve(target, vars = nil, all: true, principal: false, domain: nil)
+      principal ||= !all
       if target.equal?(true) || target.equal?(false)
         raise ArgumentError, "solve: `==` compares structurally in Ruby and this one is already #{target}; " \
                              "write solve(eq(lhs, rhs), x) or solve(hold { lhs == rhs }, x)"
@@ -90,7 +166,18 @@ module RCAS
       # Every value *of x*: with x declared an integer, sin(pi*x) vanishes
       # on ZZ and nowhere else, so the reals would be an overstatement.
       return domain || RCAS.assumption(x.name) || RealSet.reals if Scalar.zero?(f)
-      ordered(restrict(dedupe(univariate(f, x, 0, all: all)), x, domain))
+      roots = dedupe(univariate(f, x, 0, all: !principal)).map { |root| family(root, x, f) }
+      ordered(restrict(roots, x, domain))
+    end
+
+    # A root carrying a parameter the equation did not have is one period's
+    # worth of solutions repeated for ever: say so as a set, and name the
+    # parameter's domain, so that `simplify` can check the answer and the
+    # reader does not have to assume what k is.
+    def family(root, x, f)
+      return root unless root.is_a?(Expression)
+      parameters = root.variables - f.variables - [x.name]
+      parameters.empty? ? root : ImageSet.new(root, parameters.sort.map { |name| Var.new(name) })
     end
 
     # Real roots ascending, then the rest in the order they were found. The
@@ -115,9 +202,37 @@ module RCAS
       wanted = domain || RCAS.assumption(x.name)
       sign = RCAS.signs[x.name]
       return roots if wanted.nil? && sign.nil?
-      roots.reject do |root|
-        (wanted && Infer.excluded?(root, wanted)) || (sign && wrong_sign?(root, sign))
+      roots.flat_map do |root|
+        next restrict_family(root, wanted, sign) if root.is_a?(ImageSet)
+        (wanted && Infer.excluded?(root, wanted)) || (sign && wrong_sign?(root, sign)) ? [] : [root]
       end
+    end
+
+    # Which members of a family lie in a declared domain. For the families
+    # trigonometry produces this is decidable rather than guessed: a + b*k
+    # with a and b rational multiples of pi is rational only where the pi
+    # part cancels, because pi is transcendental, and that happens for at
+    # most one k. So {2*pi*k | k in ZZ} meets ZZ in 0 alone, and
+    # {pi + 2*pi*k | k in ZZ} not at all. A family of any other shape stays
+    # whole: "some member might qualify" is the honest answer there.
+    def restrict_family(set, wanted, sign)
+      return [set] unless wanted && wanted <= QQ && set.parameters.size == 1
+      k = set.parameters.first
+      slope = begin
+        Coefficients.coeff(set.expr, k, 1)
+      rescue StandardError
+        nil
+      end
+      return [set] if slope.nil?
+      rest = (set.expr - slope * k).simplify
+      return [set] if rest.variables.include?(k.name)
+      step = Trig.pi_multiple(slope)
+      offset = Scalar.zero?(rest) ? Rational(0) : Trig.pi_multiple(rest)
+      return [set] if step.nil? || offset.nil? || step.zero?
+      turns = -offset / step
+      return [] unless turns.denominator == 1 && set.domain.include?(turns.numerator)
+      member = set.at(turns.numerator)
+      (wanted && Infer.excluded?(member, wanted)) || (sign && wrong_sign?(member, sign)) ? [] : [member]
     end
 
     # What each declared sign allows a root to be.

@@ -34,7 +34,8 @@ class SolveTest < Minitest::Test
     assert_empty s(X**2 - 2, :x, domain: ZZ)
     assert_equal ["2"], s(X**2 - 4, :x, domain: NN).map(&:to_s)
     assert_equal ["1/2"], s(2 * X - 1, :x, domain: QQ).map(&:to_s)
-    assert_equal ["pi/4"], s(RCAS.tan(X) - 1, :x, domain: RR).map(&:to_s)
+    assert_equal ["{pi/4 + pi*k | k in ZZ}"], s(RCAS.tan(X) - 1, :x, domain: RR).map(&:to_s),
+                 "every real solution, since every one of them is real"
     assert_equal %w[-2**(1/2) 2**(1/2)], s(X**2 - 2, :x).map(&:to_s), "and nothing is remembered"
   end
 
@@ -52,8 +53,8 @@ class SolveTest < Minitest::Test
   # constant rcas cannot place, stays in the list.
   def test_what_cannot_be_decided_stays
     RCAS.assume(x: ZZ)
-    assert_equal ["2*pi*k", "pi + 2*pi*k"], s(RCAS.sin(X).eq(0), :x, all: true).map(&:to_s),
-                 "the family holds for k = 0, so it is not excluded"
+    assert_equal ["0"], s(RCAS.sin(X).eq(0), :x).map(&:to_s),
+                 "2*pi*k is an integer only at k = 0, and pi + 2*pi*k never"
     assert_equal ["log(2)"], s(RCAS.exp(X) - 2, :x, domain: QQ).map(&:to_s),
                  "log(2) is irrational, but not for a reason rcas can state"
   end
@@ -116,9 +117,11 @@ class SolveTest < Minitest::Test
     assert_equal ["0", "log(2)"], strs(s(RCAS.exp(2 * :x) - 3 * RCAS.exp(:x) + 2, :x))
     assert_equal ["exp(2)"], strs(s(RCAS.log(:x) - 2, :x))
     assert_equal [3], s(2**:x - 8, :x)
-    assert_equal ["pi/6", "5*pi/6"], strs(s(RCAS.sin(:x) - Rational(1, 2), :x))
-    assert_equal ["-pi/2", "pi/2"], strs(s(RCAS.cos(:x), :x))
-    assert_equal ["pi/4"], strs(s(RCAS.tan(:x) - 1, :x))
+    assert_equal ["pi/6", "5*pi/6"], strs(s(RCAS.sin(:x) - Rational(1, 2), :x, principal: true))
+    assert_equal ["-pi/2", "pi/2"], strs(s(RCAS.cos(:x), :x, principal: true))
+    assert_equal ["pi/4"], strs(s(RCAS.tan(:x) - 1, :x, principal: true))
+    # and without asking, the whole family
+    assert_equal ["{pi/4 + pi*k | k in ZZ}"], strs(s(RCAS.tan(:x) - 1, :x))
   end
 
   def test_linear_systems
@@ -185,18 +188,24 @@ class SolveTest < Minitest::Test
     assert_equal "-1 + 2**(1/2)", (1 / (1 + RCAS.sqrt(2))).rationalize.to_s
   end
   def test_the_whole_family_of_trigonometric_solutions
-    assert_equal ["pi/6", "5*pi/6"], RCAS.solve(RCAS.sin(:x) - Rational(1, 2), :x).map(&:to_s), "one period by default"
-    assert_equal ["pi/6 + 2*pi*k", "5*pi/6 + 2*pi*k"], RCAS.solve(RCAS.sin(:x) - Rational(1, 2), :x, all: true).map(&:to_s)
-    assert_equal ["pi/4 + pi*k"], RCAS.solve(RCAS.tan(:x) - 1, :x, all: true).map(&:to_s), "tan has period pi"
-    assert_equal ["pi/2 + 2*pi*k", "-pi/2 + 2*pi*k"], RCAS.solve(RCAS.cos(:x), :x, all: true).map(&:to_s)
-    assert_equal ["pi/12 + pi*k", "5*pi/12 + pi*k"], RCAS.solve(RCAS.sin(2 * :x) - Rational(1, 2), :x, all: true).map(&:to_s)
-    assert_equal ["log(3)"], RCAS.solve(RCAS.exp(:x) - 3, :x, all: true).map(&:to_s), "no period to add"
-    assert_equal ["-2**(1/2)", "2**(1/2)"], RCAS.solve(:x**2 - 2, :x, all: true).map(&:to_s)
+    assert_equal ["pi/6", "5*pi/6"], RCAS.solve(RCAS.sin(:x) - Rational(1, 2), :x, principal: true).map(&:to_s),
+                 "one period when it is asked for"
+    assert_equal ["{pi/6 + 2*pi*k | k in ZZ}", "{5*pi/6 + 2*pi*k | k in ZZ}"],
+                 RCAS.solve(RCAS.sin(:x) - Rational(1, 2), :x).map(&:to_s), "and every solution by default"
+    assert_equal ["{pi/4 + pi*k | k in ZZ}"], RCAS.solve(RCAS.tan(:x) - 1, :x).map(&:to_s), "tan has period pi"
+    assert_equal ["{pi/2 + 2*pi*k | k in ZZ}", "{-pi/2 + 2*pi*k | k in ZZ}"], RCAS.solve(RCAS.cos(:x), :x).map(&:to_s)
+    assert_equal ["{pi/12 + pi*k | k in ZZ}", "{5*pi/12 + pi*k | k in ZZ}"],
+                 RCAS.solve(RCAS.sin(2 * :x) - Rational(1, 2), :x).map(&:to_s)
+    assert_equal ["log(3)"], RCAS.solve(RCAS.exp(:x) - 3, :x).map(&:to_s), "no period to add"
+    assert_equal ["-2**(1/2)", "2**(1/2)"], RCAS.solve(:x**2 - 2, :x).map(&:to_s)
+    # the answer checks out against the equation it solves, with no assumption from the reader
+    assert_equal ["1/2", "1/2"], RCAS.solve(RCAS.sin(:x) - Rational(1, 2), :x)
+                                     .map { |set| set.map { |e| RCAS.sin(e).simplify }.to_s }
     # the parameter avoids the names already in the equation
     assert_includes RCAS.solve(RCAS.sin(:k * :x), :x, all: true).map(&:to_s).join(" "), "n"
     # every member of the family really is a solution
-    family = RCAS.solve(RCAS.sin(:x) - Rational(1, 2), :x, all: true).first
-    (-2..2).each { |i| assert_in_delta 0.5, RCAS.sin(family.subs(k: i)).evalf, 1e-12 }
+    family = RCAS.solve(RCAS.sin(:x) - Rational(1, 2), :x).first
+    (-2..2).each { |i| assert_in_delta 0.5, RCAS.sin(family.at(i)).evalf, 1e-12 }
   end
 
   def test_a_ruby_comparison_is_explained
@@ -214,7 +223,8 @@ class SolveTest < Minitest::Test
     assert_equal ["2"], strs(s(:x * abs[:x] - 4, :x)), "the root of the other branch does not lie in it"
     assert_equal ["0"], strs(s(RCAS.sign(:x), :x)), "sign vanishes where its argument does"
     assert_equal ["-1", "1"], strs(s(RCAS.sign(:x) * :x - 1, :x))
-    assert_equal ["-pi/6", "pi/6", "5*pi/6", "7*pi/6"], strs(s(abs[RCAS.sin(:x)] - Rational(1, 2), :x))
+    assert_equal ["-pi/6", "pi/6", "5*pi/6", "7*pi/6"],
+                 strs(s(abs[RCAS.sin(:x)] - Rational(1, 2), :x, principal: true))
   end
 
   def test_a_whole_branch_of_solutions_says_so
@@ -257,17 +267,17 @@ class SolveTest < Minitest::Test
   # (x + 1)*(x - 2)*sin(x) raised NotImplementedError.
   def test_a_product_is_solved_factor_by_factor
     x = RCAS::Var.new(:x)
-    assert_equal ["-1", "0", "2", "pi"], strs(RCAS.solve((x + 1) * (x - 2) * RCAS.sin(x), x))
-    assert_equal ["-1", "2", "2*pi*k", "pi + 2*pi*k"],
-                 strs(RCAS.solve((x + 1) * (x - 2) * RCAS.sin(x), x, all: true))
+    assert_equal ["-1", "0", "2", "pi"], strs(RCAS.solve((x + 1) * (x - 2) * RCAS.sin(x), x, principal: true))
+    assert_equal ["-1", "2", "{2*pi*k | k in ZZ}", "{pi + 2*pi*k | k in ZZ}"],
+                 strs(RCAS.solve((x + 1) * (x - 2) * RCAS.sin(x), x))
     assert_equal ["2"], strs(RCAS.solve(RCAS.exp(x) * (x - 2), x)), "exp is never zero"
     assert_equal ["-1", "2"], strs(RCAS.solve(RCAS.sqrt(x + 1) * (x - 2), x))
-    assert_equal ["0", "1", "pi"], strs(RCAS.solve((x - 1)**2 * RCAS.sin(x), x))
+    assert_equal ["0", "1", "pi"], strs(RCAS.solve((x - 1)**2 * RCAS.sin(x), x, principal: true))
     assert_equal ["-2", "2"], strs(RCAS.solve((x**2 - 4) * RCAS.exp(-x), x))
-    assert_equal ["0", "pi"], strs(RCAS.solve(RCAS.sin(x) / (x - 2), x)), "a denominator has no roots"
+    assert_equal ["0", "pi"], strs(RCAS.solve(RCAS.sin(x) / (x - 2), x, principal: true)), "a denominator has no roots"
     # the product the normal form has already multiplied out
     assert_equal ["1", "2"], strs(RCAS.solve((x - 2) * RCAS.log(x) / x, x))
-    assert_equal ["-1", "0", "pi"], strs(RCAS.solve(RCAS.sin(x) * x + RCAS.sin(x), x))
+    assert_equal ["-1", "0", "pi"], strs(RCAS.solve(RCAS.sin(x) * x + RCAS.sin(x), x, principal: true))
     assert_equal [["log(x)", "-2 + x"]],
                  [RCAS::Simplify.common_factor((RCAS.log(x) * x - 2 * RCAS.log(x)).simplify).map(&:to_s)]
   end
@@ -280,7 +290,8 @@ class SolveTest < Minitest::Test
     assert_equal ["1", "2"], strs(RCAS.solve(RCAS.log(x) * (x**2 - 4), x))
     assert_equal ["1"], strs(RCAS.solve(x * RCAS.sqrt(x - 1), x))
     assert_equal ["1", "2"], strs(RCAS.solve((x - 2) * RCAS.log(x) / x, x))
-    assert_equal ["-1", "0", "2", "pi"], strs(RCAS.solve((x + 1) * (x - 2) * RCAS.sin(x), x)), "and nothing lost"
+    assert_equal ["-1", "0", "2", "pi"],
+                 strs(RCAS.solve((x + 1) * (x - 2) * RCAS.sin(x), x, principal: true)), "and nothing lost"
   end
 
   # "Every value of x" is every value x can take: with x an integer,
@@ -292,7 +303,8 @@ class SolveTest < Minitest::Test
     RCAS.assume(x: RCAS::ZZ) do
       assert_equal RCAS::ZZ, RCAS.solve(RCAS.sin(RCAS::PI * x), x)
     end
-    assert_equal ["0", "1"], strs(RCAS.solve(RCAS.sin(RCAS::PI * x), x)), "undeclared: one period"
+    assert_equal ["{2*k | k in ZZ}", "{1 + 2*k | k in ZZ}"], strs(RCAS.solve(RCAS.sin(RCAS::PI * x), x)),
+                 "undeclared: every solution, which is every integer, in two families"
   end
 
   # One factor rcas cannot solve means roots it cannot name: a partial list
@@ -301,6 +313,28 @@ class SolveTest < Minitest::Test
     x = RCAS::Var.new(:x)
     e = assert_raises(NotImplementedError) { RCAS.solve(RCAS.sin(x) * (x - RCAS.cos(x)), x) }
     assert_match(/nsolve/, e.message)
+  end
+
+  # The set itself: what it prints as, what it is made of, and what can be
+  # asked of it without taking it apart.
+  def test_an_image_set_is_an_object
+    k = RCAS::Var.new(:k)
+    set = RCAS::ImageSet.new((RCAS::PI / 6 + 2 * RCAS::PI * k).simplify, k)
+    assert_equal "{pi/6 + 2*pi*k | k in ZZ}", set.to_s
+    assert_equal "\\left\\{ \\frac{\\pi}{6} + 2 \\pi k \\mid k \\in \\mathbb{Z} \\right\\}", set.to_latex
+    assert_equal "pi/6", set.at(0).to_s
+    assert_equal "25*pi/6", set.at(2).to_s
+    assert_equal [], set.variables, "k belongs to the set, not to the reader"
+    assert_equal RCAS::ZZ, set.domain
+    assert_equal set, RCAS::ImageSet.new((RCAS::PI / 6 + 2 * RCAS::PI * k).simplify, [k])
+    refute_equal set, RCAS::ImageSet.new((RCAS::PI / 6 + 2 * RCAS::PI * k).simplify, k, RCAS::RR)
+    # the members between two numbers, and nil when there are more than asked for
+    assert_equal ["pi/6", "13*pi/6"], set.between(0.0, 8.0).map(&:to_s)
+    assert_nil set.between(0.0, 1e6, limit: 64)
+    # map keeps the family when the parameter survives and drops it when not
+    assert_equal "{1 + pi/6 + 2*pi*k | k in ZZ}", set.map { |e| (e + 1).simplify }.to_s
+    assert_equal "1/2", set.map { |e| RCAS.sin(e).simplify }.to_s
+    assert_empty RCAS.assumptions, "the parameter's domain is the set's business, not the session's"
   end
 
 end

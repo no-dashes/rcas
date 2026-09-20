@@ -520,7 +520,7 @@ module RCAS
       else
         polynomial(coefficients, var, out)
       end
-      Derivation.new(Equation.new(equation.lhs, equation.rhs), out, Solve.solve(equation, var.name))
+      Derivation.new(Equation.new(equation.lhs, equation.rhs), out, Solve.solve(equation, var.name, principal: true))
     end
 
     def polynomial(coefficients, var, out)

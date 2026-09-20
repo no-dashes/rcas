@@ -285,8 +285,9 @@ Read on: 1.1 Expressions, 1.2 Numbers and constants, 1.9 Geometry,
 
 Polynomials factor, quadratics and inequalities solve, and an inequality
 answers with the set of solutions (`[2, 3]` here is the closed interval,
-not a pair). Trigonometric equations give the solutions in one period, or
-the whole family with `all: true`. Then the first calculus: derivatives,
+not a pair). A trigonometric equation is answered with the whole
+family of its solutions, as a set; `principal: true` asks for the ones in
+one period instead. Then the first calculus: derivatives,
 curve sketching, definite integrals, sums, and probability. A function may
 be given case by case with `piecewise`, and `discontinuities` and `kinks`
 name the points where its pieces do not fit together. `discuss` answers
@@ -302,8 +303,8 @@ rcas> solve(x**2 - 5*x + 6, x)
 => [2, 3]
 rcas> solve(x**2 - 5*x + 6 <= 0, x)
 => [2, 3]
-rcas> solve(sin(x) - 1/2r, x, all: true)
-=> [pi/6 + 2*pi*k, 5*pi/6 + 2*pi*k]
+rcas> solve(sin(x) - 1/2r, x)
+=> [{pi/6 + 2*pi*k | k in ZZ}, {5*pi/6 + 2*pi*k | k in ZZ}]
 rcas> extrema(x**3 - 3*x, x)
 => [[-1, 2, :maximum], [1, -2, :minimum]]
 rcas> integrate(x**2, x, 0, 3)
@@ -1925,7 +1926,7 @@ roots missing from the answer with nothing to say so, and the message
 names `nsolve` instead.
 
 ```
-rcas> solve((x + 1)*(x - 2)*sin(x), x)
+rcas> solve((x + 1)*(x - 2)*sin(x), x, principal: true)
 => [-1, 0, 2, pi]
 rcas> solve(exp(x)*(x - 2), x)
 => [2]
@@ -1966,9 +1967,9 @@ rcas> solve(2**x - 8, x)
 => [3]
 rcas> solve(log(x) - 2, x)
 => [exp(2)]
-rcas> solve(sin(x) - 1/2r, x)
+rcas> solve(sin(x) - 1/2r, x, principal: true)
 => [pi/6, 5*pi/6]
-rcas> solve(cos(x), x)
+rcas> solve(cos(x), x, principal: true)
 => [-pi/2, pi/2]
 ```
 
@@ -2014,31 +2015,39 @@ rcas> solve([x**2 - 1, y - x, z**2 - x], [x, y, z])
 => [{x=>1, y=>1, z=>1}, {x=>1, y=>1, z=>-1}, {x=>-1, y=>-1, z=>-i}, {x=>-1, y=>-1, z=>i}]
 ```
 
-A trigonometric equation has infinitely many solutions. `solve` returns the
-ones in a single period, which is what a textbook answer looks like;
-`all: true` adds the period with an integer parameter, so that the family
-is complete.
+A trigonometric equation has infinitely many solutions, and a list of
+numbers cannot say so. `solve` answers with one set per period - an image
+set, `{pi/6 + 2*pi*k | k in ZZ}`, which is the form MuPAD uses and the
+general solution a trigonometry course writes. `principal: true` asks for
+the solutions in one period instead, which is the textbook's other answer
+and what the analysis inside rcas works with.
 
 ```
 rcas> solve(sin(x) - 1/2r, x)
+=> [{pi/6 + 2*pi*k | k in ZZ}, {5*pi/6 + 2*pi*k | k in ZZ}]
+rcas> solve(sin(x) - 1/2r, x, principal: true)
 => [pi/6, 5*pi/6]
-rcas> solve(sin(x) - 1/2r, x, all: true)
-=> [pi/6 + 2*pi*k, 5*pi/6 + 2*pi*k]
-rcas> solve(tan(x) - 1, x, all: true)
-=> [pi/4 + pi*k]
+rcas> solve(tan(x) - 1, x)
+=> [{pi/4 + pi*k | k in ZZ}]
+rcas> solve(sin(2*x) - 1/2r, x)
+=> [{pi/12 + pi*k | k in ZZ}, {5*pi/12 + pi*k | k in ZZ}]
 ```
 
-The parameter is an integer, and saying so is what lets the family be
-checked: sine and cosine repeat every `2*pi` and the tangent every `pi`,
-so a whole period added to the argument drops out once the multiple is
-known to be a whole number. Without that, `k` could be `1/2` and nothing
-may be dropped.
+The set carries the domain of its parameter, which is what lets the family
+be checked: sine and cosine repeat every `2*pi` and the tangent every
+`pi`, so a whole period added to the argument drops out once the multiple
+is known to be a whole number - and the set knows, so nothing has to be
+declared first. `set.map { }` applies a function to the member and answers
+with the set of results, or with the value itself when the parameter has
+gone; `at(k)` picks one member out.
 
 ```
 rcas> assume(k: ZZ) { sin(x + 2*pi*k).simplify }
 => sin(x)
-rcas> assume(k: ZZ) { solve(sin(x) - 1/2r, x, all: true).map { |s| sin(s).simplify } }
+rcas> solve(sin(x) - 1/2r, x).map { |set| set.map { |e| sin(e).simplify } }
 => [1/2, 1/2]
+rcas> solve(sin(x), x).first.at(3)
+=> 6*pi
 ```
 
 Where the unknown lives is part of the question. A domain declared with
@@ -2073,8 +2082,8 @@ rcas> solve(x**2 - 4, x)
 => [2]
 rcas> forget
 => true
-rcas> solve(hold { sin(x) == 0 }, x, all: true, domain: ZZ)
-=> [2*pi*k, pi + 2*pi*k]
+rcas> solve(hold { sin(x) == 0 }, x, domain: ZZ)
+=> [0]
 ```
 
 Membership is decided exactly where it can be: `1/2` is not an integer by
@@ -3920,7 +3929,7 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | length, area, volume | `arclength revolution_volume revolution_surface` |
 | several variables | `gradient hessian jacobian divergence curl laplacian lagrange` |
 | line and surface integrals | `line_integral surface_integral flux enclosed_area green stokes divergence_theorem conservative? potential` |
-| algebra | `solve eq factor groebner reduce interval` |
+| algebra | `solve` (`principal: true` for one period), `eq factor groebner reduce interval` |
 | differential equations, recurrences | `D dsolve rsolve hyper laplace inverse_laplace` |
 | complex numbers | `re im conj arg` |
 | rounding | `floor ceil round mod` |

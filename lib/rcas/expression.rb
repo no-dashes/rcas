@@ -212,7 +212,7 @@ module RCAS
 
     # x.eq(4) is the equation x = 4; solve(var) solves self = 0.
     def eq(other) = Equation.new(self, other)
-    def solve(var = nil, all: false, domain: nil) = Solve.solve(self, var, all: all, domain: domain)
+    def solve(var = nil, all: true, principal: false, domain: nil) = Solve.solve(self, var, all: all, principal: principal, domain: domain)
 
     # re, im, conj, arg: the complex parts (see ComplexParts)
     def re = ComplexParts.re(self)

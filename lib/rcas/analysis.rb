@@ -38,7 +38,7 @@ module RCAS
     def critical_points(f, var = nil)
       f = Expression.lift(f)
       x = variable(f, var)
-      sort_points(Solve.solve(f.diff(x), x))
+      sort_points(Solve.solve(f.diff(x), x, principal: true))
     rescue NotImplementedError, ArgumentError
       []
     end
@@ -86,7 +86,7 @@ module RCAS
       x = variable(f, var)
       second = f.diff(x, 2)
       candidates = points || begin
-        Solve.solve(second, x)
+        Solve.solve(second, x, principal: true)
       rescue NotImplementedError, ArgumentError
         []
       end
@@ -111,7 +111,7 @@ module RCAS
 
     def vertical_asymptotes(f, x)
       poles = denominators(f, x).flat_map do |denominator|
-        Solve.solve(denominator, x)
+        Solve.solve(denominator, x, principal: true)
       rescue NotImplementedError, ArgumentError
         []
       end
@@ -298,7 +298,7 @@ module RCAS
       equations = xs.map do |x|
         gs.each_with_index.reduce(f.diff(x)) { |acc, (g, i)| acc - multipliers[i] * g.diff(x) }.simplify
       end
-      solutions = Solve.solve(equations + gs, xs + multipliers)
+      solutions = Solve.solve(equations + gs, xs + multipliers, principal: true)
       solutions.map { |s| xs.to_h { |x| [x, s[x]] } }
     end
   end

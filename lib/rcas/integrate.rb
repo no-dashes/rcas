@@ -132,7 +132,7 @@ module RCAS
       unsolved = []
       candidates.uniq.each do |d|
         roots = begin
-          Solve.solve(d, x)
+          Solve.solve(d, x, principal: true)
         rescue StandardError, NotImplementedError
           nil
         end
@@ -182,7 +182,9 @@ module RCAS
           next
         end
         roots.each do |root|
-          members = instantiate(root, x, lo, hi) or return nil
+          # a family of breaks that cannot be counted out is not "no breaks"
+          members = root.is_a?(ImageSet) ? root.between(lo, hi, limit: MAX_BREAKS) : [root]
+          return nil if members.nil?
           points.concat(members)
         end
       end
@@ -191,29 +193,11 @@ module RCAS
             .uniq.select { |p| jumps?(antiderivative, x, p, span) }
     end
 
+    # More than this many breaks in the range and the integral is held
+    # rather than split: `ImageSet#between` answers nil past it, and nil is
+    # "cannot tell", not "none" - one family of two dropping out silently
+    # left integrate(1/(2 + cos(x)), x, 0, 254*PI) wrong by a factor of two.
     MAX_BREAKS = 64
-
-    # The members of a family like pi + 4*pi*k that lie between the bounds;
-    # a root without a parameter stands for itself. nil when they cannot be
-    # counted out - more than MAX_BREAKS of them, a second parameter, a step
-    # rcas cannot measure. `[]` would say "no breaks here", and one family
-    # of two dropping out that way left
-    # integrate(1/(2 + cos(x)), x, 0, 254*PI) with a plausible number that
-    # was wrong by a factor of two.
-    def instantiate(root, x, lo, hi)
-      parameters = root.variables - [x.name]
-      return [root] if parameters.empty?
-      return nil unless parameters.size == 1
-      k = Var.new(parameters.first)
-      base = real_number(root.subs(k => Num.new(0)))
-      next_one = base && real_number(root.subs(k => Num.new(1)))
-      return nil if base.nil? || next_one.nil?
-      step = next_one - base
-      return nil if step.abs < 1e-12
-      first, last = [((lo - base) / step).floor, ((hi - base) / step).ceil].minmax
-      return nil if last - first > MAX_BREAKS
-      (first..last).map { |i| root.subs(k => Num.new(i)).simplify }
-    end
 
     # Do the values of F either side of the point disagree? Read off two
     # samples rather than two limits, and deliberately one-sided the safe

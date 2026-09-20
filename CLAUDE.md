@@ -55,6 +55,19 @@ background in `doc`/`/help`, and the manual full of worked transcripts.
   reads recurrences written this way. `dsolve` still uses `D(y, x)`.
 - **Parameter**: an indeterminate that is not the one being solved,
   integrated or summed for (`a` in `solve(x**2 - a >= 0, x)`).
+- **Image set**: `{pi/6 + 2*pi*k | k in ZZ}`, the answer `solve` gives an
+  equation with infinitely many solutions (20 Sept 2026, the user's call
+  after the review asked what `solve(sin(x))` should be). `ImageSet` is not
+  an Expression - like `Equation`, `Inequality` and `Membership` it is a
+  statement about them - and it carries the parameter's domain, which is
+  what lets `set.map { }` fold `sin` of a member to 1/2 without the reader
+  declaring anything. `solve` is complete by default now; `principal: true`
+  (or the older `all: false`) asks for one period, which is what every
+  caller inside rcas wants - `discuss`, `Analysis`, `Piecewises`, `steps`
+  and the sign charts all pass it. `restrict` can decide a family against a
+  declared domain where the members are rational multiples of pi, since pi
+  is transcendental: `{2*pi*k | k in ZZ}` meets ZZ in 0 alone and
+  `{pi + 2*pi*k | k in ZZ}` not at all.
 - The API method `Expression#variables` returns the indeterminates; the
   name follows CAS convention and stays. The manual notes this once.
 - **domain and base** (settled 17 Sept 2026, after "`(ZZ**[2,2]).random.domain`

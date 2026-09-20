@@ -336,4 +336,16 @@ class OpenMathTest < Minitest::Test
                    "#{name} encodes to #{cd}.#{symbol}, which must decode again"
     end
   end
+  # {2*pi*k | k in ZZ} is the image of a number set under a function, which
+  # is what set1.map says over there.
+  def test_an_image_set_round_trips
+    k = RCAS::Var.new(:k)
+    set = RCAS::ImageSet.new((2 * RCAS::PI * k).simplify, k)
+    assert_equal "set1.map(fns1.lambda[$k -> arith1.times(arith1.times(2, nums1.pi), $k)], setname1.Z)",
+                 om(set).to_s
+    assert_equal "map(lambda[$k -> 2*pi*$k], Z)", om(set).to_popcorn
+    assert_equal set, back(om(set).to_xml)
+    assert_equal set, RCAS.from_popcorn(om(set).to_popcorn)
+  end
+
 end
