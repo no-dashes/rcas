@@ -384,12 +384,23 @@ module RCAS
       def pixel_height = @height * 4
 
       def set(px, py)
-        return if px.negative? || py.negative? || px >= pixel_width || py >= pixel_height
+        return if outside?(px, py)
         @cells[(py / 4) * @width + (px / 2)] |= DOTS[px % 2][py % 4]
       end
 
-      # Bresenham's line algorithm [Bre65].
-      def line(x0, y0, x1, y1)
+      # Take a dot away again: what a nearer surface covers (plot3d.rb).
+      def unset(px, py)
+        return if outside?(px, py)
+        @cells[(py / 4) * @width + (px / 2)] &= ~DOTS[px % 2][py % 4]
+      end
+
+      def outside?(px, py) = px.negative? || py.negative? || px >= pixel_width || py >= pixel_height
+
+      def line(x0, y0, x1, y1) = trace(x0, y0, x1, y1) { |px, py| set(px, py) }
+
+      # Bresenham's line algorithm [Bre65]. The pixels are yielded rather
+      # than set, because plot3d.rb rubs a line out along the same path.
+      def trace(x0, y0, x1, y1)
         dx = (x1 - x0).abs
         dy = -(y1 - y0).abs
         sx = x0 < x1 ? 1 : -1
@@ -398,7 +409,7 @@ module RCAS
         x = x0
         y = y0
         loop do
-          set(x, y)
+          yield(x, y)
           break if x == x1 && y == y1
           double = 2 * error
           if double >= dy
@@ -704,11 +715,7 @@ module RCAS
       nil
     end
 
-    # Auto scale, cut back to Tukey's far-out fence when a pole would
-    # otherwise flatten the picture: a few samples beside a pole are
-    # arbitrarily large, and they must not decide the scale of the rest.
-    # The fence is wider than the data for a well-behaved function, so
-    # taking it together with the true range leaves that one alone.
+    # The y range: the one given, or the one the samples ask for.
     def y_range(curves, given)
       if given
         lo = numeric(given.begin)
@@ -718,6 +725,16 @@ module RCAS
       end
       values = curves.flat_map { |c| c.points.compact.map(&:last) }.sort
       raise Plot::Error, "plot: the function has no finite values in this range" if values.empty?
+      autoscale(values)
+    end
+
+    # The scale a sorted list of values deserves, cut back to Tukey's
+    # far-out fence when a pole would otherwise flatten the picture: a few
+    # samples beside a pole are arbitrarily large, and they must not decide
+    # the scale of the rest. The fence is wider than the data for a
+    # well-behaved function, so taking it together with the true range
+    # leaves that one alone. plot3d.rb asks the same of each of its axes.
+    def autoscale(values)
       lo = values.first
       hi = values.last
       if values.size > 20

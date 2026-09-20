@@ -529,6 +529,10 @@ module RCAS
     # scatter(xs, ys) or scatter(points), fit: true adds the least squares line
     def scatter(xs, ys = nil, **opts) = Plotting.scatter(xs, ys, **opts)
 
+    # plot3d(sin(x*y), x: -3..3, y: -3..3), plot3d([X, Y, Z], u: 0..1, v: 0..1): a surface,
+    # drawn as a mesh with what lies behind it hidden; n: the mesh, view: [azimuth, elevation]
+    def plot3d(f, **opts) = Plotting.plot3d(f, **opts)
+
     # parametric([cos(t), sin(t)], t: 0..2*pi): a curve given by its two components
     def parametric(pair, var = nil, from = nil, to = nil, **opts) = Plotting.parametric(pair, var, from, to, **opts)
 

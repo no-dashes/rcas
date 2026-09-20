@@ -144,6 +144,7 @@ lib/rcas/background.rb      (titles verified against the Wikipedia API 2026-09-1
 lib/rcas/background.rb      Background::ENTRIES: { maths:, method: } per name (or a Symbol alias) and READING: Wikipedia article titles (ASCII, spaces not underscores; Docs expands the [Key00] citations from MANUAL's bibliography itself); test/docs_test.rb checks the names exist and the [Key00] sources are in MANUAL's bibliography
 lib/rcas/docs.rb            Docs.doc(name) -> Documentation: signature + comment block read from the source, `Docs::NAMESPACES` resolves `Poly.legendre` (and the bare `chebyshev_t` when no top-level function has the name; Background keys them as `"Poly.legendre"`), plus the MANUAL.md headings that mention the name; the chat's /help NAME and the top-level doc() use it. test/docs_test.rb asserts every top-level function has a comment
 lib/rcas/plot.rb            Plot (braille canvas, SVG, PNG via Render.which/run + Chrome) and Plotting.plot/parametric/polar/scatter/histogram/boxplot/barchart (Curve markers: line, :dot, :stem, :bar, :box; ylabels/xlabels name the rows and columns); Plot has no to_latex on purpose, so the chat shows the art. `Plot.style` (:text/:image, RCAS_PLOT_STYLE) is the hook the chat's /plotstyle writes; `picture?`/`picture` draw the inline image
+lib/rcas/plot3d.rb          Plot3D (a Plot) + Plotting.plot3d: surfaces in space, the graph z = f(x, y) and the parametrized kind. A mesh, a parallel projection (azimuth/elevation), and the faces painted back to front, each erasing its own area before drawing its edges - the depth sort [NNS72], no z buffer. Three decisions are load-bearing: the *terminal* picture is built from a coarser mesh (`terminal_step`), because braille faces two or three dots wide rub out each other's shared edges and the picture comes out speckled; the erase walks the face outline as well as filling it, since a thin face's scanlines round away to nothing; and each axis is scaled to the box on its own for a graph, while a *parametric* surface gets one scale for all three (`equal:`), so a sphere is round
 lib/rcas/numerics.rb        Numerics.nsolve (bisection + Newton, and `pole?` on the answer: a sign change across a pole is not a root), nintegrate (bounded adaptive Simpson first, its answer cross-checked against composite Gauss-Legendre - `resonant?`, because Simpson refines by halving and an integrand whose period divides the interval samples the same phase at every level, so sin(x)**2 over 0..100*pi came back as 0; the Gauss panels escalate until the second opinion settles, so a genuinely oscillating integrand is still believed - then Precision.quadrature at 17 digits; `caller_for` refloats a folded exact constant, or the integrand has a hole wherever exp(-1.0) folds back to 1/e), resolve (evalf on a definite Integral)
 lib/rcas/analysis.rb        Analysis: critical_points/extrema/inflections/asymptotes/tangent/normal/real_domain, gradient/hessian/jacobian/divergence/curl/laplacian/lagrange, arclength/revolution_volume/revolution_surface. `domain_conditions` is the list real_domain intersects: one per denominator, even root and logarithm, and *two* per `asin`/`acos` (`BOUNDED_INVERSES`, 20 Sept 2026), which is the first condition with an upper bound - `Solve.defined_roots` needed `:<`/`:<=` cases for it
 lib/rcas/vector_calculus.rb VectorCalculus: line_integral/surface_integral/flux over a parametrization, enclosed_area, green/stokes/divergence_theorem (each computes the side over the region, the integrals compute the other), conservative?/potential; `norm` takes perfect squares out of the length element with the sign they have on the parameter range
@@ -961,9 +962,11 @@ Not implemented (keep this in step with MANUAL.md "2. Reference", which
 lists the same gaps for the reader): full Risch, special functions beyond
 erf, Ei, Si, Ci and li (the dilogarithm, and with it log(x)/(1 + x)),
 rational functions needing a real factor of degree three or more
-(1/(x**3 - 2), 1/(x**8 + 1)), ANOVA and non-parametric tests (Wilcoxon, KS), 3-d
-plots, geometry in space, conics, surfaces given implicitly rather than by a
-parametrization (vector_calculus.rb always asks for one), differential forms
+(1/(x**3 - 2), 1/(x**8 + 1)), ANOVA and non-parametric tests (Wilcoxon, KS),
+geometry in space, conics, curves in space (plot3d.rb draws surfaces, not
+those), surfaces given implicitly rather than by a graph or a
+parametrization (vector_calculus.rb and plot3d.rb both ask for one),
+differential forms
 of their own, Fourier transforms (the *series* are in
 fourier.rb), group
 theory, ODEs with variable coefficients beyond first
@@ -1038,7 +1041,9 @@ than guessing, and ask rather than reconstruct), and then line and surface
 integrals with Green, Stokes and Gauss (17 Sept 2026, on the parametric
 curves that had just landed: vector_calculus.rb), and then random objects
 (17 Sept 2026, "we need some more parameters": on the structures, with the
-keywords that make an object worth fiddling with). ODEs with variable
+keywords that make an object worth fiddling with), and then `plot3d`
+(20 Sept 2026, "can you create a plot3d method to plot 3d surfaces": the
+last of the plotting gaps the manual listed). ODEs with variable
 coefficients (Bernoulli, Riccati, exact equations, Cauchy-Euler, and
 Frobenius series solutions, which are fps.rb run backwards) are the most
 requested-adjacent remaining item; a `steps`/`explain` layer that narrates

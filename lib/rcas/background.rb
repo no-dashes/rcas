@@ -253,6 +253,7 @@ module RCAS
       matrix: { maths: "A matrix over a domain: a linear map in coordinates. Determinant, rank, kernel and eigenvalues are the invariants a first course computes.", method: "Gaussian elimination with exact arithmetic, cofactor expansion for small sizes, and for polynomial entries evaluation at rational points with Newton interpolation [Hor08]." },
       vector: { maths: "An element of a free module or vector space, with dot and cross products and a norm.", method: "Entries stay exact; the space records the domain, which widens as needed." },
       plot: { maths: "A picture of a function: pairs (x, f(x)) joined into a curve. What a sampled picture cannot show is what happens between the samples, so a pole is broken rather than bridged.", method: "Uniform sampling, Bresenham line drawing on a braille canvas [Bre65], and a y range trimmed to the central 96 per cent so one pole does not flatten the rest." },
+      plot3d: { maths: "A picture of a function of two variables, or of a surface in space: the points (x, y, f(x, y)), or a parametrization, drawn as a mesh. A flat picture cannot show depth, so what tells a near part of the surface from a far one is that the near one hides the far one.", method: "The mesh is projected in parallel from a given azimuth and elevation, and its quadrilaterals are painted from the back forwards, each rubbing out what lies inside it before its own edges are drawn: the depth sort, or painter's algorithm [NNS72]." },
 
       # ---- statistics -----------------------------------------------------------------
       mean: { maths: "The arithmetic mean, the balance point of the data; the median is the middle value and resists outliers, the mode is the most frequent one.", method: "Exact rational arithmetic, so no rounding creeps in." },
@@ -617,6 +618,7 @@ module RCAS
       matrix: ["Matrix (mathematics)", "Gaussian elimination", "Eigenvalues and eigenvectors"],
       vector: ["Vector space", "Euclidean vector"],
       plot: ["Graph of a function"],
+      plot3d: ["Surface (mathematics)", "Hidden-surface determination", "Painter's algorithm", "Axonometric projection"],
       scatter: ["Scatter plot"],
       mean: ["Arithmetic mean", "Median", "Mode (statistics)"],
       variance: ["Variance", "Standard deviation", "Bessel's correction"],

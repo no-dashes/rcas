@@ -97,6 +97,7 @@ same way the transcripts here are checked - nothing in them is typed by hand.
     - [Confidence intervals](#confidence-intervals)
   - [1.11 Plotting](#111-plotting)
     - [Parametric and polar curves](#parametric-and-polar-curves)
+    - [Surfaces in space](#surfaces-in-space)
     - [Statistical plots](#statistical-plots)
   - [1.12 The q-analogues](#112-the-q-analogues)
     - [q-summation](#q-summation)
@@ -331,7 +332,9 @@ it is one, and `evalf(f, 50)` gives fifty digits when sixteen are not
 enough. An integrand like `sin(x)/x` gets the name of its
 antiderivative (`Si`), arc lengths and solids of revolution have their own
 functions, and the named matrix factorizations - `lu`, `qr`, `cholesky`,
-`diagonalize`, `jordan` - are all exact.
+`diagonalize`, `jordan` - are all exact. A function of two variables can be
+looked at: `plot3d` draws its graph as a surface, in the terminal or as a
+picture.
 
 ```
 rcas> limit(sin(x)/x, x, 0)
@@ -348,12 +351,14 @@ rcas> matrix([[2, 1], [1, 2]]).eigenvalues
 => [1, 3]
 rcas> gradient(x**2*y, [x, y])
 => (2*x*y, x**2)
+rcas> plot3d(x**2 - y**2, x: -2..2, y: -2..2).z_range
+=> -4.4..4.4
 rcas> ttest([5.1, 4.9, 5.6, 5.2, 5.0], mu: 5)
 => one-sample t test: t = 1.32417, df = 4, p = 0.256044 (two-sided)
 ```
 
 Read on: 1.3 Calculus, 1.7 Linear algebra, 1.8 Differential equations and
-recurrences, 1.10 Statistics.
+recurrences, 1.10 Statistics, 1.11 Plotting.
 
 ### University (undergraduate)
 
@@ -3534,6 +3539,94 @@ rcas> polar(1 + cos(t), width: 40, height: 12, title: "r = 1 + cos(t)")
            -0.3625                            2.112
 ```
 
+#### Surfaces in space
+
+`plot3d(f, x: a..b, y: c..d)` draws the graph `z = f(x, y)` over a
+rectangle of the plane, and `plot3d([X, Y, Z], u: .., v: ..)` a surface
+given by a parametrization, as `parametric` does for a curve. The surface
+is sampled on a mesh and projected in parallel from a point above it and
+to one side; `view: [azimuth, elevation]` in degrees moves that point.
+The quadrilaterals of the mesh are then painted from the back forwards,
+each rubbing out what lies inside it before drawing its own edges, so
+what you see is a surface and not a net you can see through. The three
+ranges are named underneath: a projected picture has no axis to hang
+numbers on.
+
+```
+rcas> plot3d(x**2 + y**2, x: -2..2, y: -2..2, width: 52, height: 14)
+=> ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⡠⡺⡕⠒⠢⠤⣀⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠔⠁⢀⠇⠘⡄⠀⠀⠀⠀⠉⠑⠒⠤⠤⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡠⠊⠁⠀⠀⡸⠀⠀⠘⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⢑⡆⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠔⠊⠀⠀⠀⠀⡰⠱⡀⠀⠀⡜⠢⡀⠀⠀⠀⠀⠀⠀⠀⠀⡠⢺⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠐⡄⠀⠀⠀⠀⡰⠁⠀⠱⡀⢠⠃⠀⠈⠢⣀⣀⠀⠀⣀⠤⡲⠁⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⢆⣀⠀⡔⠱⡀⠀⠀⠱⡘⠀⠀⠀⢰⠁⠀⢩⠋⠀⢠⢃⡼⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⢣⠉⢆⠀⠘⡄⠀⢰⠉⠢⢄⠀⣇⢄⠀⡎⠀⢀⡨⡳⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢳⣌⢆⠀⠈⢆⠃⠀⠀⠀⡩⠃⠈⢲⠕⠊⣝⠔⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠳⡑⢤⢔⣁⣑⠤⠒⠉⢆⠀⢀⡔⢉⡾⠋⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⡠⠊⠚⢦⠀⠘⢄⠀⠀⣀⠧⢎⡠⠋⠒⠒⠤⢄⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠔⠁⠀⠀⠀⠀⠉⠛⠺⠶⢭⡠⠔⠉⠀⠀⠀⠀⠀⠀⡠⠜⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠠⢎⣁⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⡠⠊⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠒⠒⠤⢄⣀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠔⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠉⠒⠢⠤⢄⡠⠊⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   x: -2..2   y: -2..2   z: -0.4..8.4
+```
+
+The box is drawn as its floor and the two walls behind the surface. Each
+axis is scaled to that box on its own, because the height of a graph is
+not measured in the units of its base; a surface in space keeps one scale
+for all three instead, so that a sphere comes out round. `equal: true` or
+`equal: false` settles it either way.
+
+```
+rcas> plot3d([cos(theta)*sin(phi), sin(theta)*sin(phi), cos(phi)], theta: 0..2*pi, phi: 0..pi, width: 52, height: 18)
+=> ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⡠⢺⠑⠒⠢⠤⢄⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠔⠁⠀⢸⠀⠀⠀⠀⠀⠀⠉⠉⠒⠢⠤⢄⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡠⠔⠁⠀⠀⠀⢸⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠒⠒⠤⠤⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡠⠊⠀⠀⠀⠀⠀⠀⢸⠀⠀⣀⢀⣀⢀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠔⠊⠀⠀⠀⠀⠀⠀⢀⡠⠼⡲⣛⠶⡿⢎⢗⠵⢯⢖⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠁⠀⠀⠀⠀⠀⠀⠀⡰⡏⡠⠒⠑⢢⠴⢅⣘⡤⠝⠣⡀⠈⢑⠦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡜⡜⠭⣀⠀⢀⠎⠀⠀⠀⢇⠀⠀⢈⡱⢎⠀⠑⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠏⠀⠀⠀⠉⡞⠒⠒⠤⠤⢼⠔⠊⠁⠀⠈⢆⢸⢸⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡎⠉⠢⢄⠀⢸⠀⠀⠀⠀⠀⠘⡄⠀⠀⢀⡠⠜⢆⢀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢰⣁⠀⠀⠀⠉⡗⠒⠒⠲⠤⠤⠤⡧⠒⠉⠁⠀⠀⠸⣸⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠑⠦⡀⢠⠃⠀⠀⠀⠀⠀⠀⢣⠀⠀⠀⣀⡠⢔⠇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⢤⡀⠈⢹⠒⠒⠒⠲⠤⠤⠤⢼⠔⠊⠉⠀⢀⣜⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡠⠔⠉⠪⣑⠬⣆⣀⣀⣀⠀⠀⠀⡞⣀⠤⠔⢊⠏⠀⠈⠉⠒⠒⠤⠤⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡠⠊⠀⠀⠀⠀⠀⠑⠵⣀⣀⣈⣉⣉⣩⣫⠤⠒⠊⠁⠀⠀⠀⠀⠀⠀⡠⠔⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠔⠊⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠉⠉⠉⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀⡠⠊⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠒⠒⠤⠤⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠔⠊⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠑⠒⠤⠤⣀⣀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠔⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠑⠒⠢⠤⢄⡠⠊⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   x: -1.1..1.1   y: -1.1..1.1   z: -1.1..1.1
+```
+
+`n:` is the mesh (24 points a side), `z:` cuts the box down to a range of
+heights - a point outside it is a hole, as a pole is a gap in `plot` -
+and a value that is complex or infinite leaves a hole in the same way.
+
+```
+rcas> plot3d(x*y, x: -2..2, y: -2..2, view: [20, 70], width: 44, height: 12, title: "z = x*y from above")
+=> z = x*y from above
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⠗⠲⢦⠤⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⢾⠀⠀⠀⢉⠦⢌⠉⠒⠤⢄⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡜⡧⣀⠀⠀⡜⠀⠀⠑⢢⣀⠀⠀⠉⠑⠒⠤⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡰⡹⠀⠀⠉⡺⠤⣀⠀⢠⠃⠀⠑⠤⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⢣⡃⠀⠀⢠⠃⠀⠀⢉⠗⠤⣀⠀⡜⠈⠑⢄⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠎⡜⠈⠉⢑⠗⠤⢄⡀⡸⠀⠀⠀⡝⠒⠤⣀⢀⡞⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡜⢠⠃⠀⠀⡸⠀⠀⠀⡸⠉⠒⠒⡴⢅⣀⡀⢠⡳⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡜⠉⠑⢒⠗⠒⠤⢴⠥⢄⣀⣰⠁⠀⠀⡸⢡⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢰⠁⠀⠀⡎⠀⠀⢠⠃⠀⠀⡜⠀⠉⠉⡲⢁⠎⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠓⠶⢖⣚⠒⠒⠒⠓⠒⠒⠚⠒⠒⠒⠒⠁⡜⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠑⠒⠤⣀⡀⠀⠀⠀⠀⠀⡰⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠒⠢⠤⣠⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   x: -2..2   y: -2..2   z: -4.4..4.4
+```
+
+In the terminal the surface is a wireframe, and the mesh is taken as
+coarsely as the braille dots of neighbouring lines need in order not to
+merge; `to_svg`, `save("f.svg")`, `to_png` and `show` draw every line of
+it and fill each face with a colour that follows its height.
+
 #### Statistical plots
 
 `histogram(data, bins: 4)` counts the values in equal bins (the number of
@@ -4014,7 +4107,7 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | distributions | `Normal Uniform Exponential Bernoulli Binomial Poisson Geometric DiscreteUniform StudentT ChiSquare FRatio pdf cdf probability` |
 | random objects | `ZZ.random(1..100)`, `ZZ[x].random(3, irreducible: true)`, `(ZZ**[3, 3]).random(unimodular: true)`, `GF(9).random`; `RCAS.random = 42` repeats a session |
 | tests and intervals | `ttest ztest chisquare_test ftest binomial_test confidence_interval proportion_interval` |
-| plotting | `plot parametric polar scatter histogram boxplot barchart` |
+| plotting | `plot plot3d parametric polar scatter histogram boxplot barchart` |
 | geometry | `point line circle distance midpoint angle area perimeter collinear? centroid intersect circumcircle perpendicular_bisector parallel_through perpendicular_through` |
 | special functions | `erf erfc Ei Si Ci li` |
 | domains | `NN ZZ QQ RR CC` (also `ℕ ℤ ℚ ℝ ℂ`), `GF assume forget assumptions` |
@@ -4033,8 +4126,9 @@ coeffs domain in in? to_poly to_sexp hold-related evaluate`.
 Not implemented: the complete Risch algorithm and special functions beyond
 `erf`, `Ei`, `Si`, `Ci` and `li` (the dilogarithm, so `log(x)/(1 + x)`),
 analysis of variance and non-parametric tests,
-three-dimensional plots, geometry in space, surfaces that are given
-implicitly rather than by a parametrization, Fourier
+geometry in space, curves in space and surfaces that are given implicitly
+rather than by a graph or a parametrization (`plot3d` asks for one),
+Fourier
 transforms, group theory, differential equations with variable
 coefficients beyond first order, inequalities beyond
 polynomial, rational and absolute-value ones, number fields with more than
@@ -4089,6 +4183,7 @@ lib/rcas/geometry.rb        points, lines and circles in the plane
 lib/rcas/linear_algebra.rb  orthogonality, projections and least squares
 lib/rcas/laplace.rb         the Laplace transform and its inverse
 lib/rcas/plot.rb            function plotting: braille art, SVG, PNG
+lib/rcas/plot3d.rb          surfaces in space: a projected mesh, hidden surfaces by depth sort
 lib/rcas/docs.rb            doc(name): signatures and comments read from the source
 lib/rcas/results.rb         In and Out: the numbered lines of a session
 lib/rcas/background.rb      the mathematics behind each name, its sources and Wikipedia links
@@ -4183,6 +4278,7 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | random objects: irreducible polynomials by rejection, unimodular and positive definite matrices by construction | random.rb | [vzGG13, §14.9]; [Str16, ch. 2, 6] |
 | plotting: braille canvas (the technique of drawille and UnicodePlots.jl), line drawing | plot.rb | [Bre65] |
 | histogram bin count, box plot whiskers at 1.5 interquartile ranges | plot.rb | [Stu26]; [Tuk77] |
+| surfaces in space: parallel projection of a mesh, hidden surfaces by depth sort (the painter's algorithm) | plot3d.rb | [NNS72]; [FvDFH90, ch. 6, §15.5] |
 | Gaussian integrals: exp(quadratic) by completing the square, x**n exp(quadratic) by reduction | integrate_substitutions.rb | [AS64, §7.1, §7.4] |
 | polynomial systems: lex Gröbner basis and triangular back-substitution; resultants for two equations with parameters | solve.rb | [CLO15, ch. 2 §8, ch. 3 §1]; [GCL92, ch. 9-10] |
 | Newton interpolation by divided differences | interpolate.rb | [Knu98, §4.6.4]; [vzGG13, ch. 5] |
@@ -4299,6 +4395,12 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 - [NM77] A. C. Norman, P. M. A. Moore, Implementing the new Risch
   integration algorithm, *Proc. 4th Int. Colloquium on Advanced Computing
   Methods in Theoretical Physics*, Marseille 1977, 99-110.
+- [NNS72] M. E. Newell, R. G. Newell, T. L. Sancha, A solution to the
+  hidden surface problem, *Proc. ACM Annual Conference*, Boston 1972,
+  443-450.
+- [FvDFH90] J. D. Foley, A. van Dam, S. K. Feiner, J. F. Hughes,
+  *Computer Graphics: Principles and Practice*, 2nd ed., Addison-Wesley
+  1990.
 - [Pol75] J. M. Pollard, A Monte Carlo method for factorization, *BIT* 15
   (1975), 331-334.
 - [Pet92] M. Petkovšek, Hypergeometric solutions of linear recurrences
