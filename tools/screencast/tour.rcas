@@ -31,6 +31,29 @@ factor(360)
 factor(2**67 - 1)
 [nextprime(100), prevprime(100), divisors(12), totient(12)]
 
+# Typeset output
+# --------------
+# The chat front end can set an answer as mathematics instead of printing
+# it as Ruby. Here is the expansion from the first page again, typeset -
+# and everything below it from now on.
+/output typeset
+e.expand
+
+# The numbered session
+# --------------------
+# Every line is kept, the way Mathematica keeps them. The prompt carries
+# the number of the line to come, and Out[n] hands a result back - a
+# negative index counting back from the line before it.
+factor(x**4 - 1)
+expand(Out[-1])
+(Out[-1] - Out[-2]).expand
+
+# In[n] is the line as it was typed, held rather than run again: it gives
+# the question back, and doit answers it.
+integrate(sin(x), x)
+In[-1]
+In[-2].doit
+
 # Calculus
 # --------
 # Derivatives, including the ones that need more than the power rule:
@@ -77,8 +100,9 @@ sum(k**2, k, 1, n)
 sum(binomial(n, k)**2, k: 0..n)
 product(2*k - 1, k: 1..n)
 
-# Fourier series:
+# Fourier series - the partial sum, and the general coefficient:
 fourier(x, x: -pi..pi)
+fourier(x, x: -pi..pi, formal: true)
 
 # Arbitrary precision, for when the symbols run out:
 evalf(pi, 50)
@@ -178,10 +202,18 @@ confidence_interval([5.1, 4.9, 5.6, 5.2, 5.0])
 
 # Plots
 # -----
-# In a terminal a plot is braille art; elsewhere it is a picture.
+# In a terminal a plot is braille art, and needs nothing at all:
 plot(sin(x), x: 0..2*PI, width: 40, height: 8)
+
+# Where the terminal takes an inline picture, /plotstyle image draws one
+# instead, with the Chrome the typesetting already uses.
+/plotstyle image
 polar(1 + cos(t), width: 40, height: 12, title: "r = 1 + cos(t)")
 histogram([2, 4, 4, 5, 5, 5, 6, 6, 7, 9, 3, 5], bins: 4, width: 40, height: 7)
+
+# A function of two variables is a surface. What lies behind it is hidden,
+# not drawn through - so it reads as a surface and not as a net.
+plot3d(x**2 - y**2, x: -2..2, y: -2..2, width: 48, height: 13)
 
 # The q-analogues
 # ---------------
@@ -203,15 +235,5 @@ ZZ[x].random(6, terms: 3, monic: true)
 # Expressions travel as OpenMath objects - in XML, or in POPCORN.
 popcorn(2*x*(1 - x))
 
-# Typeset output
-# --------------
-# The chat front end can typeset its answers.
-/output typeset
-sum(k**2, k, 1, n)
-integrate(x*exp(x), x)
-solve(x**2 - 2, x)
-m.inverse
-fourier(x, x: -pi..pi, formal: true)
-
-# Every line here is valid Ruby, so this script is itself a session
-# you can paste straight into rcas.
+# Every line of mathematics here is valid Ruby, so this script is itself
+# a session you can paste straight into rcas.

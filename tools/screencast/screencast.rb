@@ -39,12 +39,26 @@ def wrap(text, width)
   end
 end
 
+# Room above and below a plot - its input line, the blank after it and the
+# prompt that follows - so that holding on one does not scroll its top away.
+IMG_ROOM = 3 * LH
+
 IMAGES = {}
-def image(path)
-  IMAGES[path] ||= begin
-    w, h = `magick identify -format "%w %h" #{path}`.split.map(&:to_i)
-    { data: Base64.strict_encode64(File.binread(path)), w: w * KFACTOR, h: h * KFACTOR }
+def image(el)
+  IMAGES[el[:path]] ||= begin
+    raw = `magick identify -format "%w %h" #{el[:path]}`.split.map(&:to_i)
+    { data: Base64.strict_encode64(File.binread(el[:path])),
+      **(el[:plot] ? fitted(el[:w], el[:h]) : { w: raw[0] * KFACTOR, h: raw[1] * KFACTOR }) }
   end
+end
+
+# A plot is a picture, not a rendered formula: it arrives with the size the
+# terminal gave it, and a terminal fits that to its window. KFACTOR is the
+# calibration for typeset formulas, where the render scale decides the size,
+# and using it on a plot shrinks it to a quarter of the width.
+def fitted(w, h)
+  k = [(COLS - 3) * CW / w.to_f, (H - CHROME - 2 * PAD - IMG_ROOM) / h.to_f].min
+  { w: w * k, h: h * k }
 end
 
 def draw(el, y)
@@ -69,7 +83,7 @@ def draw(el, y)
   when :timing
     [%(<text x="#{(PAD + (COLS - el[:text].length) * CW).round(2)}" y="#{y + FS}" fill="#{DIM}">#{esc(el[:text])}</text>), LH]
   when :image
-    i = image(el[:path])
+    i = image(el)
     [%(<image x="#{(PAD + 3 * CW).round(2)}" y="#{y + 6}" width="#{i[:w].round(2)}" ) +
      %(height="#{i[:h].round(2)}" href="data:image/png;base64,#{i[:data]}"/>), i[:h] + 12]
   end
@@ -139,7 +153,8 @@ EVENTS.each do |ev|
     end
     screen << { kind: :input, n: n, text: ev["text"] }
     ev["elements"].reject { |el| el["kind"] == "timing" && !TIMINGS }.each do |el|
-      screen << (el["kind"] == "image" ? { kind: :image, path: el["path"] }
+      screen << (el["kind"] == "image" ? { kind: :image, path: el["path"], w: el["w"], h: el["h"],
+                                           plot: el["name"] == "plot.png" }
                                        : { kind: (el["style"] || el["kind"]).to_sym, text: el["text"] })
     end
     screen << { kind: :blank }

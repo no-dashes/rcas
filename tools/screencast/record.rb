@@ -49,9 +49,13 @@ def extract_images(s)
     params, payload = Regexp.last_match(1), Regexp.last_match(2)
     path = File.join(IMGDIR, format("s%03d.png", $shot += 1))
     File.binwrite(path, Base64.decode64(payload))
+    name = params[/name=([A-Za-z0-9+\/=]+)/, 1]
     images << { "kind" => "image", "path" => path,
                 "w" => params[/width=(\d+)px/, 1].to_i,
-                "h" => params[/height=(\d+)px/, 1].to_i }
+                "h" => params[/height=(\d+)px/, 1].to_i,
+                # "plot.png" from Plot#picture, "rcas.png" from a typeset
+                # render: the two are laid out differently (screencast.rb).
+                "name" => name && Base64.decode64(name) }
     format(TOKEN, images.size - 1)
   end
   [s, images]

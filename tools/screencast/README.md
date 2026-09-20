@@ -32,7 +32,13 @@ Two scripts are kept here:
 | script       | what it is                                  |
 | ------------ | ------------------------------------------- |
 | `intro.rcas` | a short tour, about a minute                |
-| `tour.rcas`  | the whole of MANUAL.md section 1, chapter by chapter |
+| `tour.rcas`  | the whole of MANUAL.md section 1, chapter by chapter (about eight minutes) |
+
+Build the tour with `--no-gif`. GIF wants a small palette, and the tour is
+now mostly typeset pictures and four colour plots: one global 96-colour
+palette over all of that dithers into noise that no two frames share, and
+the file came out at 396 MB against the mp4's 10. The format suits
+`intro.rcas`, which is a minute of mostly text.
 
 ## Building
 
@@ -45,6 +51,13 @@ Everything lands in `build/` (gitignored). `--render-only` reuses the recorded
 transcript, so tuning captions and pacing costs no rcas time: recording a full
 tour takes minutes, laying it out takes seconds. `--no-gif` skips the GIF.
 
+How long the recording takes is decided by *where the script switches to
+typeset*, not by its length: a typeset result is a KaTeX render at
+`RENDER_SCALE`, some ten seconds each, and a text one is instant. `tour.rcas`
+switches before its calculus chapter, so about ninety of its lines are
+rendered and a full recording is a quarter of an hour. Moving the
+`/output typeset` line is the one edit that changes that number.
+
 The three stages are also separate programs, if you want one of them alone:
 
 | file            | what it does                                        |
@@ -54,8 +67,11 @@ The three stages are also separate programs, if you want one of them alone:
 | `build.rb`      | both, then ImageMagick and ffmpeg                    |
 | `config.rb`     | the geometry and colours both halves share           |
 
-Needs `ffmpeg` and ImageMagick (`magick`) on the PATH, plus what typesetting
-already needs (`npm install`, and a Chromium-family browser).
+Needs `ffmpeg`, librsvg (`rsvg-convert`) and ImageMagick (`magick`) on the
+PATH, plus what typesetting already needs (`npm install`, and a
+Chromium-family browser). librsvg turns the frames into PNGs and ImageMagick
+measures the captured pictures; on macOS, `brew install librsvg imagemagick
+ffmpeg`.
 
 ## Settings
 
@@ -86,5 +102,15 @@ ten seconds or so - a fact about the recording, not about rcas.
   wants to show the switch has to start in text: `record.rb` writes an
   `output: text` settings file into its own `RCAS_HOME` under `build/`, and
   never touches `~/.rcas`.
+- **ImageMagick cannot render the frames any more.** Homebrew's `imagemagick`
+  dropped its dependency on librsvg, so `magick` falls back to its own SVG
+  renderer - which has no font configuration at all (`magick -list font` comes
+  back empty, and `fontconfig` is not among its linked dependencies) and dies
+  on the frames' `font-family` with ``unable to read font `' ``. `build.rb`
+  rasterizes with `rsvg-convert` instead, which has pango and fontconfig
+  behind it, renders Menlo and the embedded pictures correctly, and takes
+  about a tenth of a second a frame; `magick` stays the fallback for a build
+  of it that does have librsvg. `magick` is still needed either way, to
+  measure the captured pictures.
 - **The pty hands back bytes, not UTF-8.** The banner, the rules and the
   prompt's chevron have to be re-encoded before any regexp touches them.

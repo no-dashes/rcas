@@ -24,7 +24,7 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
 
 If you would rather watch first:
 [rcas-tour.mp4](https://github.com/no-dashes/rubyCAS/releases/download/screencasts/rcas-tour.mp4)
-is a seven-minute screencast that follows section 1 below chapter by chapter
+is an eight-minute screencast that follows section 1 below chapter by chapter
 (it is attached to the releases, not kept in the repository), and
 [assets/rcas-intro.gif](assets/rcas-intro.gif) is a one-minute version. Both
 are recorded from a real session by [tools/screencast](tools/screencast), the
@@ -366,8 +366,9 @@ Rings and fields as objects: polynomial rings over ZZ, QQ or a finite
 field, algebraic numbers with their minimal polynomials, Gröbner bases for
 polynomial systems. Laplace transforms and systems of differential
 equations for the applied courses, several-variable calculus up to the
-line and surface integrals of a vector analysis course, and the number
-theory of a first course in it.
+line and surface integrals of a vector analysis course - `plot3d` draws
+the surface such an integral is taken over - and the number theory of a
+first course in it.
 
 ```
 rcas> QQ[x].(x**4 - 1).factor
@@ -1293,6 +1294,17 @@ rcas> lagrange(x + y, [x**2 + y**2 - 1], [x, y])
 => [{x=>-2**(1/2)/2, y=>-2**(1/2)/2}, {x=>2**(1/2)/2, y=>2**(1/2)/2}]
 ```
 
+At a critical point the Hessian says which kind it is: both eigenvalues
+positive is a minimum, both negative a maximum, one of each a saddle.
+
+```
+rcas> hessian(x**2 - y**2, [x, y]).eigenvalues
+=> [2, -2]
+```
+
+One of each, so the origin is a saddle - which is what `plot3d(x**2 - y**2,
+x: -2..2, y: -2..2)` draws in section 1.11.
+
 #### Line and surface integrals
 
 A line integral adds a function up along a curve, a surface integral over
@@ -1357,6 +1369,11 @@ The sphere shows what the length element needs: `|r_u x r_v|` is
 value. rcas takes the factor out of the root with the sign it has on the
 parameter range - `sin(v)` is positive on `0..pi` - and writes `abs(...)`
 where the sign changes there, rather than assuming one silently.
+
+A parametrization is also what `plot3d` draws, so the surface can be
+looked at before it is integrated over: `plot3d([sin(v)*cos(u),
+sin(v)*sin(u), cos(v)], v: 0..pi, u: 0..2*pi)` is the sphere above
+(section 1.11).
 
 #### Green, Stokes and Gauss
 
@@ -3602,7 +3619,31 @@ rcas> plot3d([cos(theta)*sin(phi), sin(theta)*sin(phi), cos(phi)], theta: 0..2*p
 
 `n:` is the mesh (24 points a side), `z:` cuts the box down to a range of
 heights - a point outside it is a hole, as a pole is a gap in `plot` -
-and a value that is complex or infinite leaves a hole in the same way.
+and a value that is complex or infinite leaves a hole in the same way. The
+upper half of the unit sphere, drawn over the square around its disc,
+shows it: outside the disc the root is complex, and the mesh is torn there
+rather than stitched shut over nothing.
+
+```
+rcas> plot3d(sqrt(1 - x**2 - y**2), x: -1..1, y: -1..1, width: 46, height: 12)
+=> ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⠔⡏⠒⠢⠤⢄⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡠⠊⠀⠀⡇⠀⠀⠀⠀⠀⠉⠑⠒⠤⠤⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠤⠊⠀⠀⠀⠀⡇⢀⡠⢄⣀⠀⠀⠀⠀⠀⠀⠀⠈⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠐⠁⠀⠀⠀⠀⢀⡠⢟⠟⠤⢄⡠⠋⢆⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠎⢀⠎⠀⠀⡜⠘⢄⠈⢲⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣎⠔⠊⡗⠢⢜⠀⠀⠀⢣⠒⢳⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠀⠀⢀⠧⣀⡈⢢⠀⢀⠇⠀⠀⠳⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡠⠒⠁⠀⠀⠈⠉⠱⡜⠤⢄⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡠⠊⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠉⠒⢢⠄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⡔⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡠⠒⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠒⠒⠤⢄⣀⠀⠀⠀⠀⠀⠀⠀⠀⡠⠊⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠑⠒⠢⠤⣀⠔⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+   x: -1..1   y: -1..1   z: -0.05..1.05
+```
+
+`view:` says where the surface is looked at from - the azimuth turns it,
+the elevation raises the eye above it. From almost overhead a saddle shows
+what it is: two directions rising away from the origin and two falling.
 
 ```
 rcas> plot3d(x*y, x: -2..2, y: -2..2, view: [20, 70], width: 44, height: 12, title: "z = x*y from above")
@@ -3626,6 +3667,14 @@ In the terminal the surface is a wireframe, and the mesh is taken as
 coarsely as the braille dots of neighbouring lines need in order not to
 merge; `to_svg`, `save("f.svg")`, `to_png` and `show` draw every line of
 it and fill each face with a colour that follows its height.
+
+Three things this does not do. A surface given *implicitly* has to be
+solved or parametrized first: `plot3d` takes a graph or a parametrization
+and nothing else. A curve in space is not a surface and has no drawing of
+its own; `parametric` draws plane curves only. And the faces are sorted by
+depth as wholes, which is right as long as they do not cut through one
+another - a surface that passes through itself can come out wrong where it
+does, and there is no z buffer here to catch it.
 
 #### Statistical plots
 
@@ -4557,7 +4606,7 @@ shows the text as well.
 ```
 $ bin/rcas-chat
 ╭─────────────────────────────────────────────────────────────╮
-│ ✻ rcas 0.1.0 - symbols are indeterminates; type Ruby        │
+│ ✻ rcas 0.2.0 - symbols are indeterminates; type Ruby        │
 │   output   typeset via katex                                │
 │   session  20260912-143012-a1b2                             │
 │                                                             │
@@ -4650,7 +4699,9 @@ calls alike:
 
 Plots are braille art by default, in every mode. `/plotstyle image` shows
 them as pictures instead, where the terminal and Chrome allow it (otherwise
-the art stays, and the command says so); `/show plot(...)` draws one picture
+the art stays, and the command says so) - which is what a surface from
+`plot3d` gains most from, since a picture draws every line of its mesh
+and shades each face by height; `/show plot(...)` draws one picture
 whatever the style, and `/png plot(...) FILE` writes it. `RCAS_PLOT_STYLE`
 sets the default outside a session.
 
@@ -4789,7 +4840,7 @@ worksheet of numbered `In`/`Out` cells, typesets every result that has a
 LaTeX form, and draws plots as pictures instead of braille art.
 
 ```
-┌────────────────────────────────────────────── rcas 0.1.0 ── text tex both latex ── ? ─┐
+┌────────────────────────────────────────────── rcas 0.2.0 ── text tex both latex ── ? ─┐
 │                                                                                      │
 │   In[1]   f = x**3 - 3*x                                                             │
 │   Out[1]  x**3 - 3*x                                                                 │
@@ -4835,7 +4886,7 @@ computes nothing itself.
 
 ```
 $ bin/rcas-app
-rcas 0.1.0 - Google Chrome window on 127.0.0.1:61319
+rcas 0.2.0 - Google Chrome window on 127.0.0.1:61319
 ```
 
 The program ends when the window is closed. `--no-window` runs the server
@@ -4843,7 +4894,7 @@ alone and prints an address to open by hand:
 
 ```
 $ bin/rcas-app --no-window
-rcas 0.1.0 - open http://127.0.0.1:61319/?token=fYLNZmCEvkvO3B6hP3u-7ea1K5y3lDro
+rcas 0.2.0 - open http://127.0.0.1:61319/?token=fYLNZmCEvkvO3B6hP3u-7ea1K5y3lDro
 ```
 
 ### Input

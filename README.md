@@ -26,7 +26,7 @@ A minute of it, from exact arithmetic to typeset answers:
   <img src="assets/rcas-intro.gif" alt="a minute of rcas: exact arithmetic, calculus, solving, typeset output" width="840">
 </p>
 
-The longer tour through everything rcas can do is a seven-minute video,
+The longer tour through everything rcas can do is an eight-minute video,
 [rcas-tour.mp4](https://github.com/no-dashes/rubyCAS/releases/download/screencasts/rcas-tour.mp4)
 (kept with the releases rather than in the repository, so a clone stays
 small). Both are built from a script of input lines by
@@ -53,8 +53,9 @@ was wrong or your rocket doesn't reach the moon in time.
 
 Optional, only for the typeset output and the chat front end:
 
-- Plots need nothing: `plot(sin(x))` draws in any terminal, and `save("f.svg")`
-  writes a picture. `plot(...).to_png` and `show` use the same Chrome as below.
+- Plots need nothing: `plot(sin(x))` draws in any terminal, `plot3d(x*y, x:
+  -2..2, y: -2..2)` draws a surface in one, and `save("f.svg")` writes a
+  picture. `plot(...).to_png` and `show` use the same Chrome as below.
 - The window front end `bin/rcas-app` borrows a browser engine instead of
   shipping one: it needs a Google Chrome, Chromium, Brave or Microsoft Edge
   on the machine (`RCAS_BROWSER` names another), and `npm install` for the

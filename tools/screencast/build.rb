@@ -26,13 +26,37 @@ def run(*cmd)
   system(*cmd) or abort "failed: #{cmd.join(' ')}"
 end
 
+def which(name) = ENV["PATH"].split(File::PATH_SEPARATOR)
+                             .map { |d| File.join(d, name) }.find { |f| File.executable?(f) }
+
+# SVG frames to PNG. rsvg-convert first: Homebrew's ImageMagick no longer
+# depends on librsvg, so `magick` falls back to its own SVG renderer, which
+# has no font configuration at all (`magick -list font` is empty) and dies on
+# the frames' font-family with "unable to read font ''". librsvg has pango and
+# fontconfig behind it and renders Menlo, the embedded pictures and all, in
+# about a tenth of a second a frame. ImageMagick stays the fallback, for a
+# build of it that does have librsvg.
+def rasterize(svgs)
+  if (rsvg = which("rsvg-convert"))
+    warn "> #{rsvg} (#{svgs.size} frames)"
+    svgs.each_with_index do |svg, i|
+      png = File.join(PNGS, File.basename(svg, ".svg") + ".png")
+      system(rsvg, "-o", png, svg) or abort "failed: rsvg-convert #{svg}"
+      warn "  #{i + 1}/#{svgs.size}" if ((i + 1) % 100).zero?
+    end
+  else
+    # One mogrify over the whole directory: ImageMagick starts once, not per frame.
+    run("magick", "mogrify", "-format", "png", "-path", PNGS, *svgs)
+    abort "magick produced no PNGs - see the note above rasterize" if Dir[File.join(PNGS, "*.png")].empty?
+  end
+end
+
 here = __dir__
 run("ruby", File.join(here, "record.rb"), SCRIPT) unless ARGV.include?("--render-only")
 run("ruby", File.join(here, "screencast.rb"), JSON_)
 
 FileUtils.rm_rf(PNGS); FileUtils.mkdir_p(PNGS)
-# One mogrify over the whole directory: ImageMagick starts once, not per frame.
-run("magick", "mogrify", "-format", "png", "-path", PNGS, *Dir[File.join(FRAMES, "*.svg")])
+rasterize(Dir[File.join(FRAMES, "*.svg")].sort)
 
 run("ffmpeg", "-y", "-loglevel", "error", "-framerate", Cast::FPS.to_s,
     "-i", File.join(PNGS, "f%05d.png"),
