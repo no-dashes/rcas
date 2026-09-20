@@ -169,9 +169,38 @@ module RCAS
       # what says it; raising made a true statement look like a failure.
       # Every value *of x*: with x declared an integer, sin(pi*x) vanishes
       # on ZZ and nowhere else, so the reals would be an overstatement.
-      return domain || RCAS.assumption(x.name) || RealSet.reals if Scalar.zero?(f)
-      roots = dedupe(univariate(f, x, 0, all: !principal)).map { |root| family(root, x, f) }
+      return everywhere(x, domain) if Scalar.zero?(f)
+      found =
+        begin
+          univariate(f, x, 0, all: !principal)
+        rescue NotImplementedError
+          constant = trig_constant(f)
+          raise if constant.nil?
+          return Scalar.zero?(constant) ? everywhere(x, domain) : []
+        end
+      roots = dedupe(found).map { |root| family(root, x, f) }
       ordered(restrict(merge_families(roots), x, domain))
+    end
+
+    # Every value of x is a solution: the declared domain when there is one,
+    # the reals otherwise.
+    def everywhere(x, domain) = domain || RCAS.assumption(x.name) || RealSet.reals
+
+    # An identity is an identity however it is written, and no rule in the
+    # chain sees the Pythagorean one: sin(x)**2 + cos(x)**2 - 1 is zero, and
+    # `Scalar.zero?` cannot say so because the identity only shows after
+    # trigsimp. The other side of the same reading is just as much an
+    # answer - a trigonometric expression that reduces to a constant which
+    # is not zero has no solutions at all, so sin(x)**2 + cos(x)**2 + 1 = 0
+    # is [] rather than "can't solve" (20 Sept 2026, the ninth pass of the
+    # review). It is asked only once every rule has failed, because trigsimp
+    # costs milliseconds and `discuss` calls solve for every row it fills.
+    def trig_constant(f)
+      return nil unless f.each_node.any? { |n| n.is_a?(Fn) && Trigonometry::SQUARES.key?(n.name) }
+      reduced = Trigonometry.trigsimp(f).simplify
+      reduced.variables.empty? ? reduced : nil
+    rescue StandardError
+      nil
     end
 
     # Families of one period that say the same thing twice, or that together
@@ -661,7 +690,8 @@ module RCAS
     # sin(x) + cos(x) = 0 is tan(x) = -1, which rcas solves, and there was
     # no rule that saw it. Where the division loses the zeros of cos(u) -
     # which it does only when no term is a pure power of sin(u) - they are
-    # put back.
+    # put back, and a term short of the top degree is raised to it by
+    # `homogenize` first.
     def homogeneous_trig(f, x, depth, all: false)
       arguments = f.each_node.filter_map do |node|
         node.args.first if node.is_a?(Fn) && %i[sin cos].include?(node.name) && depends?(node, x)
@@ -670,6 +700,8 @@ module RCAS
       u = arguments.first
       sine = Fn.new(:sin, [u])
       cosine = Fn.new(:cos, [u])
+      f = homogenize(f, sine, cosine)
+      return nil if f.nil?
       constant, table = Expand.table(f)
       return nil unless constant.zero? && table.size > 1
 
@@ -695,6 +727,30 @@ module RCAS
       answers
     rescue NotImplementedError
       nil
+    end
+
+    # sin(x)*cos(x) = 1/2 is not homogeneous as written and becomes so when
+    # the 1/2 is read as (sin(x)**2 + cos(x)**2)/2 - the classical trick,
+    # and the reason the identity is taught before the equation is set. A
+    # term short of the top degree by an even number is raised to it that
+    # way; an odd gap (sin(x) = 1/2) has no such reading and the rule
+    # declines, which leaves the equation to the atom substitution that
+    # already answers it.
+    def homogenize(f, sine, cosine)
+      constant, table = Expand.table(f)
+      entries = table.map do |factors, coefficient|
+        powers = [factors[sine] || 0, factors[cosine] || 0]
+        return nil unless powers.all? { |e| e.is_a?(Integer) && !e.negative? }
+        [powers.sum, Simplify.rebuild_product(coefficient, factors)]
+      end
+      entries << [0, Expression.lift(constant)] unless constant.zero?
+      return nil if entries.empty?
+      top = entries.map(&:first).max
+      return f if entries.all? { |degree, _| degree == top }
+      return nil unless top.positive? && entries.all? { |degree, _| ((top - degree) % 2).zero? }
+      pythagoras = Simplify.power_node(sine, 2) + Simplify.power_node(cosine, 2)
+      raised = entries.map { |degree, term| term * pythagoras**((top - degree) / 2) }
+      Expand.expand(raised.inject(:+)).simplify
     end
 
     # sqrt(u) = v: the radical on one side, both sides to the q-th power,
@@ -810,6 +866,24 @@ module RCAS
       Simplify.rebuild_sum(constant, rebuilt)
     end
 
+    # A target the function never takes is not an equation with complex
+    # solutions, it is an equation with none. rcas can name one such gap:
+    # tan(z) = (exp(2*i*z) - 1)/(i*(exp(2*i*z) + 1)) is i only where
+    # exp(2*i*z) + 1 vanishes in the denominator, so the tangent omits
+    # exactly +i and -i from the complex plane - which is also why atan(i)
+    # does not evaluate. Without this, sin(x)**2 + cos(x)**2 = 0 came back
+    # as two families built on atan(-i) and atan(i) (20 Sept 2026, the ninth
+    # pass of the review). cos(u) = 2 is not of this kind and keeps its
+    # answers: the cosine does reach 2, at i*log(2 + 3**(1/2)).
+    def tangent_gap?(v)
+      value = Expression.lift(v)
+      return false unless value.is_a?(Num)
+      number = Complex(value.value)
+      number.real.zero? && number.imaginary.abs == 1
+    rescue StandardError
+      false
+    end
+
     # Solutions of u = v for x, where u is a single atom containing x. With
     # all: true the period of sin, cos and tan is added, with an integer
     # parameter, so that every solution is covered and not just one period.
@@ -825,7 +899,7 @@ module RCAS
           when :log  then [Fn.new(:exp, [v])]
           when :sin  then [Fn.new(:asin, [v]) + turn.call(2), PI - Fn.new(:asin, [v]) + turn.call(2)]
           when :cos  then [Fn.new(:acos, [v]) + turn.call(2), -Fn.new(:acos, [v]) + turn.call(2)]
-          when :tan  then [Fn.new(:atan, [v]) + turn.call(1)]
+          when :tan  then tangent_gap?(v) ? [] : [Fn.new(:atan, [v]) + turn.call(1)]
           when :atan then [Fn.new(:tan, [v])]
           when :asin then [Fn.new(:sin, [v])]
           when :acos then [Fn.new(:cos, [v])]

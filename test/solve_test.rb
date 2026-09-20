@@ -393,4 +393,51 @@ class SolveTest < Minitest::Test
     end
   end
 
+  # tan(z) = i has no root anywhere in the complex plane, so inverting the
+  # tangent there invents solutions: sin(x)**2 + cos(x)**2 = 0 came back as
+  # two families built on atan(-i) and atan(i), which are not numbers at
+  # all. cos(x) = 2 is a different case and keeps its families - the cosine
+  # does reach 2, at i*log(2 + sqrt(3)).
+  def test_the_tangent_never_takes_i
+    x = RCAS::Var.new(:x)
+    assert_empty RCAS.solve(RCAS.tan(x) - RCAS::I, x)
+    assert_empty RCAS.solve(RCAS.tan(x) + RCAS::I, x)
+    assert_equal ["{atan(2*i) + pi*k | k in ZZ}"], strs(RCAS.solve(RCAS.tan(x) - 2 * RCAS::I, x))
+    assert_equal ["{acos(2) + 2*pi*k | k in ZZ}", "{-acos(2) + 2*pi*k | k in ZZ}"],
+                 strs(RCAS.solve(RCAS.cos(x) - 2, x))
+  end
+
+  # sin(x)**2 + cos(x)**2 is 1 however it is written, and Scalar.zero? only
+  # sees it after trigsimp: the identity is every x, and the two equations
+  # beside it have no solutions at all rather than "can't solve".
+  def test_a_trigonometric_identity_is_an_answer
+    x = RCAS::Var.new(:x)
+    assert_equal "(-oo, oo)", RCAS.solve(RCAS.sin(x)**2 + RCAS.cos(x)**2 - 1, x).to_s
+    assert_equal "(-oo, oo)", RCAS.solve(RCAS.cosh(x)**2 - RCAS.sinh(x)**2 - 1, x).to_s
+    assert_empty RCAS.solve(RCAS.sin(x)**2 + RCAS.cos(x)**2, x)
+    assert_empty RCAS.solve(RCAS.sin(x)**2 + RCAS.cos(x)**2 + 1, x)
+    RCAS.assume(x: ZZ) do
+      assert_equal "ZZ", RCAS.solve(RCAS.sin(x)**2 + RCAS.cos(x)**2 - 1, x).to_s,
+                   "every value of x, and x was declared an integer"
+    end
+    # an equation no rule can take is still unsolved, not "no solutions"
+    assert_raises(NotImplementedError) { RCAS.solve(RCAS.sin(x) + x, x) }
+    assert_raises(NotImplementedError) { RCAS.solve(x + RCAS.cos(x) * RCAS.sin(x), x) }
+  end
+
+  # sin(x)*cos(x) = 1/2 is homogeneous once the 1/2 is read as
+  # (sin(x)**2 + cos(x)**2)/2, which is the trick the identity is taught
+  # for. A term short of the top degree by an odd number has no such
+  # reading, and the rule declines rather than guessing.
+  def test_a_constant_term_is_raised_to_the_common_degree
+    x = RCAS::Var.new(:x)
+    assert_equal ["{pi/4 + pi*k | k in ZZ}"], strs(RCAS.solve(RCAS.sin(x) * RCAS.cos(x) - Rational(1, 2), x))
+    assert_equal ["{3*pi/4 + pi*k | k in ZZ}"], strs(RCAS.solve(RCAS.sin(x) * RCAS.cos(x) + Rational(1, 2), x))
+    set = RCAS.solve(RCAS.sin(x) * RCAS.cos(x) - Rational(1, 2), x).first
+    (-3..3).each { |i| assert_in_delta 0.5, (RCAS.sin(set.at(i)) * RCAS.cos(set.at(i))).evalf, 1e-12 }
+    # the odd gap is left to the substitution that already answers it
+    assert_equal ["{pi/6 + 2*pi*k | k in ZZ}", "{5*pi/6 + 2*pi*k | k in ZZ}"],
+                 strs(RCAS.solve(RCAS.sin(x) - Rational(1, 2), x))
+  end
+
 end

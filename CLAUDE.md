@@ -77,6 +77,24 @@ background in `doc`/`/help`, and the manual full of worked transcripts.
   degree in `sin(u)` and `cos(u)` by `cos(u)**n`, which makes it a
   polynomial in `tan(u)`: that is `sin(x) + cos(x) = 0`, and the zeros of
   `cos(u)` go back in when no term is a pure power of `sin(u)`.
+  Three more pieces came out of the ninth pass of the review (20 Sept
+  2026). `homogenize` raises a term short of the top degree by an *even*
+  number to it with `sin**2 + cos**2 = 1`, which is `sin(x)*cos(x) = 1/2`
+  read as `tan(x) = 1` - the trick the identity is taught for; an odd gap
+  (`sin(x) = 1/2`) has no such reading and the rule declines, leaving the
+  equation to the atom substitution that already answers it. `invert`
+  refuses `tan(u) = i` and `tan(u) = -i` (`unreachable?`): those are the
+  two values the tangent omits from the whole complex plane, which is also
+  why `atan(i)` has no value, and without the guard
+  `solve(sin(x)**2 + cos(x)**2, x)` answered an equation with no solutions
+  by two families built on `atan(+-i)`. It is a *range* test, not a
+  complex-root test: `cos(x) = 2` keeps its families, because the cosine
+  does reach 2. And when every rule has failed, `trig_constant` asks
+  `trigsimp` whether the equation was an identity after all
+  (`sin(x)**2 + cos(x)**2 - 1` is every x, and `Scalar.zero?` at the
+  funnel cannot see it) or a contradiction (`... + 1` is `[]`); it runs
+  only on the failure path, because trigsimp costs milliseconds and
+  `discuss` calls `solve` for every row it fills.
 - The API method `Expression#variables` returns the indeterminates; the
   name follows CAS convention and stays. The manual notes this once.
 - **domain and base** (settled 17 Sept 2026, after "`(ZZ**[2,2]).random.domain`

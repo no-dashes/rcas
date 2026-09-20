@@ -2061,6 +2061,26 @@ rcas> solve(cos(x)**2 - 1/2r, x)
 => [{pi/4 + pi*k/2 | k in ZZ}]
 ```
 
+A term short of that common degree by an even number is raised to it with
+`sin(x)**2 + cos(x)**2 = 1`, so that `1/2` is read as
+`(sin(x)**2 + cos(x)**2)/2`: that is the trick the identity is taught for,
+and it turns `sin(x)*cos(x) = 1/2` into `tan(x) = 1`. Read the other way
+round, the same identity settles the equations that have no solutions at
+all and the ones that have every solution. `tan(x) = i` is in the first
+group for a different reason: the tangent omits exactly `i` and `-i` from
+the complex plane, which is why `atan(i)` has no value.
+
+```
+rcas> solve(sin(x)*cos(x) - 1/2r, x)
+=> [{pi/4 + pi*k | k in ZZ}]
+rcas> solve(sin(x)**2 + cos(x)**2, x)
+=> []
+rcas> solve(sin(x)**2 + cos(x)**2 - 1, x)
+=> (-oo, oo)
+rcas> solve(tan(x) - I, x)
+=> []
+```
+
 A base of modulus one repeats as well, which is what `cos(pi*x)` becomes
 when `x` is known to be an integer.
 
