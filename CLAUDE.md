@@ -576,7 +576,15 @@ an `Integral` node. The bounds are split at the jumps of *F* as well
 (`jump_points`): the Weierstrass substitution puts `tan(x/2)` into the
 antiderivative, which breaks at every odd multiple of pi while
 `1/(2 + cos(x))` is smooth there, so the integral over a period came back
-as 0. `endpoint` also refuses a substituted value that is not defined
+as 0. `instantiate` counts out the members of a family like `pi + 4*pi*k`
+that lie between the bounds and answers **nil**, not `[]`, when it cannot
+(more than `MAX_BREAKS`, a second parameter, a step it cannot measure):
+`[]` says "no breaks", and one family of the two dropping out that way
+left the integral over `0..254*PI` wrong by a factor of two (found by the
+fourth pass of the review, 20 Sept 2026). `jumps?` reads two samples
+either side rather than two limits - splitting where F is continuous
+costs two evaluations and nothing else, since the pieces telescope, while
+missing a break costs a period, so the cheap test is also the safe one. `endpoint` also refuses a substituted value that is not defined
 (`defined_value?`: `log(0)`, `tan(pi/2)`, `undefined`) and takes the
 one-sided limit instead. A singularity rcas cannot classify (`:unknown`)
 also stays formal rather than being subtracted through, and so does a

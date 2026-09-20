@@ -254,6 +254,24 @@ class IntegrateTest < Minitest::Test
     assert_equal "2*3**(1/2)*atan(3**(1/2)*tan(1/2)/3)/3", RCAS.integrate(f, X, 0, 1).to_s
   end
 
+  # A family of breaks that cannot be counted out is not "no breaks": one
+  # family of two dropping out at the cap left the integral over 0..254*PI
+  # with a plausible number that was wrong by a factor of two, and over
+  # 0..260*PI with 0.
+  def test_breaks_we_cannot_enumerate_keep_the_integral_formal
+    f = 1 / (2 + RCAS.cos(X))
+    [1, 2, 4, 20].each do |m|
+      value = RCAS.integrate(f, X, 0, m * RCAS::PI)
+      assert_in_delta m * Math::PI / Math.sqrt(3), value.evalf, 1e-9, "over 0..#{m}*PI"
+    end
+    assert_nil RCAS::Integrate.instantiate((RCAS::PI + 4 * RCAS::PI * RCAS::Var.new(:k)).simplify,
+                                           X, 0.0, 1000.0 * Math::PI)
+    [254, 260].each do |m|
+      assert_instance_of RCAS::Integral, RCAS.integrate(f, X, 0, m * RCAS::PI),
+                         "over 0..#{m}*PI there are more breaks than rcas will count out"
+    end
+  end
+
   # An endpoint that substitutes to something undefined is not an answer.
   def test_an_undefined_endpoint_takes_the_limit
     refute RCAS::Integrate.defined_value?(RCAS.tan(RCAS::PI / 2))

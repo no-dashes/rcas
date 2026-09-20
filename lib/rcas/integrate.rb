@@ -125,6 +125,7 @@ module RCAS
       return [] if a.nil? || b.nil?
       lo, hi = [a, b].minmax
       jumps = antiderivative ? jump_points(antiderivative, x, lo, hi) : []
+      return nil if jumps.nil? # breaks rcas cannot enumerate
       return order_points(jumps, a, b) if candidates.empty?
 
       points = []
@@ -159,52 +160,75 @@ module RCAS
     # F(b) - F(a) across such a break loses a whole period - the integral
     # of 1/(2 + cos(x)) over 0..2*pi came out as 0 - and splitting there,
     # with the one-sided limits `between` already takes, is the answer.
+    # => the points, or nil when the breaks cannot be enumerated.
     def jump_points(antiderivative, x, lo, hi)
       candidates = antiderivative.each_node.filter_map do |node|
         next nil unless node.is_a?(Fn) && node.name == :tan && node.args.first.variables.include?(x.name)
         Fn.new(:cos, [node.args.first])
       end
       return [] if candidates.empty?
-      roots = candidates.uniq.flat_map do |d|
-        begin
+
+      points = []
+      candidates.uniq.each do |d|
+        roots = begin
           Solve.solve(d, x, all: true)
         rescue StandardError, NotImplementedError
-          []
+          nil
+        end
+        # Unsolvable: a break only matters if it is in there, and a cos
+        # that keeps its sign between the bounds has none.
+        if roots.nil?
+          return nil if changes_sign_between?(d, x, lo, hi, [])
+          next
+        end
+        roots.each do |root|
+          members = instantiate(root, x, lo, hi) or return nil
+          points.concat(members)
         end
       end
-      roots.flat_map { |r| instantiate(r, x, lo, hi) }
-           .select { |p| (v = real_number(p)) && v > lo && v < hi }
-           .uniq.select { |p| jumps?(antiderivative, x, p) }
+      span = (hi - lo).abs
+      points.select { |p| (v = real_number(p)) && v > lo && v < hi }
+            .uniq.select { |p| jumps?(antiderivative, x, p, span) }
     end
 
     MAX_BREAKS = 64
 
-    # The members of a family like pi + 4*pi*k that lie between the bounds.
-    # A root without a parameter stands for itself.
+    # The members of a family like pi + 4*pi*k that lie between the bounds;
+    # a root without a parameter stands for itself. nil when they cannot be
+    # counted out - more than MAX_BREAKS of them, a second parameter, a step
+    # rcas cannot measure. `[]` would say "no breaks here", and one family
+    # of two dropping out that way left
+    # integrate(1/(2 + cos(x)), x, 0, 254*PI) with a plausible number that
+    # was wrong by a factor of two.
     def instantiate(root, x, lo, hi)
       parameters = root.variables - [x.name]
       return [root] if parameters.empty?
-      return [] unless parameters.size == 1
+      return nil unless parameters.size == 1
       k = Var.new(parameters.first)
       base = real_number(root.subs(k => Num.new(0)))
       next_one = base && real_number(root.subs(k => Num.new(1)))
-      return [] if base.nil? || next_one.nil?
+      return nil if base.nil? || next_one.nil?
       step = next_one - base
-      return [] if step.abs < 1e-12
+      return nil if step.abs < 1e-12
       first, last = [((lo - base) / step).floor, ((hi - base) / step).ceil].minmax
-      return [] if last - first > MAX_BREAKS
+      return nil if last - first > MAX_BREAKS
       (first..last).map { |i| root.subs(k => Num.new(i)).simplify }
     end
 
-    # Do the one-sided limits of F disagree? Only then is there anything to
-    # split: a point where F is merely written awkwardly needs nothing.
-    def jumps?(f, x, point)
-      left = Limits.limit(f, x, point, :left)
-      right = Limits.limit(f, x, point, :right)
-      return false if left.is_a?(Limit) || right.is_a?(Limit)
-      !Scalar.zero?((left - right).simplify)
-    rescue StandardError
-      false
+    # Do the values of F either side of the point disagree? Read off two
+    # samples rather than two limits, and deliberately one-sided the safe
+    # way: splitting where F is in fact continuous costs two evaluations
+    # and nothing else, because the pieces then telescope, while missing a
+    # break costs a whole period. Limits here cost about a tenth of a
+    # second each, and there is one candidate per half period.
+    def jumps?(f, x, point, span)
+      middle = real_number(point)
+      return true if middle.nil?
+      step = [span, 1.0].max * 1e-7
+      left = real_number(f.subs(x => Num.new(middle - step)))
+      right = real_number(f.subs(x => Num.new(middle + step)))
+      return true if left.nil? || right.nil?
+      (left - right).abs > 1e-6 * [1.0, left.abs, right.abs].max
     end
 
     # log(0) and tan(pi/2) are not values: an endpoint that substitutes to
