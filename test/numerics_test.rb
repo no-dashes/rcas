@@ -97,4 +97,32 @@ class NumericsTest < Minitest::Test
     end
   end
 
+  # Adaptive Simpson refines by halving, so an integrand whose period
+  # divides the interval puts every sample on the same phase: the
+  # refinement agrees with itself all the way down and returns a confident
+  # wrong number. sin(x)**2 over 0..100*pi came back as 0.
+  def test_a_resonant_grid_is_not_believed
+    x = RCAS::Var.new(:x)
+    assert_in_delta 50 * Math::PI, RCAS.nintegrate(RCAS.sin(x)**2, x: 0..100 * Math::PI), 1e-9
+    assert_in_delta 4 * Math::PI, RCAS.nintegrate(RCAS.sin(x)**2, x: 0..8 * Math::PI), 1e-9
+    # and where the slower quadrature cannot settle either, it says so
+    # rather than handing back the resonant number
+    e = assert_raises(ArgumentError) { RCAS.nintegrate(1 / (2 + RCAS.cos(x)), x: 0..1000 * Math::PI) }
+    assert_match(/did not settle/, e.message)
+  end
+
+  # An integrand that really does oscillate is not resonant: the second
+  # opinion escalates until it settles, and settling on Simpson's answer
+  # clears it. Otherwise 500 periods would go to the slow quadrature.
+  def test_an_oscillating_integrand_is_still_believed
+    x = RCAS::Var.new(:x)
+    g = RCAS::Numerics.caller_for(RCAS.sin(1000 * x), x)
+    exact = (1 - Math.cos(1000)) / 1000
+    refute RCAS::Numerics.resonant?(g, 0.0, 1.0, exact), "500 periods, but the value is right"
+    assert RCAS::Numerics.resonant?(RCAS::Numerics.caller_for(RCAS.sin(x)**2, x), 0.0, 100 * Math::PI, 0.0)
+    # a value that is legitimately zero is not called resonant
+    refute RCAS::Numerics.resonant?(RCAS::Numerics.caller_for(RCAS.cos(x), x), 0.0, 2 * Math::PI, 0.0)
+    assert_in_delta 0.0, RCAS.nintegrate(RCAS.cos(x), x: 0..2 * Math::PI), 1e-12
+  end
+
 end

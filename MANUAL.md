@@ -1015,9 +1015,12 @@ rcas> integrate(exp(-x**4), x: 0..1).evalf
 `nintegrate` tries adaptive Simpson first, with a budget it cannot
 exceed, and falls back to the tanh-sinh quadrature of the `digits:` form
 when that does not settle - so a smooth integrand costs a millisecond and
-an endpoint singularity is still no harder than anything else. An
-integrand neither of them settles is reported rather than subdivided for
-ever.
+an endpoint singularity is still no harder than anything else. Simpson's
+answer is checked against a second rule whose sample points are nowhere
+near its own, because halving the interval can sample a periodic
+integrand at the same phase every time and agree with itself about a
+wrong number. An integrand neither method settles is reported rather than
+subdivided for ever.
 
 A function changes sign across a pole as it does across a root, so a
 bracket that contains one is refused rather than answered: `1/x` has no

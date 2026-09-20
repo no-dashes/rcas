@@ -219,7 +219,64 @@ module RCAS
       g = patch_ends(g, lo, hi)
       whole = simpson_rule(g, lo, hi)
       return nil unless whole.finite?
-      refine(g, lo, hi, whole, SIMPSON_TOLERANCE * [1.0, whole.abs].max, SIMPSON_DEPTH)
+      value = refine(g, lo, hi, whole, SIMPSON_TOLERANCE * [1.0, whole.abs].max, SIMPSON_DEPTH)
+      value.nil? || resonant?(g, lo, hi, value) ? nil : value
+    end
+
+    # Gauss-Legendre on [-1, 1], seven nodes: irrational positions, which is
+    # the whole point of them here.
+    GAUSS_NODES = [0.0, -0.4058451513773972, 0.4058451513773972, -0.7415311855993945,
+                   0.7415311855993945, -0.9491079123427585, 0.9491079123427585].freeze
+    GAUSS_WEIGHTS = [0.4179591836734694, 0.3818300505051189, 0.3818300505051189, 0.2797053914892766,
+                     0.2797053914892766, 0.1294849661688697, 0.1294849661688697].freeze
+    GAUSS_PANELS = 8
+    GAUSS_ESCALATIONS = 3 # 8, 32, 128, 512 panels
+    GAUSS_TOLERANCE = 1e-9
+
+    # A second opinion, from nodes that are not on the halving grid.
+    # Adaptive Simpson refines by halving, so an integrand whose period
+    # divides the interval puts every sample on the same phase: the
+    # refinement then agrees with itself all the way down and returns a
+    # confident wrong number. sin(x)**2 over 0..100*pi came back as 0, and
+    # 1/(2 + cos(x)) over 0..1000*pi as 1047 where the answer is 1814. No
+    # period lines up with the Gauss nodes, so the two answers part company
+    # there - by half and more - while on a smooth integrand they agree to
+    # the last digit (5.6e-16 at worst over the ten measured for
+    # SIMPSON_TOLERANCE). No second opinion (the integrand is undefined at
+    # one of the nodes) is not a veto.
+    # An integrand that really does oscillate is not resonant, and Gauss on
+    # eight panels cannot see 500 periods either: when the two disagree the
+    # panels are multiplied until the second opinion settles. Settling on
+    # Simpson's answer clears it; settling anywhere else, or not settling
+    # at all inside the budget, does not.
+    def resonant?(g, lo, hi, value)
+      panels = GAUSS_PANELS
+      previous = nil
+      (GAUSS_ESCALATIONS + 1).times do
+        estimate = gauss_legendre(g, lo, hi, panels) or return false
+        return false if agree?(estimate, value)
+        return true if previous && agree?(estimate, previous)
+        previous = estimate
+        panels *= 4
+      end
+      true
+    end
+
+    def agree?(a, b) = (a - b).abs <= GAUSS_TOLERANCE * [1.0, a.abs, b.abs].max
+
+    def gauss_legendre(g, lo, hi, panels = GAUSS_PANELS)
+      width = (hi - lo) / panels.to_f
+      half = width / 2
+      total = 0.0
+      panels.times do |i|
+        centre = lo + width * (i + 0.5)
+        GAUSS_NODES.each_with_index do |node, j|
+          value = g.call(centre + half * node)
+          return nil if value.nil?
+          total += GAUSS_WEIGHTS[j] * value * half
+        end
+      end
+      total.finite? ? total : nil
     end
 
     # An end the caller cannot evaluate takes the value just inside it -
