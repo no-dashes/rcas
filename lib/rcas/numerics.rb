@@ -19,7 +19,14 @@ module RCAS
   module Numerics
     TOLERANCE = 1e-12
     FLOAT_DIGITS = 17 # one more than a Float carries, so the last one is right
-    SIMPSON_TOLERANCE = 1e-12
+    # Simpson accepts at this much, relative to the size of the integral.
+    # It decides how nearly the fast path agrees with the slow one: over ten
+    # smooth integrands, 1e-12 leaves three of them 1 to 23 ulp out, 1e-13
+    # one of them 1 ulp out, and 1e-15 none - at 0.22 s, 0.41 s and 1.17 s
+    # against the 0.70 s the doubly exponential quadrature takes for all
+    # ten. 1e-13 is where the two paths agree to the digit a Float carries
+    # and the fast one is still the fast one.
+    SIMPSON_TOLERANCE = 1e-13
     SIMPSON_DEPTH = 20
     MAX_STEPS = 200
     MAX_DEPTH = 50
@@ -184,11 +191,13 @@ module RCAS
       return -nintegrate(f, var, to, from) if lo > hi
       return 0.0 if lo == hi
       # Adaptive Simpson first: on a smooth integrand it settles in a
-      # millisecond and to the last Float digit, where the doubly
-      # exponential quadrature pays 100 ms for its guard digits. Its budget
-      # is bounded now, so a singular integrand fails fast and goes there
-      # instead of subdividing for ever (MAX_DEPTH = 50 was 2**50
-      # subintervals and never came back).
+      # millisecond, and to the digit the slower quadrature would give (see
+      # SIMPSON_TOLERANCE for how nearly), where the doubly exponential one
+      # pays 100 ms for its guard digits. Its budget is bounded, so a
+      # singular integrand fails fast and goes there instead of subdividing
+      # for ever (MAX_DEPTH = 50 was 2**50 subintervals and never came
+      # back). The price of the fast path is paid on the slow road: a
+      # divergent integrand takes a second or two longer to be refused.
       unless lo.infinite? || hi.infinite?
         quick = bounded_simpson(caller_for(f, var), lo, hi)
         return quick if quick

@@ -572,8 +572,14 @@ the interval, so reversed bounds are evaluated from the right side. When a
 piece comes out non-real - `log(cos(x))` past `pi/2` - the pieces are
 taken again with `log|u|` (`real_logs`), which is an antiderivative on
 each piece and the one a real integral wants; what is still not real stays
-an `Integral` node. A singularity rcas cannot classify (`:unknown`) also
-stays formal rather than being subtracted through, and so does a
+an `Integral` node. The bounds are split at the jumps of *F* as well
+(`jump_points`): the Weierstrass substitution puts `tan(x/2)` into the
+antiderivative, which breaks at every odd multiple of pi while
+`1/(2 + cos(x))` is smooth there, so the integral over a period came back
+as 0. `endpoint` also refuses a substituted value that is not defined
+(`defined_value?`: `log(0)`, `tan(pi/2)`, `undefined`) and takes the
+one-sided limit instead. A singularity rcas cannot classify (`:unknown`)
+also stays formal rather than being subtracted through, and so does a
 denominator whose zeros `Solve` cannot name when it *changes sign* between
 the bounds (`changes_sign_between?`): "no pole" would be a claim, not an
 answer. `singular_points` says that with `nil`, which the caller has to

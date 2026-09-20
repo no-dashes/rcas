@@ -74,7 +74,7 @@ module RCAS
       return Piecewises.definite(f, x, from, to) if f.is_a?(Piecewise)
       antiderivative = integrate(f, x)
       return Integral.new(f, x, from, to) unless complete?(antiderivative)
-      points = singular_points(f, x, from, to)
+      points = singular_points(f, x, from, to, antiderivative)
       return Integral.new(f, x, from, to) if points.nil? # a pole we cannot place
       bounds = [from, *points, to]
       value = between(antiderivative, x, bounds)
@@ -115,16 +115,17 @@ module RCAS
     # integrand. Rational poles come from the denominators Analysis already
     # collects for `discuss`, and tan(u) from the zeros of cos(u).
     # => [] (no interior singularity), the points, or nil (cannot tell).
-    def singular_points(f, x, from, to)
+    def singular_points(f, x, from, to, antiderivative = nil)
       candidates = Analysis.denominators(f, x).flat_map { |d| [d, *vanishing_factors(d, x)] }
       f.each_node do |node|
         next unless node.is_a?(Fn) && node.name == :tan && node.args.first.variables.include?(x.name)
         candidates << Fn.new(:cos, [node.args.first])
       end
-      return [] if candidates.empty?
       a, b = real_number(from), real_number(to)
       return [] if a.nil? || b.nil?
       lo, hi = [a, b].minmax
+      jumps = antiderivative ? jump_points(antiderivative, x, lo, hi) : []
+      return order_points(jumps, a, b) if candidates.empty?
 
       points = []
       unsolved = []
@@ -144,8 +145,80 @@ module RCAS
       inside = points.uniq.select { |p| (v = real_number(p)) && v > lo && v < hi }
       kinds = inside.to_h { |p| [p, singularity(f, x, p)] }
       return nil if kinds.value?(:unknown)
-      inside = inside.select { |p| kinds[p] == :pole }.sort_by { |p| real_number(p) }
-      a > b ? inside.reverse : inside
+      order_points(inside.select { |p| kinds[p] == :pole } + jumps, a, b)
+    end
+
+    def order_points(points, a, b)
+      points = points.uniq.sort_by { |p| real_number(p) }
+      a > b ? points.reverse : points
+    end
+
+    # Where the antiderivative jumps although the integrand does not: the
+    # Weierstrass substitution puts tan(x/2) into F, which breaks at every
+    # odd multiple of pi while 1/(2 + cos(x)) is perfectly smooth there.
+    # F(b) - F(a) across such a break loses a whole period - the integral
+    # of 1/(2 + cos(x)) over 0..2*pi came out as 0 - and splitting there,
+    # with the one-sided limits `between` already takes, is the answer.
+    def jump_points(antiderivative, x, lo, hi)
+      candidates = antiderivative.each_node.filter_map do |node|
+        next nil unless node.is_a?(Fn) && node.name == :tan && node.args.first.variables.include?(x.name)
+        Fn.new(:cos, [node.args.first])
+      end
+      return [] if candidates.empty?
+      roots = candidates.uniq.flat_map do |d|
+        begin
+          Solve.solve(d, x, all: true)
+        rescue StandardError, NotImplementedError
+          []
+        end
+      end
+      roots.flat_map { |r| instantiate(r, x, lo, hi) }
+           .select { |p| (v = real_number(p)) && v > lo && v < hi }
+           .uniq.select { |p| jumps?(antiderivative, x, p) }
+    end
+
+    MAX_BREAKS = 64
+
+    # The members of a family like pi + 4*pi*k that lie between the bounds.
+    # A root without a parameter stands for itself.
+    def instantiate(root, x, lo, hi)
+      parameters = root.variables - [x.name]
+      return [root] if parameters.empty?
+      return [] unless parameters.size == 1
+      k = Var.new(parameters.first)
+      base = real_number(root.subs(k => Num.new(0)))
+      next_one = base && real_number(root.subs(k => Num.new(1)))
+      return [] if base.nil? || next_one.nil?
+      step = next_one - base
+      return [] if step.abs < 1e-12
+      first, last = [((lo - base) / step).floor, ((hi - base) / step).ceil].minmax
+      return [] if last - first > MAX_BREAKS
+      (first..last).map { |i| root.subs(k => Num.new(i)).simplify }
+    end
+
+    # Do the one-sided limits of F disagree? Only then is there anything to
+    # split: a point where F is merely written awkwardly needs nothing.
+    def jumps?(f, x, point)
+      left = Limits.limit(f, x, point, :left)
+      right = Limits.limit(f, x, point, :right)
+      return false if left.is_a?(Limit) || right.is_a?(Limit)
+      !Scalar.zero?((left - right).simplify)
+    rescue StandardError
+      false
+    end
+
+    # log(0) and tan(pi/2) are not values: an endpoint that substitutes to
+    # one of them is answered with the one-sided limit instead.
+    def defined_value?(value)
+      value.each_node.none? do |node|
+        next true if node == UNDEFINED
+        next false unless node.is_a?(Fn)
+        case node.name
+        when :log then (arg = node.args.first).is_a?(Num) && arg.value.is_a?(Numeric) && arg.value.zero?
+        when :tan then Scalar.zero?(Functions.fold(Fn.new(:cos, [node.args.first])))
+        else false
+        end
+      end
     end
 
     # The factors of a denominator: a product vanishes where any of them
@@ -226,7 +299,7 @@ module RCAS
         rescue ZeroDivisionError
           nil
         end
-        return value if value && value.each_node.none? { |n| n.is_a?(Fn) && n.name == :log && n.args.first.is_a?(Num) && n.args.first.zero? }
+        return value if value && defined_value?(value)
       end
       value = Limits.limit(antiderivative, x, point, dir)
       value.is_a?(Limit) ? nil : value

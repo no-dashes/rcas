@@ -239,6 +239,30 @@ class IntegrateTest < Minitest::Test
     assert_equal "2*log(2) - log(3)", RCAS.integrate(1 / (X * (X - 1)), X, 2, 3).to_s
   end
 
+  # The Weierstrass substitution puts tan(x/2) into the antiderivative,
+  # which jumps at every odd multiple of pi although 1/(2 + cos(x)) is
+  # smooth there: F(b) - F(a) over a whole period came back as 0, and over
+  # half of one it carried tan(pi/2), which is not a value at all.
+  def test_the_antiderivative_may_jump_where_the_integrand_does_not
+    f = 1 / (2 + RCAS.cos(X))
+    assert_equal "2*3**(1/2)*pi/3", RCAS.integrate(f, X, 0, 2 * RCAS::PI).to_s
+    assert_equal "3**(1/2)*pi/3", RCAS.integrate(f, X, 0, RCAS::PI).to_s
+    assert_equal "4*3**(1/2)*pi/3", RCAS.integrate(f, X, 0, 4 * RCAS::PI).to_s
+    assert_equal "2*3**(1/2)*pi/3", RCAS.integrate(1 / (2 + RCAS.sin(X)), X, 0, 2 * RCAS::PI).to_s
+    assert_in_delta 2 * Math::PI / Math.sqrt(3), RCAS.nintegrate(f, x: 0..2 * Math::PI), 1e-9
+    # an interval that crosses no break is left alone
+    assert_equal "2*3**(1/2)*atan(3**(1/2)*tan(1/2)/3)/3", RCAS.integrate(f, X, 0, 1).to_s
+  end
+
+  # An endpoint that substitutes to something undefined is not an answer.
+  def test_an_undefined_endpoint_takes_the_limit
+    refute RCAS::Integrate.defined_value?(RCAS.tan(RCAS::PI / 2))
+    refute RCAS::Integrate.defined_value?(RCAS.log(RCAS::Num.new(0)))
+    refute RCAS::Integrate.defined_value?(RCAS::UNDEFINED)
+    assert RCAS::Integrate.defined_value?(RCAS.tan(RCAS::PI / 4))
+    assert RCAS::Integrate.defined_value?((2 * X + 1).simplify)
+  end
+
   def test_helpers
     assert_equal "x**3/3", RCAS.integrate(:x**2, :x).to_s
     assert_equal "x**2/2", (:x).to_expr.integrate(:x).to_s

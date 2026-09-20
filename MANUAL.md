@@ -918,6 +918,18 @@ rcas> integrate(1/x, x, -2, -1)
 => -log(2)
 ```
 
+An antiderivative can jump where the integrand does not - the substitution
+`t = tan(x/2)`, which is what makes a rational function of `sin` and `cos`
+integrable, breaks at every odd multiple of `pi` - so those points split
+the integral as well.
+
+```
+rcas> integrate(1/(2 + cos(x)), x, 0, 2*PI)
+=> 2*3**(1/2)*pi/3
+rcas> integrate(1/(2 + cos(x)), x, 0, PI)
+=> 3**(1/2)*pi/3
+```
+
 #### Integrals that have names
 
 Some integrands have no elementary antiderivative but have a named one,
