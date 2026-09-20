@@ -310,6 +310,21 @@ module RCAS
       negative ? negate(result) : result
     end
 
+    # [what every term of a sum has in common, what is left], or nil:
+    # -2*log(x) + x*log(x) is log(x) times (x - 2). `factor` refuses this
+    # one, because log(x) is not a polynomial variable, but the term table
+    # has the factor in plain sight. Both `solve` and `discuss` look for a
+    # product this way before giving up on an equation.
+    def common_factor(expr)
+      constant, terms = Expand.table(expr)
+      return nil unless constant.zero?
+      return nil if terms.size < 2
+      shared = terms.keys.first.select { |base, exponent| terms.keys.all? { |factors| factors[base] == exponent } }
+      return nil if shared.empty?
+      common = shared.reduce(Num.new(1)) { |product, (base, exponent)| (product * power_node(base, exponent)).simplify }
+      [common, Expand.expand(expr / common)]
+    end
+
     # ---- helpers ----------------------------------------------------------
 
     # A factor map that must not be rebuilt into a value: an infinity that

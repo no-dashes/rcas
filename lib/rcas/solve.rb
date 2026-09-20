@@ -435,6 +435,9 @@ module RCAS
         return values.map { |v| (v**q).simplify }
       end
 
+      product = product_equation(f, x, depth, all: all)
+      return product if product
+
       radicals = radical_equation(f, x, depth)
       return radicals if radicals
 
@@ -442,6 +445,34 @@ module RCAS
       return logs if logs
 
       raise NotImplementedError, "can't solve #{f} = 0 for #{x}; nsolve(#{f}, #{x}: a..b) finds a root numerically"
+    end
+
+    # A product vanishes where one of its factors does, so a product no
+    # rule can take whole is still three easy equations when it is written
+    # as one: (x + 1)*(x - 2)*sin(x). Every factor has to be solvable, or
+    # the answer would be missing roots without saying so; a factor in the
+    # denominator is not one of them (`numerator_denominator` has already
+    # taken those away, and its zeros are poles rather than roots).
+    def product_equation(f, x, depth, all: false)
+      _, factors = Simplify.factorize(f)
+      pieces = factors.filter_map do |base, exponent|
+        next nil if exponent.is_a?(Numeric) && Simplify.negative?(exponent)
+        # a positive power vanishes exactly where its base does, and a
+        # symbolic exponent is the factor itself: exp(u) is stored as
+        # EXP**u, whose base knows nothing about x
+        piece = exponent.is_a?(Numeric) && exponent.positive? ? base : Simplify.power_node(base, exponent)
+        depends?(piece, x) ? piece : nil
+      end
+      if pieces.size < 2
+        # a product the normal form has already multiplied out:
+        # (x - 2)*log(x)/x arrives as -2*log(x) + x*log(x)
+        common, rest = Simplify.common_factor(f)
+        pieces = [common, rest].compact.select { |piece| depends?(piece, x) }
+        return nil if pieces.size < 2
+      end
+      pieces.flat_map { |piece| univariate(piece, x, depth + 1, all: all) }
+    rescue NotImplementedError
+      nil # one factor rcas cannot solve: the product is no easier
     end
 
     # sqrt(u) = v: the radical on one side, both sides to the q-th power,

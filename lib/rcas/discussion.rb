@@ -316,13 +316,7 @@ module RCAS
 
     # [what every term of the sum has in common, what is left], or nil.
     def split_common(g)
-      constant, terms = Expand.table(g)
-      return nil unless constant.zero?
-      return nil if terms.size < 2
-      shared = terms.keys.first.select { |base, exponent| terms.keys.all? { |factors| factors[base] == exponent } }
-      return nil if shared.empty?
-      common = shared.reduce(Num.new(1)) { |product, (base, exponent)| (product * Simplify.power_node(base, exponent)).simplify }
-      [common, Expand.expand(g / common)]
+      Simplify.common_factor(g)
     rescue *UNDECIDED
       nil
     end

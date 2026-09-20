@@ -1917,6 +1917,22 @@ rcas> solve(x - x, x)
 => (-oo, oo)
 ```
 
+A product is solved factor by factor, since it vanishes exactly where one
+of its factors does - and that holds for a product the normal form has
+already multiplied out, which is found through the term table rather than
+by factoring. Every factor has to be solvable: one that is not would mean
+roots missing from the answer with nothing to say so, and the message
+names `nsolve` instead.
+
+```
+rcas> solve((x + 1)*(x - 2)*sin(x), x)
+=> [-1, 0, 2, pi]
+rcas> solve(exp(x)*(x - 2), x)
+=> [2]
+rcas> solve((x - 2)*log(x)/x, x)
+=> [1, 2]
+```
+
 An equation with one radical is squared, one with several logarithms is
 combined into one, and both are then checked against the equation they
 came from: raising to a power and merging logarithms invent solutions, and

@@ -252,4 +252,32 @@ class SolveTest < Minitest::Test
     assert_match(/nsolve/, e.message)
   end
 
+  # A product vanishes where one of its factors does, so a product no rule
+  # takes whole is still several easy equations: solve of
+  # (x + 1)*(x - 2)*sin(x) raised NotImplementedError.
+  def test_a_product_is_solved_factor_by_factor
+    x = RCAS::Var.new(:x)
+    assert_equal ["-1", "0", "2", "pi"], strs(RCAS.solve((x + 1) * (x - 2) * RCAS.sin(x), x))
+    assert_equal ["-1", "2", "2*pi*k", "pi + 2*pi*k"],
+                 strs(RCAS.solve((x + 1) * (x - 2) * RCAS.sin(x), x, all: true))
+    assert_equal ["2"], strs(RCAS.solve(RCAS.exp(x) * (x - 2), x)), "exp is never zero"
+    assert_equal ["-1", "2"], strs(RCAS.solve(RCAS.sqrt(x + 1) * (x - 2), x))
+    assert_equal ["0", "1", "pi"], strs(RCAS.solve((x - 1)**2 * RCAS.sin(x), x))
+    assert_equal ["-2", "2"], strs(RCAS.solve((x**2 - 4) * RCAS.exp(-x), x))
+    assert_equal ["0", "pi"], strs(RCAS.solve(RCAS.sin(x) / (x - 2), x)), "a denominator has no roots"
+    # the product the normal form has already multiplied out
+    assert_equal ["1", "2"], strs(RCAS.solve((x - 2) * RCAS.log(x) / x, x))
+    assert_equal ["-1", "0", "pi"], strs(RCAS.solve(RCAS.sin(x) * x + RCAS.sin(x), x))
+    assert_equal [["log(x)", "-2 + x"]],
+                 [RCAS::Simplify.common_factor((RCAS.log(x) * x - 2 * RCAS.log(x)).simplify).map(&:to_s)]
+  end
+
+  # One factor rcas cannot solve means roots it cannot name: a partial list
+  # would say nothing about what is missing, so the message stands.
+  def test_a_product_with_an_unsolvable_factor_still_says_so
+    x = RCAS::Var.new(:x)
+    e = assert_raises(NotImplementedError) { RCAS.solve(RCAS.sin(x) * (x - RCAS.cos(x)), x) }
+    assert_match(/nsolve/, e.message)
+  end
+
 end
