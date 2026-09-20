@@ -38,6 +38,22 @@ class AnalysisTest < Minitest::Test
     assert_equal RCAS::RealSet.reals, RCAS.real_domain(X**2 + 1, :x)
   end
 
+  # asin and acos are bounded both ways, and the domain said nothing about
+  # them: real_domain(asin(x), x) was the whole line. Past the interval
+  # they do have a value, off the real line, which is why the condition
+  # has to be named rather than left to the evaluation to notice.
+  def test_the_inverse_functions_are_bounded_both_ways
+    assert_equal "[-1, 1]", RCAS.real_domain(RCAS.asin(X), :x).to_s
+    assert_equal "[-1, 1]", RCAS.real_domain(RCAS.acos(X), :x).to_s
+    assert_equal "[-1/2, 1/2]", RCAS.real_domain(RCAS.asin(2 * X), :x).to_s
+    assert_equal "[2, 4]", RCAS.real_domain(RCAS.acos(X - 3), :x).to_s
+    assert_equal "[-1, 0) ∪ (0, 1]", RCAS.real_domain(RCAS.asin(X) / X, :x).to_s
+    assert_equal RCAS::RealSet.reals, RCAS.real_domain(RCAS.atan(X), :x), "atan is not one of them"
+    assert_equal "[-1, 1]", RCAS.discuss(RCAS.asin(X), :x).domain.to_s
+    ops = RCAS::Analysis.domain_conditions(RCAS.asin(X), RCAS::Var.new(:x)).map(&:op)
+    assert_equal %i[>= <=], ops
+  end
+
   def test_several_variables
     assert_equal "(2*x*y, x**2)", RCAS.gradient(X**2 * Y, [:x, :y]).to_s
     assert_equal [["2*y", "2*x"], ["2*x", "0"]], RCAS.hessian(X**2 * Y, [:x, :y]).entries.map { |r| r.map(&:to_s) }

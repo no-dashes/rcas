@@ -280,20 +280,22 @@ class IntegrateTest < Minitest::Test
   # spells them, and the reach halved silently when two families of step
   # 4*pi became the one family of step 2*pi that says the same thing.
   def test_the_break_budget_is_spent_across_families
-    k = RCAS::Var.new(:k)
-    coarse = [RCAS::ImageSet.new((RCAS::PI + 4 * RCAS::PI * k).simplify, k),
-              RCAS::ImageSet.new((3 * RCAS::PI + 4 * RCAS::PI * k).simplify, k)]
-    fine = RCAS::ImageSet.new((RCAS::PI + 2 * RCAS::PI * k).simplify, k)
-    hi = 255.0 * Math::PI
-    budget = RCAS::Integrate::MAX_BREAKS
-    spent = coarse.sum do |family|
-      members = family.between(0.0, hi, limit: budget)
-      refute_nil members
-      budget -= members.size
-      members.size
-    end
-    assert_equal fine.between(0.0, hi, limit: RCAS::Integrate::MAX_BREAKS).size, spent,
-                 "the same breaks, however they are spelled"
+    # two antiderivatives, each with breaks of its own: tan(x/2) breaks at
+    # the odd multiples of pi, tan(x/3) at the odd multiples of 3*pi/2
+    half = RCAS.tan(X / 2)
+    third = RCAS.tan(X / 3)
+    cap = RCAS::Integrate::MAX_BREAKS
+    hi = 200.0 * Math::PI
+    alone = RCAS::Integrate.jump_points(half, X, 0.0, hi)
+    assert_equal 100, alone.size, "under the cap on its own"
+    assert_operator RCAS::Integrate.jump_points(third, X, 0.0, hi).size, :<, cap
+    assert_nil RCAS::Integrate.jump_points(half + third, X, 0.0, hi),
+               "together they are past the budget, and that is not 'no breaks'"
+    # and inside the budget the two families are simply added up
+    short = 40.0 * Math::PI
+    both = RCAS::Integrate.jump_points(half + third, X, 0.0, short)
+    assert_equal RCAS::Integrate.jump_points(half, X, 0.0, short).size +
+                 RCAS::Integrate.jump_points(third, X, 0.0, short).size, both.size
   end
 
   # An endpoint that substitutes to something undefined is not an answer.

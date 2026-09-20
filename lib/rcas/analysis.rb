@@ -221,8 +221,16 @@ module RCAS
       raise NotImplementedError, "real_domain: where #{condition} holds is not decided here (#{e.message})", cause: nil
     end
 
+    # The inverse functions whose real argument has to stay in [-1, 1].
+    # Past that they do have a value, off the real line (Functions
+    # .real_branch), which is exactly why the condition has to be named
+    # here: real_domain(asin(x), x) answered with the whole line before
+    # (20 Sept 2026, after the tenth pass of the review).
+    BOUNDED_INVERSES = %i[asin acos].freeze
+
     # The conditions behind that domain, so that a caller can name them:
-    # one per denominator, even root and logarithm.
+    # one per denominator, even root and logarithm, and two for each
+    # asin or acos.
     def domain_conditions(f, x)
       conditions = denominators(f, x).map { |d| Inequality.new(d, :!=, 0) }
       f.each_node do |node|
@@ -231,6 +239,9 @@ module RCAS
           conditions << Inequality.new(node.base, :>=, 0)
         elsif node.is_a?(Fn) && node.name == :log && node.args.first.variables.include?(x.name)
           conditions << Inequality.new(node.args.first, :>, 0)
+        elsif node.is_a?(Fn) && BOUNDED_INVERSES.include?(node.name) && node.args.first.variables.include?(x.name)
+          conditions << Inequality.new(node.args.first, :>=, Num.new(-1))
+          conditions << Inequality.new(node.args.first, :<=, Num.new(1))
         end
       end
       conditions

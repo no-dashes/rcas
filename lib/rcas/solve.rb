@@ -812,6 +812,8 @@ module RCAS
           case condition.op
           when :> then value > 1e-9
           when :>= then value > -1e-9
+          when :< then value < -1e-9
+          when :<= then value < 1e-9
           when :!= then value.abs > 1e-9
           else true
           end

@@ -1129,7 +1129,13 @@ rcas> tangent(x**2, x, 1)
 => -1 + 2*x
 rcas> real_domain(log(x - 1), x)
 => (1, oo)
+rcas> real_domain(asin(x)/x, x)
+=> [-1, 0) ∪ (0, 1]
 ```
+
+`real_domain` collects one condition per denominator, even root and
+logarithm, and two for each `asin` or `acos`, which are bounded at both
+ends; a condition it cannot solve is named rather than quietly dropped.
 
 `extrema` returns the point, the value and the kind. The second derivative
 decides; where that vanishes too, as for `x**4`, the sign of the first

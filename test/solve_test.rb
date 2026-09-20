@@ -440,4 +440,17 @@ class SolveTest < Minitest::Test
                  strs(RCAS.solve(RCAS.sin(x) - Rational(1, 2), x))
   end
 
+  # A root of one factor solves the product only where the rest of it is
+  # defined, and asin is the first condition with an upper bound as well
+  # as a lower one: 3 is a root of x - 3 and asin(3) is not a real number,
+  # so it is not a root of the product.
+  def test_a_factor_root_outside_the_inverse_interval_is_dropped
+    x = RCAS::Var.new(:x)
+    assert_equal ["0"], strs(RCAS.solve(RCAS.asin(x) * (x - 3), x))
+    assert_equal ["1"], strs(RCAS.solve(RCAS.acos(x) * (x + 2), x))
+    assert_equal ["1"], strs(RCAS.solve(RCAS.asin(x - 1) * (x - 3), x))
+    # and a root inside the interval is kept
+    assert_equal ["0", "1/2"], strs(RCAS.solve(RCAS.asin(x) * (x - Rational(1, 2)), x))
+  end
+
 end
