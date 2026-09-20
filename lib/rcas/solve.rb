@@ -87,7 +87,9 @@ module RCAS
       x = variable(f, vars)
       # 0 = 0 holds for every value of x. That is an answer, and a set is
       # what says it; raising made a true statement look like a failure.
-      return RealSet.reals if Scalar.zero?(f)
+      # Every value *of x*: with x declared an integer, sin(pi*x) vanishes
+      # on ZZ and nowhere else, so the reals would be an overstatement.
+      return domain || RCAS.assumption(x.name) || RealSet.reals if Scalar.zero?(f)
       ordered(restrict(dedupe(univariate(f, x, 0, all: all)), x, domain))
     end
 
@@ -468,9 +470,11 @@ module RCAS
         # (x - 2)*log(x)/x arrives as -2*log(x) + x*log(x)
         common, rest = Simplify.common_factor(f)
         pieces = [common, rest].compact.select { |piece| depends?(piece, x) }
-        return nil if pieces.size < 2
+          return nil if pieces.size < 2
       end
-      pieces.flat_map { |piece| univariate(piece, x, depth + 1, all: all) }
+      # A root of one factor is a root of the product only where the rest of
+      # the product is defined: log(x)*(x**2 - 4) does not vanish at -2.
+      defined_roots(f, x, pieces.flat_map { |piece| univariate(piece, x, depth + 1, all: all) })
     rescue NotImplementedError
       nil # one factor rcas cannot solve: the product is no easier
     end

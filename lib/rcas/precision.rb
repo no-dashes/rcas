@@ -550,7 +550,8 @@ module RCAS
         return total.mult(1, prec) if settled && level > 1
         previous = total
       end
-      raise NoConvergence, "evalf: the quadrature did not settle to #{prec} digits (the integral may diverge)"
+      raise NoConvergence, "evalf: the quadrature did not settle to #{prec} digits; " \
+                           "the integral may diverge, or oscillate faster than the rule resolves"
     end
 
     # One trapezoidal sum in t, over every k (parity 0) or only the odd ones

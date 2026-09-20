@@ -127,4 +127,17 @@ class ComplexPartsAndRoundingTest < Minitest::Test
     assert_in_delta Math.cos(1), RCAS.cos(-1.0).value, 1e-15
   end
 
+  # `include RCAS::Functions` into Object - what README tells a library user
+  # to do - gives the Math module itself a `floor`, so a Math.respond_to?
+  # guard sent floor(2.5) back into Functions#floor until the stack ran out.
+  def test_folding_asks_math_only_for_what_math_owns
+    refute_includes RCAS::Functions::MATH_NAMES, :floor
+    refute_includes RCAS::Functions::MATH_NAMES, :bernoulli
+    assert_includes RCAS::Functions::MATH_NAMES, :sin
+    script = 'include RCAS::Functions; puts [floor(2.5), ceil(2.5), round(2.5), bernoulli(3), ' \
+             'fibonacci(10), harmonic(3), sin(1.0)].inspect'
+    out = `ruby -I#{File.expand_path('../lib', __dir__)} -rrcas -e #{script.inspect} 2>&1`
+    assert_equal "[2, 3, 3, 0, 55, 11/6, 0.8414709848078965]", out.strip
+  end
+
 end

@@ -272,6 +272,29 @@ class SolveTest < Minitest::Test
                  [RCAS::Simplify.common_factor((RCAS.log(x) * x - 2 * RCAS.log(x)).simplify).map(&:to_s)]
   end
 
+  # A root of one factor solves the product only where the rest of the
+  # product is defined: log(x)*(x**2 - 4) does not vanish at -2, and
+  # x*sqrt(x - 1) does not vanish at 0.
+  def test_a_products_roots_are_checked_against_the_whole_product
+    x = RCAS::Var.new(:x)
+    assert_equal ["1", "2"], strs(RCAS.solve(RCAS.log(x) * (x**2 - 4), x))
+    assert_equal ["1"], strs(RCAS.solve(x * RCAS.sqrt(x - 1), x))
+    assert_equal ["1", "2"], strs(RCAS.solve((x - 2) * RCAS.log(x) / x, x))
+    assert_equal ["-1", "0", "2", "pi"], strs(RCAS.solve((x + 1) * (x - 2) * RCAS.sin(x), x)), "and nothing lost"
+  end
+
+  # "Every value of x" is every value x can take: with x an integer,
+  # sin(pi*x) vanishes on ZZ, and the real line would be an overstatement.
+  def test_every_value_means_every_value_the_unknown_can_take
+    x = RCAS::Var.new(:x)
+    assert_equal RCAS::RealSet.reals, RCAS.solve(x - x, x)
+    assert_equal RCAS::ZZ, RCAS.solve(x - x, x, domain: RCAS::ZZ)
+    RCAS.assume(x: RCAS::ZZ) do
+      assert_equal RCAS::ZZ, RCAS.solve(RCAS.sin(RCAS::PI * x), x)
+    end
+    assert_equal ["0", "1"], strs(RCAS.solve(RCAS.sin(RCAS::PI * x), x)), "undeclared: one period"
+  end
+
   # One factor rcas cannot solve means roots it cannot name: a partial list
   # would say nothing about what is missing, so the message stands.
   def test_a_product_with_an_unsolvable_factor_still_says_so

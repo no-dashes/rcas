@@ -114,7 +114,7 @@ lib/rcas/decompositions.rb  Decompositions + Matrix#lu/qr/cholesky/diagonalize/j
 lib/rcas/laplace.rb         Laplace.transform (table + first shift + multiplication by t) and .inverse (partial fractions)
 lib/rcas/hypothesis.rb      Hypothesis: ttest/ztest/chisquare_test/ftest/binomial_test (exact), confidence_interval, proportion_interval; TestResult prints one line
 lib/rcas/combinatorics.rb   factorial/binomial/gamma values, factorial cancellation, known power series
-lib/rcas/solve.rb           Equation, Solve (polynomial, transcendental, abs/sign by case split + verify, products factor by factor - `product_equation`, falling back to `Simplify.common_factor` for a product the normal form has multiplied out - systems: linear, lex Gröbner + triangular, resultants for parameters), polynomial_roots (binomial, biquadratic, RootOf); `restrict` drops the answers that contradict the unknown's declared domain or sign (`Infer.excluded?`, `domain:` for one call)
+lib/rcas/solve.rb           Equation, Solve (polynomial, transcendental, abs/sign by case split + verify, products factor by factor - `product_equation`, whose roots go through `defined_roots` because a factor's root solves the product only where the rest of it is defined, falling back to `Simplify.common_factor` for a product the normal form has multiplied out - systems: linear, lex Gröbner + triangular, resultants for parameters), polynomial_roots (binomial, biquadratic, RootOf); `restrict` drops the answers that contradict the unknown's declared domain or sign (`Infer.excluded?`, `domain:` for one call)
 lib/rcas/groebner.rb        Groebner: Buchberger (product criterion), reduce, interreduce, zero_dimensional?; orders :lex :grlex :grevlex
 lib/rcas/named_polynomials.rb  Poly: the named families (chebyshev_t/u, legendre, hermite/hermite_prob, laguerre, gegenbauer, jacobi, bernoulli, euler, cyclotomic, swinnerton_dyer, abel, fibonacci, lucas, bell) as coefficient lists, handed back expanded; a namespace, registered in `Constants` (so all three front ends see `Poly`), never bare names - `legendre`/`bernoulli`/`fibonacci` are taken
 lib/rcas/interpolate.rb     Interpolate.newton (divided differences over Scalar arithmetic; PolyMatrix keeps its own Rational-only copy)
@@ -858,6 +858,13 @@ names one without a session-wide assumption.
   scales extra right-hand-side columns the same way, so solutions of the
   scaled system are already solutions of the original; do not rescale
   again (that cost 23 s on a 6x6 inverse before it was removed).
+- **`Math.respond_to?(name)` is not a guard.** `include RCAS::Functions`
+  into Object - which README tells a library user to do - gives the `Math`
+  module itself a `floor`, so `Math.public_send(:floor, 2.5)` lands back in
+  `Functions#floor` and folding recurses until the stack ends. Float
+  folding compares against `Functions::MATH_NAMES` instead (found by the
+  sixth pass of the review, 20 Sept 2026; it bit only the library path,
+  since the three front ends include into a session object).
 - Ruby's `Integer#prime?` is Miller-Rabin only below about 3.3e24 and
   trial division above; `Prime.prime_division` is trial division always.
   `NumberTheory` has its own tests for that reason - and since 19 Sept 2026

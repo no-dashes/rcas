@@ -620,6 +620,15 @@ module RCAS
     ODD = %i[sin tan atan asin sinh sign erf Si].freeze
     EVEN = %i[cos cosh abs].freeze
 
+    # The functions rcas hands to Math for a Float argument. Asking
+    # `Math.respond_to?` instead looks safe and is not: `include
+    # RCAS::Functions` into Object - which is what README tells a library
+    # user to do - gives the Math module itself a `floor`, so
+    # Math.public_send(:floor, 2.5) lands back in Functions#floor, which
+    # folds, which asks again. floor, ceil, round, bernoulli, fibonacci and
+    # harmonic all recursed that way until the stack ran out.
+    MATH_NAMES = %i[sin cos tan asin acos atan sinh cosh exp log erf erfc gamma].freeze
+
     # Math.log(-1.0) and Math.asin(2.0) raise Math::DomainError: the value
     # is outside the reals, so the node stays as it is rather than the error
     # reaching the user (a divergent sum used to come back as "Numerical
@@ -675,7 +684,7 @@ module RCAS
       return exact if exact
 
       case [fn.name, arg]
-      in [_, Num => n] if n.value.is_a?(Float) && Math.respond_to?(fn.name) then math_value(fn, n.value)
+      in [_, Num => n] if n.value.is_a?(Float) && MATH_NAMES.include?(fn.name) then math_value(fn, n.value)
       in [_, Num => n] if n.value.is_a?(Complex) && (n.value.real.is_a?(Float) || n.value.imaginary.is_a?(Float)) && %i[exp sin cos].include?(fn.name)
         Num.new(CMath_lite.public_send(fn.name, n.value))
       in [:sin, Num => n] if n.zero? then Num.new(0)
