@@ -111,21 +111,34 @@ module RCAS
 
     def vertical_asymptotes(f, x)
       poles = denominators(f, x).flat_map do |denominator|
-        Solve.solve(denominator, x, principal: true)
+        Solve.solve(denominator, x)
       rescue NotImplementedError, ArgumentError
         []
       end
-      sort_points(poles.uniq.select { |p| Limits.infinite?(Limits.limit(f, x, p, :right)) || Limits.infinite?(Limits.limit(f, x, p, :left)) })
+      sort_points(poles.uniq.select { |p| runs_away?(f, x, p) })
     end
 
-    # The denominators f divides by: the one of its normal form, and the ones
-    # it is written with, which the normal form may have cancelled away
-    # ((x**2 - 1)/(x - 1) is still undefined at 1).
+    # A whole family of asymptotes is reported as the family: tan has one
+    # at every odd multiple of pi/2, and a member of the set stands for all
+    # of them when the limit is taken.
+    def runs_away?(f, x, point)
+      probe = point.is_a?(ImageSet) ? point.at(0) : point
+      Limits.infinite?(Limits.limit(f, x, probe, :right)) || Limits.infinite?(Limits.limit(f, x, probe, :left))
+    rescue StandardError
+      false
+    end
+
+    # The denominators f divides by: the one of its normal form, the ones it
+    # is written with, which the normal form may have cancelled away
+    # ((x**2 - 1)/(x - 1) is still undefined at 1), and the one tan hides -
+    # tan(u) is sin(u)/cos(u), so it has a pole wherever cos(u) vanishes,
+    # and without that a tangent had no asymptotes and no gaps at all.
     def denominators(f, x)
       found = [RationalFunction.denom(f)]
       f.each_node do |node|
         case node
         when Div then found << node.right
+        when Fn then found << Fn.new(:cos, [node.args.first]) if node.name == :tan
         when Pow
           exponent = node.exponent
           found << node.base if exponent.is_a?(Num) && exponent.value.is_a?(Numeric) &&
@@ -178,7 +191,17 @@ module RCAS
       x = variable(f, var)
       conditions = domain_conditions(f, x)
       return RealSet.reals if conditions.empty?
-      conditions.map { |c| Inequalities.solve(c, x) }.reduce(:&)
+      conditions.map { |c| solved_condition(c, x) }.reduce(:&)
+    end
+
+    # A condition rcas cannot solve is not an empty one: dropping it would
+    # claim the function is defined where nobody has looked. The message
+    # says which condition it was, in rcas's own words rather than as a
+    # backtrace out of Inequalities.
+    def solved_condition(condition, x)
+      Inequalities.solve(condition, x)
+    rescue NotImplementedError => e
+      raise NotImplementedError, "real_domain: where #{condition} holds is not decided here (#{e.message})"
     end
 
     # The conditions behind that domain, so that a caller can name them:

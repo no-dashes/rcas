@@ -80,4 +80,15 @@ class AnalysisTest < Minitest::Test
     assert_in_delta 4 * Math::PI / 3, RCAS.revolution_volume(RCAS.sqrt(1 - :x**2), x: -1..1).evalf, 1e-12, "the unit ball"
     assert_in_delta 4 * Math::PI, RCAS.revolution_surface(RCAS.sqrt(1 - :x**2), x: -1..1).evalf, 1e-9, "its surface"
   end
+  # A condition rcas cannot solve is not an empty one: dropping it would
+  # claim the function is defined where nobody looked.
+  def test_a_domain_condition_that_cannot_be_solved_says_so
+    x = RCAS::Var.new(:x)
+    [RCAS.log(RCAS.sin(x)), RCAS.tan(x)].each do |f|
+      e = assert_raises(NotImplementedError) { RCAS.real_domain(f, x) }
+      assert_match(/real_domain/, e.message)
+    end
+    assert_equal "(-oo, 0) ∪ (0, oo)", RCAS.real_domain(1 / x, x).to_s
+  end
+
 end

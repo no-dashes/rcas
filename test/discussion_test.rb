@@ -192,6 +192,27 @@ class DiscussionTest < Minitest::Test
     assert_equal "discuss(t**2 - 1, t)", RCAS.steps(T**2 - 1, :discuss).problem.to_s
   end
 
+  # "not determined" must mean the library said so, not that any error at
+  # all was swallowed on the way.
+  def test_undecided_is_a_named_list_of_errors
+    assert_includes RCAS::Discussion::UNDECIDED, ArgumentError
+    assert_includes RCAS::Discussion::UNDECIDED, RCAS::DomainError
+    refute_includes RCAS::Discussion::UNDECIDED, StandardError
+    refute_includes RCAS::Discussion::UNDECIDED, NoMethodError
+  end
+
+  # tan(x) hides a cos in its denominator, so it used to have no gaps, no
+  # asymptotes and the whole real line as its domain.
+  def test_a_tangent_has_gaps_and_asymptotes
+    x = RCAS::Var.new(:x)
+    report = RCAS.discuss(RCAS.tan(x), x)
+    assert_nil report.domain, "the complement of a family is not a RealSet, and saying so is honest"
+    assert_equal "pi", report.period.to_s
+    assert_equal ["{pi/2 + pi*k | k in ZZ}"], report.asymptotes[:vertical].map(&:to_s)
+    assert_equal ["-pi/2", "pi/2"], report.gaps.map { |point, _kind, _l, _r| point.to_s }
+    assert_equal %i[pole pole], report.gaps.map { |_point, kind, _l, _r| kind }
+  end
+
   private
 
   def row(report, label) = report.to_s.lines.find { |l| l.start_with?("  #{label}") }.split.drop(1).join(" ")
@@ -203,14 +224,6 @@ class DiscussionTest < Minitest::Test
     return high - 1.0 if low.infinite?
     return low + 1.0 if high.infinite?
     (low + high) / 2
-  end
-  # "not determined" must mean the library said so, not that any error at
-  # all was swallowed on the way.
-  def test_undecided_is_a_named_list_of_errors
-    assert_includes RCAS::Discussion::UNDECIDED, ArgumentError
-    assert_includes RCAS::Discussion::UNDECIDED, RCAS::DomainError
-    refute_includes RCAS::Discussion::UNDECIDED, StandardError
-    refute_includes RCAS::Discussion::UNDECIDED, NoMethodError
   end
 
 end

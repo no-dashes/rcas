@@ -79,12 +79,16 @@ module RCAS
     def to_expr = expr
 
     # The image of the set under a function of its member: the parameter
-    # keeps its domain while the block runs, so sin of {pi/6 + 2*pi*k | k in
-    # ZZ} folds to 1/2 without anyone declaring k first. A result that no
+    # keeps its domain while the block runs, and the result is simplified
+    # there too, so cos of {2*pi*k | k in ZZ} folds to 1 without anyone
+    # declaring k first - that fold needs the integer. A result that no
     # longer mentions the parameter is not a family any more and comes back
     # as the value itself.
     def map
-      inside = RCAS.assume(**parameters.to_h { |p| [p.name, domain] }) { yield(expr) }
+      inside = RCAS.assume(**parameters.to_h { |p| [p.name, domain] }) do
+        found = yield(expr)
+        found.is_a?(Expression) ? found.simplify : found
+      end
       lifted = Expression.lift(inside)
       (lifted.variables & parameters.map(&:name)).empty? ? lifted : ImageSet.new(lifted, parameters, domain)
     end
@@ -167,7 +171,62 @@ module RCAS
       # on ZZ and nowhere else, so the reals would be an overstatement.
       return domain || RCAS.assumption(x.name) || RealSet.reals if Scalar.zero?(f)
       roots = dedupe(univariate(f, x, 0, all: !principal)).map { |root| family(root, x, f) }
-      ordered(restrict(roots, x, domain))
+      ordered(restrict(merge_families(roots), x, domain))
+    end
+
+    # Families of one period that say the same thing twice, or that together
+    # make a finer one: sin(x)**2 = 1 is solved at pi/2, -pi/2 and 3*pi/2
+    # over a period of 2*pi, of which the last two are the same set and all
+    # three together are {pi/2 + pi*k | k in ZZ} - which is what a student
+    # writes. The offsets are compared as fractions of the step, so it works
+    # the same for {2*k} and {1 + 2*k}, whose union is the integers.
+    def merge_families(roots)
+      entries = roots.map { |root| family_shape(root) || [:plain, root] }
+      groups = entries.select { |e| e.first == :family }.group_by { |e| e[1] }
+      done = {}
+      entries.flat_map do |entry|
+        next [entry.last] if entry.first == :plain
+        next [] if done[entry[1]]
+        done[entry[1]] = true
+        merged_family(groups[entry[1]], entry[1])
+      end
+    end
+
+    # [:family, step, offset as a fraction of the step, the set], or nil for
+    # anything this cannot measure - a set whose offset is not a rational
+    # multiple of its step has no residue to compare.
+    def family_shape(root)
+      return nil unless root.is_a?(ImageSet) && root.parameters.size == 1
+      k = root.parameters.first
+      step = begin
+        Coefficients.coeff(root.expr, k, 1)
+      rescue StandardError
+        nil
+      end
+      return nil if step.nil? || Scalar.zero?(step)
+      offset = (root.expr - step * k).simplify
+      return nil if offset.variables.include?(k.name)
+      residue = (offset / step).simplify
+      return nil unless residue.is_a?(Num) && (residue.value.is_a?(Integer) || residue.value.is_a?(Rational))
+      [:family, step, Rational(residue.value) % 1, root]
+    end
+
+    def merged_family(group, step)
+      residues = group.map { |e| e[2] }.uniq.sort
+      set = group.first.last
+      count = residues.size
+      if count > 1 && residues.each_cons(2).all? { |a, b| b - a == Rational(1, count) }
+        [rebuilt_family(set, residues.first * step, step / count)]
+      else
+        residues.map { |residue| rebuilt_family(set, residue * step, step) }
+      end
+    end
+
+    # {k | k in ZZ} is the domain itself, and says so.
+    def rebuilt_family(set, offset, step)
+      k = set.parameters.first
+      expr = (Expression.lift(offset) + step * k).simplify
+      expr == k ? set.domain : ImageSet.new(expr, [k], set.domain)
     end
 
     # A root carrying a parameter the equation did not have is one period's
@@ -585,7 +644,7 @@ module RCAS
         # (x - 2)*log(x)/x arrives as -2*log(x) + x*log(x)
         common, rest = Simplify.common_factor(f)
         pieces = [common, rest].compact.select { |piece| depends?(piece, x) }
-          return nil if pieces.size < 2
+        return nil if pieces.size < 2
       end
       # A root of one factor is a root of the product only where the rest of
       # the product is defined: log(x)*(x**2 - 4) does not vanish at -2.
@@ -735,7 +794,8 @@ module RCAS
         if depends?(u.base, x) && !depends?(u.exponent, x)
           univariate((u.base - v**(1 / u.exponent)).simplify, x, depth + 1)
         elsif !depends?(u.base, x)
-          univariate((u.exponent - Fn.new(:log, [v]) / Fn.new(:log, [u.base])).simplify, x, depth + 1)
+          roots_of_unity(u, v, x, depth, all: all) ||
+            univariate((u.exponent - Fn.new(:log, [v]) / Fn.new(:log, [u.base])).simplify, x, depth + 1)
         else
           []
         end
@@ -743,6 +803,31 @@ module RCAS
         []
       end
     end
+
+    # Largest order of a root of unity we look for: (-1)**x is the one that
+    # turns up, from cos(pi*x) with x an integer.
+    MAX_ORDER = 12
+
+    # b**u = v where b is a root of unity: the logarithm is no use, because
+    # the solutions repeat. (-1)**x = 1 holds for every even x and
+    # (-1)**x = -1 for every odd one, and answering with one of them - which
+    # is what log gave - drops all the rest. nil when b is not one, so that
+    # 2**x = 4 keeps the ordinary route.
+    def roots_of_unity(u, v, x, depth, all: false)
+      base = u.base
+      return nil unless base.is_a?(Num) && v.is_a?(Num)
+      order = (2..MAX_ORDER).find { |n| unity?(Simplify.pow_number(base.value, n), 1) }
+      return nil if order.nil?
+      turn = all ? period_parameter(u.exponent - v, x) : nil
+      (0...order).filter_map do |j|
+        next nil unless unity?(Simplify.pow_number(base.value, j), v.value)
+        target = Num.new(j)
+        target = (target + Num.new(order) * turn).simplify if turn
+        univariate((u.exponent - target).simplify, x, depth + 1)
+      end.flatten
+    end
+
+    def unity?(value, target) = Scalar.zero?(Expression.lift(Simplify.normalize_number(value - target)))
 
     # Drop candidates that numerically fail the equation (spurious branches).
     def verify(f, x, roots)

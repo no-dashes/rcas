@@ -2033,6 +2033,34 @@ rcas> solve(sin(2*x) - 1/2r, x)
 => [{pi/12 + pi*k | k in ZZ}, {5*pi/12 + pi*k | k in ZZ}]
 ```
 
+Sets that say the same thing twice, or that together make a finer one, are
+merged: `sin(x) = 0` is solved at `0` and at `pi` over a period of `2*pi`,
+which is every multiple of `pi`, and that is what a student writes. Where
+the whole of a number set solves the equation, it is named.
+
+```
+rcas> solve(sin(x), x)
+=> [{pi*k | k in ZZ}]
+rcas> solve(sin(x)**2 - 1, x)
+=> [{pi/2 + pi*k | k in ZZ}]
+rcas> solve(sin(x)*cos(x), x)
+=> [{pi*k/2 | k in ZZ}]
+rcas> solve(sin(PI*x), x)
+=> [ZZ]
+```
+
+A base of modulus one repeats as well, which is what `cos(pi*x)` becomes
+when `x` is known to be an integer.
+
+```
+rcas> assume(x: ZZ) { solve(cos(PI*x) + 1, x) }
+=> [{1 + 2*k | k in ZZ}]
+rcas> solve((-1)**x - 1, x)
+=> [{2*k | k in ZZ}]
+rcas> solve(2**x - 4, x)
+=> [2]
+```
+
 The set carries the domain of its parameter, which is what lets the family
 be checked: sine and cosine repeat every `2*pi` and the tangent every
 `pi`, so a whole period added to the argument drops out once the multiple
@@ -2047,7 +2075,7 @@ rcas> assume(k: ZZ) { sin(x + 2*pi*k).simplify }
 rcas> solve(sin(x) - 1/2r, x).map { |set| set.map { |e| sin(e).simplify } }
 => [1/2, 1/2]
 rcas> solve(sin(x), x).first.at(3)
-=> 6*pi
+=> 3*pi
 ```
 
 Where the unknown lives is part of the question. A domain declared with

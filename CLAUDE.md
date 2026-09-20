@@ -67,7 +67,12 @@ background in `doc`/`/help`, and the manual full of worked transcripts.
   and the sign charts all pass it. `restrict` can decide a family against a
   declared domain where the members are rational multiples of pi, since pi
   is transcendental: `{2*pi*k | k in ZZ}` meets ZZ in 0 alone and
-  `{pi + 2*pi*k | k in ZZ}` not at all.
+  `{pi + 2*pi*k | k in ZZ}` not at all. `merge_families` then folds the
+  families of one period together - it compares each offset as a fraction
+  of the step, so `{pi/2 + 2*pi*k}` and `{3*pi/2 + 2*pi*k}` become
+  `{pi/2 + pi*k}`, and `{2*k}` with `{1 + 2*k}` becomes `ZZ` - and
+  `roots_of_unity` gives `(-1)**x = 1` the even integers rather than 0
+  alone (all three: 20 Sept 2026, the seventh pass of the review).
 - The API method `Expression#variables` returns the indeterminates; the
   name follows CAS convention and stays. The manual notes this once.
 - **domain and base** (settled 17 Sept 2026, after "`(ZZ**[2,2]).random.domain`
@@ -830,6 +835,11 @@ names one without a session-wide assumption.
 - Folding `Num` results back into a coefficient must skip the imaginary
   unit (`Simplify.imaginary_unit?`) or `i` disappears into a Complex
   coefficient and prints as `(1/2*i)`.
+- **A test appended after a `private` in a test class never runs.** Minitest
+  collects public methods only, and two tests sat there unnoticed until a
+  count of `def test_` was compared with the reported runs (20 Sept 2026).
+  Append above the `private`, and check the run count when adding to a file
+  whose helpers live at the bottom.
 - **Never `include RCAS::Functions` in a test class.** `Functions#diff`
   overrides `Minitest::Assertions#diff`, so the *first failing assertion*
   dies while formatting its message (a TypeError from `Expression.lift`)

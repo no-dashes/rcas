@@ -246,10 +246,15 @@ module RCAS
     end
 
     # A line the graph approaches. A line that *is* the graph - the oblique
-    # asymptote of 2*x + 1 is 2*x + 1 - is not worth saying.
+    # asymptote of 2*x + 1 is 2*x + 1 - is not worth saying. A vertical one
+    # is a place rather than a line, and may be a whole family of them
+    # ({pi/2 + pi*k | k in ZZ} for the tangent), so that question is not
+    # asked of it.
     def asymptotes(f, x, domain)
       found = Analysis.asymptotes(f, x, at: ends(domain))
-      found.transform_values { |lines| lines.reject { |line| same?(line, f) } }
+      found.to_h do |kind, lines|
+        [kind, kind == :vertical ? lines : lines.reject { |line| same?(line, f) }]
+      end
     rescue *UNDECIDED
       { vertical: [], horizontal: [], oblique: [] }
     end

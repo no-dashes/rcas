@@ -193,7 +193,8 @@ class SolveTest < Minitest::Test
     assert_equal ["{pi/6 + 2*pi*k | k in ZZ}", "{5*pi/6 + 2*pi*k | k in ZZ}"],
                  RCAS.solve(RCAS.sin(:x) - Rational(1, 2), :x).map(&:to_s), "and every solution by default"
     assert_equal ["{pi/4 + pi*k | k in ZZ}"], RCAS.solve(RCAS.tan(:x) - 1, :x).map(&:to_s), "tan has period pi"
-    assert_equal ["{pi/2 + 2*pi*k | k in ZZ}", "{-pi/2 + 2*pi*k | k in ZZ}"], RCAS.solve(RCAS.cos(:x), :x).map(&:to_s)
+    assert_equal ["{pi/2 + pi*k | k in ZZ}"], RCAS.solve(RCAS.cos(:x), :x).map(&:to_s),
+                 "the two families of a period apart are one of half the period"
     assert_equal ["{pi/12 + pi*k | k in ZZ}", "{5*pi/12 + pi*k | k in ZZ}"],
                  RCAS.solve(RCAS.sin(2 * :x) - Rational(1, 2), :x).map(&:to_s)
     assert_equal ["log(3)"], RCAS.solve(RCAS.exp(:x) - 3, :x).map(&:to_s), "no period to add"
@@ -268,7 +269,7 @@ class SolveTest < Minitest::Test
   def test_a_product_is_solved_factor_by_factor
     x = RCAS::Var.new(:x)
     assert_equal ["-1", "0", "2", "pi"], strs(RCAS.solve((x + 1) * (x - 2) * RCAS.sin(x), x, principal: true))
-    assert_equal ["-1", "2", "{2*pi*k | k in ZZ}", "{pi + 2*pi*k | k in ZZ}"],
+    assert_equal ["-1", "2", "{pi*k | k in ZZ}"],
                  strs(RCAS.solve((x + 1) * (x - 2) * RCAS.sin(x), x))
     assert_equal ["2"], strs(RCAS.solve(RCAS.exp(x) * (x - 2), x)), "exp is never zero"
     assert_equal ["-1", "2"], strs(RCAS.solve(RCAS.sqrt(x + 1) * (x - 2), x))
@@ -303,8 +304,8 @@ class SolveTest < Minitest::Test
     RCAS.assume(x: RCAS::ZZ) do
       assert_equal RCAS::ZZ, RCAS.solve(RCAS.sin(RCAS::PI * x), x)
     end
-    assert_equal ["{2*k | k in ZZ}", "{1 + 2*k | k in ZZ}"], strs(RCAS.solve(RCAS.sin(RCAS::PI * x), x)),
-                 "undeclared: every solution, which is every integer, in two families"
+    assert_equal ["ZZ"], strs(RCAS.solve(RCAS.sin(RCAS::PI * x), x)),
+                 "undeclared: every solution, which is every integer, and it says so"
   end
 
   # One factor rcas cannot solve means roots it cannot name: a partial list
@@ -335,6 +336,42 @@ class SolveTest < Minitest::Test
     assert_equal "{1 + pi/6 + 2*pi*k | k in ZZ}", set.map { |e| (e + 1).simplify }.to_s
     assert_equal "1/2", set.map { |e| RCAS.sin(e).simplify }.to_s
     assert_empty RCAS.assumptions, "the parameter's domain is the set's business, not the session's"
+  end
+
+  # Families of one period that repeat the same set, or that together make
+  # a finer one, are merged: sin(x)**2 = 1 was three sets of which two were
+  # literally the same, and all three together are {pi/2 + pi*k}.
+  def test_families_of_the_same_period_are_merged
+    x = RCAS::Var.new(:x)
+    assert_equal ["{pi/2 + pi*k | k in ZZ}"], strs(RCAS.solve(RCAS.sin(x)**2 - 1, x))
+    assert_equal ["{pi*k/2 | k in ZZ}"], strs(RCAS.solve(RCAS.sin(x) * RCAS.cos(x), x))
+    assert_equal ["{pi*k | k in ZZ}"], strs(RCAS.solve(RCAS.sin(x), x))
+    assert_equal ["ZZ"], strs(RCAS.solve(RCAS.sin(RCAS::PI * x), x)), "{k | k in ZZ} is ZZ"
+    # two families a third of a period apart are not one family
+    assert_equal ["{pi/6 + 2*pi*k | k in ZZ}", "{5*pi/6 + 2*pi*k | k in ZZ}"],
+                 strs(RCAS.solve(RCAS.sin(x) - Rational(1, 2), x))
+    # and every member of the merged set really solves the equation
+    set = RCAS.solve(RCAS.sin(x)**2 - 1, x).first
+    (-3..3).each { |i| assert_in_delta 1.0, RCAS.sin(set.at(i)).evalf**2, 1e-12 }
+  end
+
+  # (-1)**x = 1 holds for every even x, not just for 0: a base of modulus
+  # one repeats, and the logarithm route answered with one member of the
+  # family. cos(pi*x) rewrites to (-1)**x when x is an integer, so this is
+  # what that equation comes to.
+  def test_a_root_of_unity_has_a_period_too
+    x = RCAS::Var.new(:x)
+    assert_equal ["{2*k | k in ZZ}"], strs(RCAS.solve((-1)**x - 1, x))
+    assert_equal ["{1 + 2*k | k in ZZ}"], strs(RCAS.solve((-1)**x + 1, x))
+    assert_empty RCAS.solve((-1)**x - 2, x)
+    assert_equal ["{4*k | k in ZZ}"], strs(RCAS.solve(RCAS::I**x - 1, x))
+    assert_equal ["2"], strs(RCAS.solve(2**x - 4, x)), "no period when the base is bigger than one"
+    assert_equal ["0"], strs(RCAS.solve((-1)**x - 1, x, principal: true))
+    RCAS.assume(x: ZZ) do
+      assert_equal ["{1 + 2*k | k in ZZ}"], strs(RCAS.solve(RCAS.cos(RCAS::PI * x) + 1, x)),
+                   "the odd integers, not just the first of them"
+      assert_equal ["{2*k | k in ZZ}"], strs(RCAS.solve(RCAS.cos(RCAS::PI * x) - 1, x))
+    end
   end
 
 end
