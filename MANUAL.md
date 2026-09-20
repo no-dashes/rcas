@@ -2049,6 +2049,18 @@ rcas> solve(sin(PI*x), x)
 => [ZZ]
 ```
 
+An equation whose terms all have the same degree in `sin` and `cos` is a
+polynomial in `tan`, which is how `sin(x) + cos(x) = 0` is solved.
+
+```
+rcas> solve(sin(x) + cos(x), x)
+=> [{3*pi/4 + pi*k | k in ZZ}]
+rcas> solve(sin(x)**2 - cos(x)**2, x)
+=> [{pi/4 + pi*k/2 | k in ZZ}]
+rcas> solve(cos(x)**2 - 1/2r, x)
+=> [{pi/4 + pi*k/2 | k in ZZ}]
+```
+
 A base of modulus one repeats as well, which is what `cos(pi*x)` becomes
 when `x` is known to be an integer.
 

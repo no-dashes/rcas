@@ -80,6 +80,17 @@ class AnalysisTest < Minitest::Test
     assert_in_delta 4 * Math::PI / 3, RCAS.revolution_volume(RCAS.sqrt(1 - :x**2), x: -1..1).evalf, 1e-12, "the unit ball"
     assert_in_delta 4 * Math::PI, RCAS.revolution_surface(RCAS.sqrt(1 - :x**2), x: -1..1).evalf, 1e-9, "its surface"
   end
+  # A curve discussion is about a real function: the roots of 3*x**2 + 1
+  # are not critical points of the graph of x**3 + x.
+  def test_only_real_points_are_reported
+    x = RCAS::Var.new(:x)
+    assert_empty RCAS.critical_points(x**3 + x, x)
+    assert_empty RCAS.extrema(x**3 + x, x)
+    assert_equal ["0"], RCAS.inflections(RCAS.tan(x), x).map(&:to_s)
+    assert_equal ["-1", "1"], RCAS.critical_points(x**3 - 3 * x, x).map(&:to_s), "and nothing real is lost"
+    assert_equal ["0"], RCAS.inflections(x**3 - 3 * x, x).map(&:to_s)
+  end
+
   # A condition rcas cannot solve is not an empty one: dropping it would
   # claim the function is defined where nobody looked.
   def test_a_domain_condition_that_cannot_be_solved_says_so

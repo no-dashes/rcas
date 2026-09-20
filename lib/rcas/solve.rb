@@ -614,6 +614,9 @@ module RCAS
       product = product_equation(f, x, depth, all: all)
       return product if product
 
+      homogeneous = homogeneous_trig(f, x, depth, all: all)
+      return homogeneous if homogeneous
+
       radicals = radical_equation(f, x, depth)
       return radicals if radicals
 
@@ -651,6 +654,47 @@ module RCAS
       defined_roots(f, x, pieces.flat_map { |piece| univariate(piece, x, depth + 1, all: all) })
     rescue NotImplementedError
       nil # one factor rcas cannot solve: the product is no easier
+    end
+
+    # An equation in which every term has the same total degree in sin(u)
+    # and cos(u) is a polynomial in tan(u): divide through by cos(u)**n.
+    # sin(x) + cos(x) = 0 is tan(x) = -1, which rcas solves, and there was
+    # no rule that saw it. Where the division loses the zeros of cos(u) -
+    # which it does only when no term is a pure power of sin(u) - they are
+    # put back.
+    def homogeneous_trig(f, x, depth, all: false)
+      arguments = f.each_node.filter_map do |node|
+        node.args.first if node.is_a?(Fn) && %i[sin cos].include?(node.name) && depends?(node, x)
+      end.uniq
+      return nil unless arguments.size == 1
+      u = arguments.first
+      sine = Fn.new(:sin, [u])
+      cosine = Fn.new(:cos, [u])
+      constant, table = Expand.table(f)
+      return nil unless constant.zero? && table.size > 1
+
+      t = Var.new(:"_t#{depth}")
+      degrees = []
+      polynomial = Num.new(0)
+      table.each do |factors, coefficient|
+        sines = factors[sine] || 0
+        cosines = factors[cosine] || 0
+        rest = factors.reject { |base, _| base == sine || base == cosine }
+        return nil unless [sines, cosines].all? { |e| e.is_a?(Integer) && !e.negative? }
+        return nil if rest.keys.any? { |base| depends?(base, x) }
+        degrees << sines + cosines
+        polynomial += Simplify.rebuild_product(coefficient, rest) * t**sines
+      end
+      return nil unless degrees.uniq.size == 1 && degrees.first.positive?
+
+      roots = univariate(polynomial.simplify, t, depth + 1)
+      answers = roots.flat_map { |value| invert(Fn.new(:tan, [u]), value, x, depth, all: all) }
+      # cos(u) = 0 solves it too when there is no pure sin(u)**n term
+      answers += univariate(cosine, x, depth + 1, all: all) if Coefficients.coeff(polynomial.simplify, t, degrees.first).nil? ||
+                                                               Scalar.zero?(Coefficients.coeff(polynomial.simplify, t, degrees.first))
+      answers
+    rescue NotImplementedError
+      nil
     end
 
     # sqrt(u) = v: the radical on one side, both sides to the q-th power,

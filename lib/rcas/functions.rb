@@ -620,6 +620,12 @@ module RCAS
     ODD = %i[sin tan atan asin sinh sign erf Si].freeze
     EVEN = %i[cos cosh abs].freeze
 
+    # Neither odd nor even, but reflected about a point: acos(-u) is
+    # pi - acos(u). Without it acos(-2**(1/2)/2) had no value although
+    # acos(2**(1/2)/2) has one, since the exact table is written for
+    # positive arguments and only the odd ones carry the sign across.
+    REFLECTED = { acos: ->(value) { (PI - value).simplify } }.freeze
+
     # The functions rcas hands to Math for a Float argument. Asking
     # `Math.respond_to?` instead looks safe and is not: `include
     # RCAS::Functions` into Object - which is what README tells a library
@@ -665,7 +671,11 @@ module RCAS
       # odd / even symmetry: sin(-u) = -sin(u), cos(-u) = cos(u). A negative
       # number counts: cos(-1) is cos(1), which is what lets a definite
       # integral of tan over a symmetric range come out as 0.
-      if ODD.include?(fn.name) || EVEN.include?(fn.name)
+      # a float argument is Math's business: pi - 1.047... is no better than
+      # the number, and acos is neither odd nor even, so falling through to
+      # either branch would answer acos(-0.5) with acos(0.5)
+      reflected = REFLECTED.key?(fn.name) && !(arg.is_a?(Num) && arg.value.is_a?(Float))
+      if ODD.include?(fn.name) || EVEN.include?(fn.name) || reflected
         coeff, factors = Simplify.factorize(arg)
         negative = Simplify.negative?(coeff)
         if !negative && (pair = factors.find { |b, e| e == 1 && Simplify.negative_sum?(b) })
@@ -676,7 +686,10 @@ module RCAS
         end
         if negative
           flipped = Fn.new(fn.name, [Simplify.rebuild_product(Simplify.negative?(coeff) ? -coeff : coeff, factors)])
-          return ODD.include?(fn.name) ? Simplify.negate(fold(flipped)) : fold(flipped)
+          reflect = REFLECTED[fn.name] if reflected
+          next_value = fold(flipped)
+          return reflect.call(next_value) if reflect
+          return ODD.include?(fn.name) ? Simplify.negate(next_value) : next_value
         end
       end
 

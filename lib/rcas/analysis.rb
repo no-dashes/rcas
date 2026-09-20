@@ -38,13 +38,29 @@ module RCAS
     def critical_points(f, var = nil)
       f = Expression.lift(f)
       x = variable(f, var)
-      sort_points(Solve.solve(f.diff(x), x, principal: true))
+      sort_points(Solve.solve(f.diff(x), x, principal: true).select { |p| real_point?(p) })
     rescue NotImplementedError, ArgumentError
       []
     end
 
     def sort_points(points)
       points.sort_by { |p| [numeric(p) ? 0 : 1, numeric(p) || 0.0, p.to_s] }
+    end
+
+    # A curve discussion is about a real function, so a complex root of the
+    # derivative is not a critical point of its graph: critical_points of
+    # x**3 + x reported the two roots of 3*x**2 + 1. A point rcas cannot
+    # evaluate stays, since not knowing is not the same as knowing it is
+    # complex - but one whose imaginary unit is written into it goes.
+    def real_point?(point)
+      return true if point.is_a?(ImageSet)
+      return false if Expression.lift(point).each_node.any? { |n| Simplify.imaginary_unit?(n) }
+      value = Expression.lift(point).evalf
+      value = value.value if value.is_a?(Num)
+      return true unless value.is_a?(Numeric)
+      !value.is_a?(Complex) || value.imaginary.abs < 1e-12
+    rescue StandardError
+      true
     end
 
     # [[x, f(x), :minimum | :maximum | :saddle], ...] by the second derivative,
@@ -91,7 +107,7 @@ module RCAS
         []
       end
       third = f.diff(x, 3)
-      sort_points(candidates.select do |point|
+      sort_points(candidates.select { |p| real_point?(p) }.select do |point|
         value = numeric(third.subs(x => point).simplify)
         value.nil? || value.abs > 1e-12 ? true : sign_change(second, x, point) == :saddle
       end)
@@ -201,7 +217,8 @@ module RCAS
     def solved_condition(condition, x)
       Inequalities.solve(condition, x)
     rescue NotImplementedError => e
-      raise NotImplementedError, "real_domain: where #{condition} holds is not decided here (#{e.message})"
+      # cause: nil, or irb prints this backtrace and the one underneath it
+      raise NotImplementedError, "real_domain: where #{condition} holds is not decided here (#{e.message})", cause: nil
     end
 
     # The conditions behind that domain, so that a caller can name them:

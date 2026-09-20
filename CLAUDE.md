@@ -73,6 +73,10 @@ background in `doc`/`/help`, and the manual full of worked transcripts.
   `{pi/2 + pi*k}`, and `{2*k}` with `{1 + 2*k}` becomes `ZZ` - and
   `roots_of_unity` gives `(-1)**x = 1` the even integers rather than 0
   alone (all three: 20 Sept 2026, the seventh pass of the review).
+  `homogeneous_trig` divides an equation whose terms all have the same
+  degree in `sin(u)` and `cos(u)` by `cos(u)**n`, which makes it a
+  polynomial in `tan(u)`: that is `sin(x) + cos(x) = 0`, and the zeros of
+  `cos(u)` go back in when no term is a pure power of `sin(u)`.
 - The API method `Expression#variables` returns the indeterminates; the
   name follows CAS convention and stays. The manual notes this once.
 - **domain and base** (settled 17 Sept 2026, after "`(ZZ**[2,2]).random.domain`
@@ -832,6 +836,10 @@ names one without a session-wide assumption.
   (`Array#-` removes all duplicates).
 - `Polynomial#content` must be positive; `.abs` on Complex is a magnitude,
   never use `.abs` for sign handling of coefficients.
+- `acos` is neither odd nor even: `Functions::REFLECTED` carries
+  `acos(-u) = pi - acos(u)`, and it must not fall through to the ODD/EVEN
+  branch, which would answer `acos(-0.5)` with `acos(0.5)`. A Float
+  argument skips the reflection entirely and goes to `Math`.
 - Folding `Num` results back into a coefficient must skip the imaginary
   unit (`Simplify.imaginary_unit?`) or `i` disappears into a Complex
   coefficient and prints as `(1/2*i)`.

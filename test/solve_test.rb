@@ -308,6 +308,25 @@ class SolveTest < Minitest::Test
                  "undeclared: every solution, which is every integer, and it says so"
   end
 
+  # Every term of the same total degree in sin(u) and cos(u): divide by
+  # cos(u)**n and it is a polynomial in tan(u). sin(x) + cos(x) = 0 raised
+  # NotImplementedError, where it is tan(x) = -1.
+  def test_homogeneous_in_sine_and_cosine
+    x = RCAS::Var.new(:x)
+    assert_equal ["{3*pi/4 + pi*k | k in ZZ}"], strs(RCAS.solve(RCAS.sin(x) + RCAS.cos(x), x))
+    assert_equal ["{pi/4 + pi*k | k in ZZ}"], strs(RCAS.solve(RCAS.sin(x) - RCAS.cos(x), x))
+    assert_equal ["{-atan(2) + pi*k | k in ZZ}"], strs(RCAS.solve(RCAS.sin(x) + 2 * RCAS.cos(x), x))
+    assert_equal ["{pi/4 + pi*k/2 | k in ZZ}"], strs(RCAS.solve(RCAS.sin(x)**2 - RCAS.cos(x)**2, x))
+    assert_equal ["{3*pi/8 + pi*k/2 | k in ZZ}"], strs(RCAS.solve(RCAS.sin(2 * x) + RCAS.cos(2 * x), x))
+    # and the members really solve it
+    [RCAS.sin(x) + RCAS.cos(x), RCAS.sin(2 * x) + RCAS.cos(2 * x)].each do |f|
+      set = RCAS.solve(f, x).first
+      (-3..3).each { |i| assert_in_delta 0.0, f.evalf(x: set.at(i).evalf), 1e-12, "#{f} at #{set.at(i)}" }
+    end
+    # a term of another degree is not this rule's business
+    assert_raises(NotImplementedError) { RCAS.solve(RCAS.sin(x) + RCAS.cos(x) + 1, x) }
+  end
+
   # One factor rcas cannot solve means roots it cannot name: a partial list
   # would say nothing about what is missing, so the message stands.
   def test_a_product_with_an_unsolvable_factor_still_says_so

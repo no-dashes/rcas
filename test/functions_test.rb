@@ -88,6 +88,21 @@ class ComplexPartsAndRoundingTest < Minitest::Test
     assert_equal "harmonic(n)", RCAS.harmonic(RCAS::Var.new(:n)).to_s
     assert_equal "fibonacci(n)", RCAS.fibonacci(RCAS::Var.new(:n)).to_s
   end
+  # acos is neither odd nor even: acos(-u) is pi - acos(u), and without
+  # that acos(-2**(1/2)/2) had no value although acos(2**(1/2)/2) has one.
+  def test_acos_of_a_negative_argument
+    assert_equal "2*pi/3", RCAS.acos(-1r / 2).to_s
+    assert_equal "3*pi/4", RCAS.acos(-RCAS.sqrt(2) / 2).to_s
+    assert_equal "5*pi/6", RCAS.acos(-RCAS.sqrt(3) / 2).to_s
+    assert_equal "pi", RCAS.acos(-1).to_s
+    assert_equal "pi/2", RCAS.acos(0).to_s
+    assert_equal "pi - acos(1/4)", RCAS.acos(-1r / 4).to_s, "no table value, but the reflection still holds"
+    # a float is Math's business, and acos is not even: acos(-0.5) is not acos(0.5)
+    assert_in_delta Math.acos(-0.5), RCAS.acos(-0.5).value, 1e-15
+    assert_in_delta Math.acos(-0.25), RCAS.acos(-0.25).value, 1e-15
+    assert_in_delta Math.acos(0.5), RCAS.acos(0.5).value, 1e-15
+  end
+
   # A typo prints back as an unknown function, which is right - u(n + 1)
   # works the same way - but a name one letter from a real one says so.
   def test_a_likely_typo_is_named
