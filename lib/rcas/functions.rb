@@ -635,14 +635,42 @@ module RCAS
     # harmonic all recursed that way until the stack ran out.
     MATH_NAMES = %i[sin cos tan asin acos atan sinh cosh exp log erf erfc gamma].freeze
 
+    # f(g(u)) = u, the direction that holds for every u. The other way
+    # round is only true on the inverse's own range.
+    INVERSE_PAIRS = { sin: :asin, cos: :acos, tan: :atan }.freeze
+
+    def self.imaginary_unit_value?(u)
+      u.is_a?(Num) && u.value.is_a?(Complex) && u.value.real.zero? && u.value.imaginary.abs == 1
+    end
+
     # Math.log(-1.0) and Math.asin(2.0) raise Math::DomainError: the value
     # is outside the reals, so the node stays as it is rather than the error
     # reaching the user (a divergent sum used to come back as "Numerical
     # argument is out of domain - log").
+    # asin and acos are the exception, because there the value outside the
+    # reals is the answer and not a symptom: cos(x) = 2 is solved at
+    # +-acos(2) + 2*pi*k, and a family whose members evaluate to nothing is
+    # correct but inert (20 Sept 2026, the tenth pass of the review).
+    # The branch is the one every C library takes - acos of a number past
+    # the interval has negative imaginary part, asin positive - written out
+    # rather than derived, because the general formula picks the other side
+    # of the cut for a real argument with no signed zero on it.
     def self.math_value(fn, value)
       Num.new(Math.public_send(fn.name, value))
     rescue Math::DomainError
-      fn
+      beyond = real_branch(fn.name, value)
+      beyond ? Num.new(beyond) : fn
+    end
+
+    # acos and asin of a real number outside [-1, 1]: with
+    # acosh(t) = log(t + sqrt(t**2 - 1)) for t >= 1,
+    # acos(x) = (x > 1 ? 0 : pi) - i*acosh(|x|) and asin(x) = pi/2 - acos(x).
+    def self.real_branch(name, value)
+      return nil unless %i[asin acos].include?(name) && value.is_a?(Float) && value.abs > 1
+      t = value.abs
+      acosh = Math.log(t + Math.sqrt(t * t - 1))
+      acos = Complex(value.positive? ? 0.0 : Math::PI, -acosh)
+      name == :acos ? acos : Complex(Math::PI / 2, 0.0) - acos
     end
 
     # Constant folding for function applications; called by Simplify.
@@ -691,6 +719,18 @@ module RCAS
           return reflect.call(next_value) if reflect
           return ODD.include?(fn.name) ? Simplify.negate(next_value) : next_value
         end
+      end
+
+      # cos(acos(u)) is u for every u, and that is the direction that holds:
+      # acos(cos(u)) is not u outside [0, pi]. It matters because the
+      # inverse rarely has a value to fold to - solve(cos(x) - 2, x)
+      # answers with acos(2), which is a number but not one the real
+      # tables know (20 Sept 2026, the tenth pass of the review).
+      # tan(atan(i)) is the exception: atan has no value at +-i, so there
+      # is nothing to undo.
+      if (inner = INVERSE_PAIRS[fn.name]) && arg.is_a?(Fn) && arg.name == inner && arg.args.size == 1
+        undone = arg.args.first
+        return undone unless fn.name == :tan && imaginary_unit_value?(undone)
       end
 
       exact = exact_value(fn.name, arg)

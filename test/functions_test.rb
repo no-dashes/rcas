@@ -155,4 +155,23 @@ class ComplexPartsAndRoundingTest < Minitest::Test
     assert_equal "[2, 3, 3, 0, 55, 11/6, 0.8414709848078965]", out.strip
   end
 
+  # cos(acos(u)) is u for every u; acos(cos(u)) is not, outside [0, pi].
+  # It matters because the inverse often has no value to fold to:
+  # solve(cos(x) - 2, x) answers with acos(2), and a family whose members
+  # cannot be folded or evaluated is correct but inert.
+  def test_a_function_undoes_its_own_inverse
+    x = RCAS::Var.new(:x)
+    assert_equal "2", RCAS.cos(RCAS.acos(2)).to_s
+    assert_equal "3", RCAS.sin(RCAS.asin(3)).to_s
+    assert_equal "5", RCAS.tan(RCAS.atan(5)).to_s
+    # a non-constant argument waits for simplify, as construction always does
+    assert_equal "cos(acos(x + 1))", RCAS.cos(RCAS.acos(x + 1)).to_s
+    assert_equal "1 + x", RCAS.cos(RCAS.acos(x + 1)).simplify.to_s
+    # the tangent has no value at +-i, so there is nothing to undo
+    assert_equal "tan(atan(i))", RCAS.tan(RCAS.atan(RCAS::I)).to_s
+    # and the other direction is not an identity
+    assert_equal "acos(cos(5))", RCAS.acos(RCAS.cos(5)).to_s
+    assert_equal "asin(sin(5))", RCAS.asin(RCAS.sin(5)).to_s
+  end
+
 end

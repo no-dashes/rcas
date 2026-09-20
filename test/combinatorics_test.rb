@@ -72,7 +72,26 @@ class CombinatoricsTest < Minitest::Test
     assert_equal "2**n*n/2", RCAS.sum(k * RCAS.binomial(RCAS::Var.new(:n), k), k, 0, RCAS::OO).to_s
     # and log of a negative float no longer leaves Ruby's error in the open
     assert_equal "log(-1.0)", RCAS.log(-1.0).to_s
-    assert_equal "asin(2.0)", RCAS.asin(2.0).to_s
+    # asin and acos past the interval are the one case where the value
+    # outside the reals is the answer rather than a symptom, and it is the
+    # branch every C library takes. On the negative side rcas's own oddness
+    # decides instead - asin(-u) is -asin(u) here, which is the other lip
+    # of the cut from the one a signed zero would pick - and what has to
+    # hold either way does: sin(asin(u)) is u.
+    assert_equal "1.5707963267948966 + 1.3169578969248166*i", RCAS.asin(2.0).to_s
+    assert_equal "-1.3169578969248166*i", RCAS.acos(2.0).to_s
+    assert_equal "-1.5707963267948966 - 1.3169578969248166*i", RCAS.asin(-2.0).to_s
+    assert_equal "3.141592653589793 - 1.3169578969248166*i", RCAS.acos(-2.0).to_s
+    undo = lambda do |outer, inner, v|
+      value = RCAS.public_send(outer, RCAS.public_send(inner, RCAS::Num.new(v))).evalf
+      value = value.value if value.is_a?(RCAS::Num)
+      Complex(value)
+    end
+    [2.0, -2.0, 5.0].each do |v|
+      assert_in_delta v, undo.call(:cos, :acos, v).real, 1e-12
+      assert_in_delta 0.0, undo.call(:cos, :acos, v).imaginary, 1e-12
+      assert_in_delta v, undo.call(:sin, :asin, v).real, 1e-12
+    end
   end
 
 end

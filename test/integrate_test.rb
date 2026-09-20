@@ -269,10 +269,31 @@ class IntegrateTest < Minitest::Test
     assert_nil family.between(0.0, 1000.0 * Math::PI, limit: RCAS::Integrate::MAX_BREAKS),
                "more members than rcas will count out is not none of them"
     assert_equal ["pi"], family.between(0.0, 10.0, limit: RCAS::Integrate::MAX_BREAKS).map(&:to_s)
-    [254, 260].each do |m|
+    [256, 260].each do |m|
       assert_instance_of RCAS::Integral, RCAS.integrate(f, X, 0, m * RCAS::PI),
                          "over 0..#{m}*PI there are more breaks than rcas will count out"
     end
+  end
+
+  # The cap is a budget for the whole range, not an allowance per family:
+  # how many families the breaks arrive in is a matter of how `solve`
+  # spells them, and the reach halved silently when two families of step
+  # 4*pi became the one family of step 2*pi that says the same thing.
+  def test_the_break_budget_is_spent_across_families
+    k = RCAS::Var.new(:k)
+    coarse = [RCAS::ImageSet.new((RCAS::PI + 4 * RCAS::PI * k).simplify, k),
+              RCAS::ImageSet.new((3 * RCAS::PI + 4 * RCAS::PI * k).simplify, k)]
+    fine = RCAS::ImageSet.new((RCAS::PI + 2 * RCAS::PI * k).simplify, k)
+    hi = 255.0 * Math::PI
+    budget = RCAS::Integrate::MAX_BREAKS
+    spent = coarse.sum do |family|
+      members = family.between(0.0, hi, limit: budget)
+      refute_nil members
+      budget -= members.size
+      members.size
+    end
+    assert_equal fine.between(0.0, hi, limit: RCAS::Integrate::MAX_BREAKS).size, spent,
+                 "the same breaks, however they are spelled"
   end
 
   # An endpoint that substitutes to something undefined is not an answer.

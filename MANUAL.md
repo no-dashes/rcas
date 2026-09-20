@@ -602,11 +602,21 @@ rcas> [(E**x).simplify, log(E), (E**2 * E).simplify]
 => [exp(x), 1, exp(3)]
 rcas> [asin(1/2r), acos(0), atan(1)]
 => [pi/6, pi/2, pi/4]
+rcas> [cos(acos(2)), sin(asin(x + 1)).simplify, acos(cos(5))]
+=> [2, 1 + x, acos(cos(5))]
+rcas> evalf(acos(2))
+=> (0.0-1.3169578969248166i)
 rcas> sin(PI/5)
 => sin(pi/5)
 rcas> sin(x)
 => sin(x)
 ```
+
+A function undoes its own inverse whatever the argument is - that is the
+direction that always holds, while `acos(cos(5))` is `5` only on the
+interval `acos` answers in, so it stays. And `acos` of a number past that
+interval is not an error but a value off the real line, which is why
+`solve(cos(x) - 2, x)` has an answer at all.
 
 Infinity is a value, not a number: it absorbs what is finite and says so
 when a calculation asks it something it cannot answer. `oo - oo`, `oo/oo`

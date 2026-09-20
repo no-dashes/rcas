@@ -169,6 +169,7 @@ module RCAS
       return [] if candidates.empty?
 
       points = []
+      budget = MAX_BREAKS
       candidates.uniq.each do |d|
         roots = begin
           Solve.solve(d, x, all: true)
@@ -183,8 +184,9 @@ module RCAS
         end
         roots.each do |root|
           # a family of breaks that cannot be counted out is not "no breaks"
-          members = root.is_a?(ImageSet) ? root.between(lo, hi, limit: MAX_BREAKS) : [root]
+          members = root.is_a?(ImageSet) ? root.between(lo, hi, limit: budget) : [root]
           return nil if members.nil?
+          budget -= members.size
           points.concat(members)
         end
       end
@@ -197,7 +199,16 @@ module RCAS
     # rather than split: `ImageSet#between` answers nil past it, and nil is
     # "cannot tell", not "none" - one family of two dropping out silently
     # left integrate(1/(2 + cos(x)), x, 0, 254*PI) wrong by a factor of two.
-    MAX_BREAKS = 64
+    # It is a budget for the whole range, spent family by family, not a
+    # limit per family: how many families the breaks arrive in is a matter
+    # of how `solve` spells them, and the bound has to mean the same either
+    # way. It did not, and the reach halved silently when `merge_families`
+    # landed and two families of step 4*pi became one of step 2*pi (20 Sept
+    # 2026, the tenth pass of the review). The number also decides how long
+    # the slowest allowed integral takes, since a break costs about 0.048 s
+    # to split at: 128 of them is some twelve seconds, which is the most
+    # this is willing to spend before holding the integral instead.
+    MAX_BREAKS = 128
 
     # Do the values of F either side of the point disagree? Read off two
     # samples rather than two limits, and deliberately one-sided the safe

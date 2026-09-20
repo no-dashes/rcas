@@ -621,7 +621,15 @@ that lie between the bounds and answers **nil**, not `[]`, when it cannot
 (more than `MAX_BREAKS`, a second parameter, a step it cannot measure):
 `[]` says "no breaks", and one family of the two dropping out that way
 left the integral over `0..254*PI` wrong by a factor of two (found by the
-fourth pass of the review, 20 Sept 2026). `jumps?` reads two samples
+fourth pass of the review, 20 Sept 2026). `MAX_BREAKS` is a budget for
+the whole range, spent family by family, and **not** a limit per family:
+how many families the breaks arrive in is a matter of how `solve` spells
+them, and the reach halved silently (253 periods to 127) when
+`merge_families` landed and two families of step `4*pi` became the one of
+step `2*pi` that says the same thing. It is also the time guard - a break
+costs about 0.048 s to split at, so 128 of them is some twelve seconds,
+and that is what the number buys (both: 20 Sept 2026, the tenth pass of
+the review). `jumps?` reads two samples
 either side rather than two limits - splitting where F is continuous
 costs two evaluations and nothing else, since the pieces telescope, while
 missing a break costs a period, so the cheap test is also the safe one. `endpoint` also refuses a substituted value that is not defined
@@ -858,6 +866,23 @@ names one without a session-wide assumption.
   `acos(-u) = pi - acos(u)`, and it must not fall through to the ODD/EVEN
   branch, which would answer `acos(-0.5)` with `acos(0.5)`. A Float
   argument skips the reflection entirely and goes to `Math`.
+- **`asin` and `acos` past the interval are values, not errors** (20 Sept
+  2026, the tenth pass of the review). `Math.asin(2.0)` raises
+  `Math::DomainError` and `math_value` used to hand the node back, which
+  left the families `solve(cos(x) - 2, x)` answers with correct but inert:
+  nothing numeric came out of them. `Functions.real_branch` writes the two
+  out - `acos(x) = (x > 1 ? 0 : pi) - i*acosh(|x|)`, `asin = pi/2 - acos`,
+  the branch every C library takes - rather than deriving them from the
+  general formula, which picks the other lip of the cut for a real
+  argument that carries no signed zero. On the negative side rcas's own
+  oddness decides instead (`asin(-u)` is `-asin(u)`, so `asin(-2.0)`
+  differs from C in the sign of its imaginary part), and what has to hold
+  either way does: `sin(asin(u))` is `u`. `log(-1.0)` is deliberately
+  *not* in this list - the node staying is what tells a divergent sum it
+  diverged. `INVERSE_PAIRS` is the other half: `cos(acos(u))` folds to `u`
+  for every `u`, and only that direction, since `acos(cos(u))` is `u` only
+  on `[0, pi]`; `tan(atan(i))` is the one exception, because `atan` has no
+  value at `+-i`.
 - Folding `Num` results back into a coefficient must skip the imaginary
   unit (`Simplify.imaginary_unit?`) or `i` disappears into a Complex
   coefficient and prints as `(1/2*i)`.
