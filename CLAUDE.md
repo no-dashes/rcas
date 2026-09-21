@@ -342,6 +342,22 @@ MANUAL.md                   the user manual (usage); README.md (setup only); ass
   settings, tests, pointers). Usage goes in MANUAL. Logo at the top of
   both with the "This logo was AI generated" hint; `assets/rcas-logo.jpeg`
   is the 960px copy used in documents.
+- **The tour is embedded in a collapsed `<details>`** near the top of both
+  (21 Sept 2026, the user's ask: "ideally so that the data isn't loaded
+  whenever you open it"). Three facts decided that shape, all measured
+  rather than assumed - `gh api /markdown` renders a string exactly as
+  github.com would, which is how to check any of this. GitHub's sanitizer
+  keeps `<video>` with `src`, `controls`, `muted`, `width` and `height` and
+  **strips `poster`, `preload`, `loop`, `playsinline` and `style`**, so
+  neither a thumbnail nor `preload="none"` is available. A bare `<video>`
+  therefore fetches `bytes=0-` on every page view, while one inside a
+  closed `<details>` fetches *nothing* until the reader opens it, and then
+  loads normally (measured against a local server counting requests). And
+  a release asset plays in a `<video>` even though GitHub serves it
+  `application/octet-stream` with `Content-Disposition: attachment` -
+  media elements ignore both - which is why the *link* downloads but the
+  player does not. Keep the width attribute: without it the 1120px video
+  overflows the ~1012px column, and `style` cannot be used to cap it.
 - Smoke-test interactively with piped input:
   `printf 'x + 1\n' | ruby bin/rcas` (no `=> ` prefix without a tty) or
   `printf '/settings\n' | RCAS_HOME=/tmp/h ruby bin/rcas-chat`.

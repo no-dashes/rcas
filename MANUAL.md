@@ -11,6 +11,14 @@ REPL. This manual walks through everything that is finished. Every
 transcript in it is checked by `test/manual_test.rb`, so the outputs are
 exactly what the current code prints.
 
+<details>
+<summary><b>Watch the tour</b> - eight minutes, chapter by chapter. Nothing is
+downloaded until you open this.</summary>
+
+<video src="https://github.com/no-dashes/rubyCAS/releases/download/screencasts/rcas-tour.mp4" controls width="900"></video>
+
+</details>
+
 Start a session with
 
 ```
@@ -22,13 +30,12 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
 `RCAS.solve`), or `include RCAS::Functions`, `RCAS::Sets` and
 `RCAS::Constants` to get the bare names used below.
 
-If you would rather watch first:
-[rcas-tour.mp4](https://github.com/no-dashes/rubyCAS/releases/download/screencasts/rcas-tour.mp4)
-is an eight-minute screencast that follows section 1 below chapter by chapter
-(it is attached to the releases, not kept in the repository), and
-[assets/rcas-intro.gif](assets/rcas-intro.gif) is a one-minute version. Both
-are recorded from a real session by [tools/screencast](tools/screencast), the
-same way the transcripts here are checked - nothing in them is typed by hand.
+The tour above is [rcas-tour.mp4](https://github.com/no-dashes/rubyCAS/releases/download/screencasts/rcas-tour.mp4),
+attached to the releases rather than kept in the repository, and
+[assets/rcas-intro.gif](assets/rcas-intro.gif) is a one-minute version of the
+same thing. Both are recorded from a real session by
+[tools/screencast](tools/screencast), the same way the transcripts here are
+checked - nothing in them is typed by hand.
 
 <!-- toc -->
 - [Sessions and setup](#sessions-and-setup)
