@@ -1037,6 +1037,56 @@ causes are seven mistakes repeated, so the fixes are policies:
   refuses a negative sign for a variable declared in NN.
 - `LaTeX.hash` was renamed `LaTeX.table`: a module method named `hash`
   replaces `Module#hash` and breaks every Hash keyed by the module.
+- **"Cannot" is never "none".** `Solve.invert` raises
+  (`cannot_invert!`) instead of answering `[]`; `critical_points`,
+  `inflections` and `vertical_asymptotes` let an unsolved equation through
+  as NotImplementedError (discuss turns it into "not determined");
+  `nintegrate` refuses a non-numeric integrand and never counts an
+  undefined sample as 0 (Simpson returns nil, tanh-sinh calls `hole`,
+  which is a removable point or a NoConvergence); Petkovsek's truncated
+  divisor search raises `TooMany`. The refusal is NotImplementedError,
+  because the review tests accept exactly that; the single
+  `RCAS::Unsupported < StandardError` the review proposed was not made.
+- **Poles are read off the equation as written** (`Analysis.denominators`
+  of the unsimplified target): `Solve.solve` takes them out of points,
+  families (`family_off_poles`, member by member through the index, which
+  can leave two half-families over NN) and identity sets (`everywhere`);
+  the inequality solver does the same (`without_poles`). A rational
+  identity is a set, not `[]` (`rational_identity?`).
+- **Complete, not principal, wherever the answer is used as all of
+  them**: `sign_on_interval` (and so every radius and `norm`), the
+  integrator's `singular_points`, `split_at_kinks` and `jump_points`,
+  `Piecewises.solve` (a family is cut to its piece, `within`), discuss for
+  a non-periodic f. `ImageSet#between` counts members and `nonreal?` says
+  a family never meets the real line.
+- **A sign on an interval is a proof**: no zero inside (complete), no
+  pole, jump or edge of the real domain inside, samples decided exactly and
+  only as a veto. On a box, only factor by factor (`proven_sign`). A
+  definite integral of abs/sign of a non-linear argument is split at its
+  zeros (`split_at_kinks`).
+- **Certified digits**: `Precision.evalf` reports what two working
+  precisions agree on and raises the guard (`GUARDS`) until that is all
+  that was asked for; `refine` does the same for roots. `certify: false`
+  is the single walk, and `Decide` uses it because it compares precisions
+  itself.
+- **Exact decisions where Floats cancelled**: the sign chart of the
+  inequality solver (`Inequalities.compare`, `sample`, `real?`), `nsolve`
+  (a bracket as narrow as Floats go, not a small value; a jump is refused),
+  extrema and inflections (the first non-vanishing derivative, decided;
+  a polynomial's degree bounds the search; a parameter that decides it
+  raises), the median, `binomial_test` (exact Rationals), and the tails of
+  distributions (`survival`, erfc, gamma_q) instead of 1 - cdf.
+- Supports and moments: a symbolic cdf/pdf of Uniform/Exponential keeps
+  its support as a piecewise; a moment that does not exist is oo or
+  undefined. `evalf` falls back to arbitrary precision when a Float
+  overflows (`wide`).
+- Things the review flagged that are **design questions left to the
+  user** (REVIEW.md section 4), so do not settle them on your own: which
+  indeterminates are coordinates in gradient & co., the empty-sum
+  convention, odd roots of negative numbers (Precision takes the real root,
+  Float evalf the principal one), real_domain of expressions with complex
+  intermediate values (`real_domain(I*sqrt(x))` refuses today), and
+  whether solve is complete over CC.
 
 ## Traps we have hit (so you do not hit them again)
 
