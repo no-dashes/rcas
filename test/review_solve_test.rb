@@ -148,4 +148,55 @@ class ReviewSolveTest < Minitest::Test
     assert_raises(ArgumentError) { RCAS.nsolve(step, x: 0..1) }
     assert_raises(ArgumentError) { RCAS.nsolve((@x - 1/2r) / RCAS.abs(@x - 1/2r), x: 0..1) }
   end
+
+  # f' = x**2*(x - a) with a = 10**-5 is negative on both sides of 0, so 0
+  # is no extremum; sampling at +-10**-4 steps over a (analysis.rb:78).
+  def test_an_extremum_needs_a_sign_change_of_the_derivative
+    f = @x**4 / 4 - @x**3 / (3 * 10**5)
+    refute RCAS.extrema(f, @x).any? { |p, _, kind| real(p) == 0.0 && kind != :saddle }
+    refute RCAS.discuss(f, @x).extrema.any? { |p, _, kind| real(p) == 0.0 && kind != :saddle }
+  end
+
+  # critical_points / vertical_asymptotes turn "cannot solve" into []
+  # (analysis.rb:42, :175). cos(x) + x**2/4 has a maximum at 0 (f''(0) =
+  # -1/2); exp(x) - x - 2 changes sign on [1, 2] and [-2, -1], poles of 1/it.
+  def test_unsolved_equations_are_not_reported_as_none
+    refused_or { refute_empty RCAS.extrema(RCAS.cos(@x) + @x**2 / 4, @x) }
+    refused_or { refute_empty RCAS.asymptotes(1 / (RCAS.exp(@x) - @x - 2), @x)[:vertical] }
+  end
+
+  # log(x) -> -oo as x -> 0+, so x = 0 is a vertical asymptote; only
+  # denominators are searched (analysis.rb:196). Likewise log(x - 1) at 1.
+  def test_a_logarithm_has_a_vertical_asymptote
+    assert covers?(RCAS.asymptotes(RCAS.log(@x), @x)[:vertical], 0.0)
+    assert covers?(RCAS.asymptotes(RCAS.log(@x - 1) / @x, @x)[:vertical], 1.0)
+  end
+
+  # f'' of sqrt(x)*(x - 3) vanishes only at x = -1, outside [0, oo): there
+  # is no inflection, and certainly not the complex point (-1, -4*i).
+  def test_reported_inflections_lie_in_the_domain
+    points = RCAS.discuss(RCAS.sqrt(@x) * (@x - 3), @x).inflections
+    assert points.all? { |p, _| (v = real(p)) && v >= 0 }, points.inspect
+  end
+
+  # x/a > 1: for a = 1 this is x > 1, for a = 0 it is meaningless; a case
+  # split must not divide by zero on the way.
+  def test_a_parametric_inequality_survives_a_zero_parameter
+    cases = RCAS.solve(@x / @a > 1, @x)
+    assert cases.at(1).include?(2)
+  end
+
+  # (x - 1)**3/(x - 1) is (x - 1)**2 off x = 1 and undefined at 1, so it has
+  # no extremum at all; evaluating there divides by zero.
+  def test_an_excluded_point_is_not_an_extremum
+    assert_equal [], RCAS.extrema((@x - 1)**3 / (@x - 1), @x)
+  end
+
+  # The graph of sqrt(x) has a vertical tangent at 0, which y = m*x + c
+  # cannot write: refusing with a message is right, ZeroDivisionError is not.
+  def test_a_vertical_tangent_is_refused_with_a_message
+    RCAS.tangent(RCAS.sqrt(@x), @x, 0)
+  rescue ArgumentError, NotImplementedError
+    assert true
+  end
 end

@@ -60,4 +60,29 @@ class ThirdReviewAdversarialTest < Minitest::Test
   def test_empty_range_has_zero_probability
     assert_equal n(0), RCAS.Uniform(0,1).probability(Rational(3,4)..Rational(1,4))
   end
+
+  def test_nonzero_rescaling_preserves_polynomial_inflection
+    assert_equal ['0'], RCAS.inflections(@x**17/10**300,@x).map(&:to_s)
+  end
+
+  def test_unsolved_curvature_must_not_be_reported_as_no_inflections
+    # g=f''=2*cos(x)-x*sin(x), g(0)=2 and g(pi)=-2.
+    # Returning an explicit refusal is acceptable; an empty solution list is not.
+    begin
+      result = RCAS.inflections(@x*RCAS.sin(@x),@x)
+    rescue NotImplementedError
+      return assert true
+    end
+    refute_empty result
+  end
+
+  def test_parameter_dependent_multiplicity_requires_a_condition
+    begin
+      result = RCAS::Analysis.inflections(@a*@x**3+@x**4,@x,points:[n(0)])
+    rescue NotImplementedError
+      return assert true
+    end
+    # The current array has no means of carrying the necessary a != 0 condition.
+    refute_equal [n(0)], result
+  end
 end

@@ -213,11 +213,17 @@ module RCAS
     def each(&block) = branches.each(&block)
     include Enumerable
 
-    # The value for a concrete parameter.
+    # The value for a concrete parameter, with the parameter substituted
+    # into the ends: at(1) of a > 0: (a, oo) is (1, oo).
     def at(value)
       branch = branches.find { |cond, _| cond.include?(value) }
       raise ArgumentError, "#{var} = #{value} is not covered" unless branch
-      branch.last
+      set = branch.last
+      return set unless set.is_a?(RealSet)
+      point = Expression.lift(value)
+      RealSet.new(set.intervals.map do |i|
+        Interval.new(i.low.subs(var => point).simplify, i.high.subs(var => point).simplify, left_open: i.left_open, right_open: i.right_open)
+      end)
     end
 
     def condition(set)

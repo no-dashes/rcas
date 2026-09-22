@@ -2356,7 +2356,7 @@ rcas> solve(a*x - 1 > 0, x)
    a = 0: {}
    a > 0: (1/a, oo)
 rcas> solve(x**2 - a >= 0, x).at(4)
-=> (-oo, -a**(1/2)] ∪ [a**(1/2), oo)
+=> (-oo, -2] ∪ [2, oo)
 ```
 
 `abs` and `sign` are functions (`abs(-x)` simplifies to `abs(x)`, the

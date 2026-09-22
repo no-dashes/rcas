@@ -35,12 +35,29 @@ module RCAS
     # ---- one variable ----------------------------------------------------------
 
     # Where the derivative vanishes, sorted where they can be compared.
+    #
+    # An equation solve cannot do is a refusal, not "no critical points":
+    # cos(x) + x**2/4 has its maximum at 0 all the same (third review,
+    # S11). Points where f itself has no value are not points of its graph.
     def critical_points(f, var = nil)
       f = Expression.lift(f)
       x = variable(f, var)
-      sort_points(Solve.solve(f.diff(x), x, principal: true).select { |p| real_point?(p) })
-    rescue NotImplementedError, ArgumentError
-      []
+      found = Solve.solve(f.diff(x), x, principal: true)
+      raise NotImplementedError, "critical points of #{f}: the derivative vanishes on a whole interval" unless found.is_a?(Array)
+      sort_points(found.select { |p| real_point?(p) && defined_at?(f, x, p) })
+    end
+
+    # f has a real value at the point (a family counts as defined).
+    def defined_at?(f, x, point)
+      return true if point.is_a?(ImageSet)
+      value = f.subs(x => point).simplify
+      return false unless Integrate.defined_value?(value)
+      real = Inequalities.real?(value)
+      real != false
+    rescue ZeroDivisionError
+      false
+    rescue NotImplementedError, StandardError
+      true
     end
 
     def sort_points(points)
@@ -52,13 +69,14 @@ module RCAS
     # x**3 + x reported the two roots of 3*x**2 + 1. A point rcas cannot
     # evaluate stays, since not knowing is not the same as knowing it is
     # complex - but one whose imaginary unit is written into it goes.
+    # Decided exactly (Inequalities.real?): 1 + 10**-13*i is not real,
+    # however small its imaginary part (third review, Q1); an unevaluated
+    # log(-1) is not either.
     def real_point?(point)
       return true if point.is_a?(ImageSet)
-      return false if Expression.lift(point).each_node.any? { |n| Simplify.imaginary_unit?(n) }
-      value = Expression.lift(point).evalf
-      value = value.value if value.is_a?(Num)
-      return true unless value.is_a?(Numeric)
-      !value.is_a?(Complex) || value.imaginary.abs < 1e-12
+      Inequalities.real?(point)
+    rescue NotImplementedError
+      true # not knowing is not knowing it is complex
     rescue StandardError
       true
     end
@@ -67,55 +85,104 @@ module RCAS
     # falling back to the sign of the first derivative on either side.
     # `points` supplies the critical points, for a caller that knows them
     # (or can find more of them) already.
+    #
+    # The kind is decided by the first derivative of f that does not vanish
+    # at the point, which is exact: an even order is an extremum, an odd
+    # one a saddle. The old test read f'' against 1e-12 and then sampled f'
+    # at +-1e-4, which stepped over a zero of f' at 10**-5 and called a
+    # saddle a minimum (third review, S10).
     def extrema(f, var = nil, points: nil)
       f = Expression.lift(f)
       x = variable(f, var)
-      second = f.diff(x, 2)
-      (points || critical_points(f, x)).filter_map do |point|
+      first = f.diff(x)
+      candidates = points || critical_points(f, x)
+      candidates.filter_map do |point|
+        next nil unless defined_at?(f, x, point)
         value = (f.subs(x => point)).simplify
-        curvature = numeric(second.subs(x => point).simplify)
-        kind =
-          if curvature.nil? || curvature.abs < 1e-12 then sign_change(f.diff(x), x, point)
-          elsif curvature.positive? then :minimum
-          else :maximum
-          end
+        kind = extremum_kind(first, x, point, candidates)
         kind ? [point, value, kind] : nil
       end
+    end
+
+    def extremum_kind(first, x, point, others)
+      found = vanishing(first, x, point)
+      if found
+        order, sign = found
+        return :saddle if order.even? # f' vanishes to an even order: f has an odd one
+        return sign == :positive ? :minimum : :maximum
+      end
+      sign_change(first, x, point, step: safe_step(point, others))
+    end
+
+    # [k, sign] for the smallest k >= 1 with g^(k)(point) != 0 decided, or
+    # nil when that cannot be told within the budget.
+    def vanishing(g, x, point, limit = nil)
+      limit ||= vanishing_limit(g, x)
+      limit.times do |k|
+        g = g.diff(x)
+        value = g.subs(x => point).simplify
+        if value.variables.empty?
+          sign = Decide.sign(value)
+          return nil if sign.nil?
+          next if sign == :zero
+          return [k + 1, sign]
+        end
+        next if Scalar.zero?(value)
+        # 6*a at 0 for a*x**3 + x**4: whether it vanishes depends on a
+        raise NotImplementedError, "whether #{value} is zero decides the shape at #{point}; assume something about #{value.variables.join(', ')}"
+      end
+      nil
+    rescue ArgumentError
+      nil
     end
 
     # The shape of a critical point from the sign of g on both sides. The
     # step must stay inside the point's own neighbourhood: with a zero of g
     # at 10**-5 next door, the default 10**-4 samples the far side of it and
     # reads the wrong sign (22 Sept 2026, from the second review).
+    # The signs are decided exactly at rational points (Decide), so an
+    # underflow is not read as a zero (T4a).
     def sign_change(g, x, point, step: nil)
       centre = numeric(point) or return nil
       step ||= 1e-4 * [1.0, centre.abs].max
-      return nil unless step.positive?
-      left = numeric(g.subs(x => Num.new(centre - step)))
-      right = numeric(g.subs(x => Num.new(centre + step)))
-      return nil if left.nil? || right.nil?
-      return :minimum if left.negative? && right.positive?
-      return :maximum if left.positive? && right.negative?
+      return nil unless step&.positive?
+      exact = Expression.lift(point)
+      delta = Num.new(Rational(step).rationalize(Rational(step) / 1000))
+      left = Decide.sign(g.subs(x => (exact - delta).simplify).simplify)
+      right = Decide.sign(g.subs(x => (exact + delta).simplify).simplify)
+      return nil unless %i[positive negative].include?(left) && %i[positive negative].include?(right)
+      return :minimum if left == :negative && right == :positive
+      return :maximum if left == :positive && right == :negative
       :saddle
     end
 
     # Where the curvature changes sign; `points` supplies the zeros of the
     # second derivative, as for extrema.
+    #
+    # "Cannot solve f'' = 0" is a refusal, never "no inflections": x*sin(x)
+    # has f''(0) = 2 and f''(pi) = -2, so there is one in between (T4b).
+    # A point outside the domain of f is no point of the graph (S14).
     def inflections(f, var = nil, points: nil)
       f = Expression.lift(f)
       x = variable(f, var)
       second = f.diff(x, 2)
-      candidates = points || begin
-        Solve.solve(second, x, principal: true)
-      rescue NotImplementedError, ArgumentError
-        []
-      end
-      real = candidates.select { |p| real_point?(p) }
+      candidates = points || Solve.solve(second, x, principal: true)
+      raise NotImplementedError, "inflections of #{f}: f'' vanishes on a whole interval" unless candidates.is_a?(Array)
+      real = candidates.select { |p| real_point?(p) && defined_at?(f, x, p) }
       sort_points(real.select { |point| inflection_at?(second, x, point, real) })
     end
 
-    # How far a derivative of g has to be taken before it stops vanishing.
+    # How far a derivative of g has to be taken before it stops vanishing,
+    # for anything that is not a polynomial; a polynomial has its degree as
+    # the bound, so x**17 is decided however small its coefficient (T4a).
     MAX_VANISHING = 12
+
+    def vanishing_limit(g, x)
+      coefficients = Solve.polynomial_coefficients(g.expand, x)
+      coefficients ? [coefficients.size, 1].max : MAX_VANISHING
+    rescue StandardError
+      MAX_VANISHING
+    end
 
     # f'' changes sign at one of its zeros exactly when it vanishes there to
     # an *odd* order [Spi08, ch. 11], and that order is the first derivative of f'' that
@@ -129,24 +196,15 @@ module RCAS
     # inside the point's own neighbourhood; when even that cannot decide,
     # the answer is "undecided" and not "no inflection".
     def inflection_at?(second, x, point, others)
-      order = vanishing_order(second, x, point)
-      return order.odd? if order
+      found = vanishing(second, x, point)
+      return found.first.odd? if found
       change = sign_change(second, x, point, step: safe_step(point, others))
       return change != :saddle if change
       raise NotImplementedError, "inflections: whether the curvature changes at #{point} is not decided here"
     end
 
-    # The smallest k >= 1 with g^(k)(point) != 0, or nil when no derivative
-    # up to MAX_VANISHING could be told apart from zero.
-    def vanishing_order(g, x, point, limit = MAX_VANISHING)
-      limit.times do |k|
-        g = g.diff(x)
-        return k + 1 unless Scalar.zero?(g.subs(x => point).simplify)
-      end
-      nil
-    rescue ArgumentError, NotImplementedError
-      nil
-    end
+    # The smallest k >= 1 with g^(k)(point) != 0, or nil.
+    def vanishing_order(g, x, point, limit = nil) = vanishing(g, x, point, limit)&.first
 
     # Half the way to the nearest other candidate, at most the default step:
     # no sample may cross a neighbouring zero.
@@ -169,13 +227,19 @@ module RCAS
 
     def infinities = [OO, Neg.new(OO).simplify]
 
+    # The candidates are the zeros of the denominators and the edges of the
+    # logarithms' domains - log(x) runs to -oo at 0, which a search of the
+    # denominators alone never saw (S12). A denominator whose zeros solve
+    # cannot name is a refusal: 1/(exp(x) - x - 2) has two poles (S11).
     def vertical_asymptotes(f, x)
-      poles = denominators(f, x).flat_map do |denominator|
-        Solve.solve(denominator, x)
-      rescue NotImplementedError, ArgumentError
-        []
+      edges = []
+      f.each_node { |n| edges << n.args.first if n.is_a?(Fn) && n.name == :log && n.args.first.variables.include?(x.name) }
+      poles = (denominators(f, x) + edges).uniq.flat_map do |g|
+        found = Solve.solve(g, x)
+        raise NotImplementedError, "vertical asymptotes of #{f}: #{g} = 0 vanishes on a whole interval" unless found.is_a?(Array)
+        found
       end
-      sort_points(poles.uniq.select { |p| runs_away?(f, x, p) })
+      sort_points(poles.uniq.select { |p| real_point?(p) && runs_away?(f, x, p) })
     end
 
     # A whole family of asymptotes is reported as the family: tan has one
@@ -228,11 +292,20 @@ module RCAS
     end
 
     # The tangent and the normal to the graph at a point.
+    # A vertical tangent (sqrt(x) at 0) is no line y = m*x + c: refused
+    # with a message rather than a ZeroDivisionError (S17).
     def tangent(f, var = nil, at = nil)
       f = Expression.lift(f)
       x = variable(f, var)
       a = Expression.lift(at)
-      (f.subs(x => a) + f.diff(x).subs(x => a) * (x - a)).simplify
+      slope = begin
+        f.diff(x).subs(x => a).simplify
+      rescue ZeroDivisionError
+        raise ArgumentError, "tangent: #{f} has no finite slope at #{x} = #{a}; the tangent there is vertical or does not exist"
+      end
+      raise ArgumentError, "tangent: #{f} has no finite slope at #{x} = #{a}" if Limits.infinite?(slope) || slope == UNDEFINED
+      value = f.subs(x => a).simplify
+      (value + slope * (x - a)).simplify
     end
 
     def normal(f, var = nil, at = nil)

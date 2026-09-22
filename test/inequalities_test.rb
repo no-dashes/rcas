@@ -57,7 +57,8 @@ class InequalitiesTest < Minitest::Test
     assert_kind_of RCAS::Cases, c
     assert_equal "a <= 0: (-oo, oo)\na > 0:  (-oo, -a**(1/2)] ∪ [a**(1/2), oo)", c.to_s
     assert_equal "(-oo, oo)", c.at(-1).to_s
-    assert_equal "(-oo, -a**(1/2)] ∪ [a**(1/2), oo)", c.at(4).to_s
+    assert_equal "(-oo, -2] ∪ [2, oo)", c.at(4).to_s, "the parameter is substituted into the branch"
+    assert_equal "(-oo, -a**(1/2)] ∪ [a**(1/2), oo)", c.branches.last.last.to_s
     assert_equal "a < 1: (a, 1)\na = 1: {}\na > 1: (1, a)", RCAS.solve((X - a) * (X - 1) < 0, X).to_s
     assert_equal "a < 0: (-oo, 1/a)\na = 0: {}\na > 0: (1/a, oo)", RCAS.solve(a * X - 1 > 0, X).to_s
     assert_equal "a < 0: (-oo, -(-a)**(1/2)) ∪ ((-a)**(1/2), oo)\na = 0: (-oo, 0) ∪ (0, oo)\na > 0: (-oo, oo)", RCAS.solve(X**2 + a > 0, X).to_s
