@@ -389,6 +389,12 @@ module RCAS
     # or the whole line would each be a claim (S15): refused.
     def scattered_power!(f, x)
       f.each_node do |n|
+        # gamma and factorial have a pole at every non-positive integer
+        # (gamma(x) at -1 is no number): the complement is not a finite
+        # union either (S15)
+        if n.is_a?(Fn) && %i[gamma factorial].include?(n.name) && n.args.first.variables.include?(x.name)
+          raise NotImplementedError, "real_domain: #{n} has a pole at every point where its argument is a non-positive integer"
+        end
         next unless n.is_a?(Pow) && n.exponent.variables.include?(x.name)
         base = n.base
         sign = base.variables.empty? ? Decide.sign(base) : RCAS.assume(x.name => RR) { RCAS.sign_of(base) }
