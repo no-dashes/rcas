@@ -130,4 +130,17 @@ class ReviewQualityTest < Minitest::Test
     value = result.is_a?(Numeric) ? result : (result.is_a?(RCAS::Num) ? result.value : nil)
     assert_in_delta Math::PI / 2, value, 1e-9 if value
   end
+
+  def test_a_power_with_a_variable_exponent_is_not_real_everywhere
+    # (-1/2)**(-1/2) = -i*sqrt(2) and (-2)**(1/2) = i*sqrt(2) are not real,
+    # so neither real domain can be the whole line. Refusing is acceptable.
+    begin
+      power = RCAS.real_domain(@x**@x, @x)
+      exponential = RCAS.real_domain(n(-2)**@x, @x)
+    rescue NotImplementedError
+      return assert true
+    end
+    refute power.include?(n(Rational(-1, 2))), "x**x at -1/2 is not real: #{power}"
+    refute exponential.include?(n(Rational(1, 2))), "(-2)**x at 1/2 is not real: #{exponential}"
+  end
 end

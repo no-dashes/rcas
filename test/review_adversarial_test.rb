@@ -85,4 +85,14 @@ class ThirdReviewAdversarialTest < Minitest::Test
     # The current array has no means of carrying the necessary a != 0 condition.
     refute_equal [n(0)], result
   end
+
+  def test_implicit_complex_power_is_not_real_everywhere
+    f = n(-1)**RCAS.sqrt(2)+@x
+    begin
+      result = RCAS.real_domain(f,@x)
+    rescue NotImplementedError
+      return assert true
+    end
+    assert_equal RCAS::RealSet.empty, result
+  end
 end

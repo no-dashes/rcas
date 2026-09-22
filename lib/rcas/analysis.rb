@@ -361,13 +361,40 @@ module RCAS
     # review had asked for this and the answer then was that it was a gap).
     # Only an explicit complex number puts the question, so nothing without
     # one pays for it. => a RealSet, or nil when there is no condition.
+    #
+    # "Explicit" was too narrow: (-1)**sqrt(2) is exp(i*pi*sqrt(2)), complex
+    # without an i in sight, and real_domain((-1)**sqrt(2) + x) said the whole
+    # line (third review, T5a). A constant part shown not to be real puts the
+    # question too.
     def real_locus(f, x)
-      return nil unless f.each_node.any? { |n| n.is_a?(Num) && n.value.is_a?(Complex) && !n.value.imaginary.zero? }
+      scattered_power!(f, x)
+      explicit = f.each_node.any? { |n| n.is_a?(Num) && n.value.is_a?(Complex) && !n.value.imaginary.zero? }
+      return nil unless explicit || f.each_node.any? { |n| (n.is_a?(Pow) || n.is_a?(Fn)) && n.variables.empty? && nonreal_constant?(n) }
       imaginary = RCAS.assume(x.name => RR) { ComplexParts.im(f) }
       return nil if Scalar.zero?(imaginary)
       return RealSet.empty if imaginary.variables.empty? # a constant that is not 0
       raise NotImplementedError, "real_domain: where #{f} is real is not decided here (its imaginary part is #{imaginary})" unless imaginary.variables == [x.name]
       points_of(imaginary, x)
+    end
+
+    def nonreal_constant?(n)
+      Inequalities.real?(n) == false
+    rescue NotImplementedError, StandardError
+      false
+    end
+
+    # b**u with u moving with x and b possibly negative is real on a
+    # scattered set: (-2)**x at the integers, x**x for x > 0 and at the
+    # negative integers. No finite union of intervals is that, and (0, oo)
+    # or the whole line would each be a claim (S15): refused.
+    def scattered_power!(f, x)
+      f.each_node do |n|
+        next unless n.is_a?(Pow) && n.exponent.variables.include?(x.name)
+        base = n.base
+        sign = base.variables.empty? ? Decide.sign(base) : RCAS.assume(x.name => RR) { RCAS.sign_of(base) }
+        next if sign == :positive
+        raise NotImplementedError, "real_domain: #{n} is real only on a scattered set of points where its base is negative"
+      end
     end
 
     # A condition rcas cannot solve is not an empty one: dropping it would
