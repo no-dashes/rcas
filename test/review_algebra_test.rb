@@ -54,4 +54,12 @@ class ReviewAlgebraTest < Minitest::Test
     assert_value 3 * expected, RCAS.simplify(3 * RCAS::I * half)
     assert_value expected, RCAS.expand(RCAS::I * (@x + half)).subs(x: 0)
   end
+
+  # GF(9) = GF(3)[b]/(b**2 + 1), so x**2 + 1 has the two roots b and -b there.
+  def test_roots_over_an_extension_field
+    k = RCAS.GF(9)
+    roots = k[:x].call(@x**2 + 1).roots
+    assert_equal 2, roots.size
+    roots.each { |r| v = r.is_a?(RCAS::Num) ? r.value : r; assert_predicate v * v + 1, :zero? }
+  end
 end

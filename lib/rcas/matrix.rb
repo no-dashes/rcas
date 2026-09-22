@@ -263,8 +263,18 @@ module RCAS
     alias nullspace kernel
 
     # Characteristic polynomial det(t*I - A) as an element of base[t].
-    def charpoly(var = :x)
+    # The variable is x unless the entries use x themselves, and then the
+    # first of lambda, t, s that they do not: det(x*I - A) with the x of A
+    # inside collapsed [[x, 1], [1, x]] to -1 (third review, L11). A name
+    # given explicitly that the entries use is refused.
+    def charpoly(var = nil)
       raise ArgumentError, "charpoly needs a square matrix" unless square?
+      used = entries.flatten.flat_map { |e| Expression.lift(e).variables }.uniq
+      if var.nil?
+        var = %i[x lambda t s].find { |name| !used.include?(name) } || Expression.fresh_variable(:x, used).name
+      elsif used.include?(var.to_sym)
+        raise ArgumentError, "charpoly: the entries already use #{var}; name another variable"
+      end
       t = Var.new(var)
       shifted = Array.new(rows) { |i| Array.new(cols) { |j| i == j ? Scalar.sub(t, self[i, j]) : Scalar.neg(self[i, j]) } }
       ring = (base.ring? ? base : ZZ)[var]
@@ -287,8 +297,50 @@ module RCAS
       values = eigenvalues
       Solve.dedupe(values).map do |l|
         shifted = self - space.identity.scale(l)
-        vectors = shifted.kernel.map { |v| v.space.unchecked(v.entries.map { |e| e.rationalize }) }
+        vectors = if floating?
+                    float_kernel(shifted)
+                  else
+                    shifted.kernel.map { |v| v.space.unchecked(v.entries.map { |e| e.rationalize }) }
+                  end
         [l, values.count { |v| v == l }, vectors]
+      end
+    end
+
+    def floating? = entries.flatten.any? { |e| e.is_a?(Num) && (e.value.is_a?(Float) || (e.value.is_a?(Complex) && e.value.real.is_a?(Float))) }
+
+    # The kernel of a Float matrix, by elimination with partial pivoting and
+    # a pivot counted as zero below rounding relative to the matrix: A - l*I
+    # at a Float eigenvalue is singular only up to its last digits, and the
+    # exact kernel of it was empty (third review, L10).
+    def float_kernel(m)
+      rows = m.entries.map { |row| row.map { |e| Complex(Expression.lift(e).evalf) } }
+      scale = [rows.flatten.map(&:abs).max || 0.0, 1.0].max
+      tolerance = scale * 1e-9
+      n = cols
+      pivots = []
+      r = 0
+      (0...n).each do |c|
+        break if r >= rows.size
+        best = (r...rows.size).max_by { |i| rows[i][c].abs }
+        next if rows[best][c].abs <= tolerance
+        rows[r], rows[best] = rows[best], rows[r]
+        pivot = rows[r][c]
+        rows[r] = rows[r].map { |v| v / pivot }
+        rows.each_index do |i|
+          next if i == r || rows[i][c].zero?
+          factor = rows[i][c]
+          rows[i] = rows[i].each_with_index.map { |v, j| v - factor * rows[r][j] }
+        end
+        pivots << c
+        r += 1
+      end
+      free = (0...n).to_a - pivots
+      space_v = VectorSpace.new(base, n)
+      free.map do |f|
+        v = Array.new(n, Complex(0.0))
+        v[f] = Complex(1.0)
+        pivots.each_with_index { |c, i| v[c] = -rows[i][f] }
+        space_v.unchecked(v.map { |z| Num.new(z.imaginary.abs <= tolerance ? z.real : z) })
       end
     end
 

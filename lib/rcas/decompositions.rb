@@ -52,7 +52,9 @@ module RCAS
       basis = LinearAlgebra.gram_schmidt(matrix.column_vectors, normalize: true)
       raise ArgumentError, "qr: the columns of the matrix are not independent" unless basis.size == matrix.cols
       q = field_matrix(matrix, basis.map(&:entries).transpose, matrix.rows, matrix.cols)
-      r = (q.transpose * matrix).simplify
+      # Q^H A: the conjugate transpose, which is the transpose for real Q
+      adjoint = field_matrix(matrix, q.transpose.to_a.map { |row| row.map { |e| LinearAlgebra.conjugate(e) } }, matrix.cols, matrix.rows)
+      r = (adjoint * matrix).simplify
       [q, r]
     end
 

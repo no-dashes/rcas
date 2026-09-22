@@ -136,7 +136,7 @@ module RCAS
       ])
     end
 
-    def norm = RCAS.sqrt(dot(self)).simplify
+    def norm = LinearAlgebra.norm(self) # Hermitian for complex entries
     def zero? = entries.all? { |e| Scalar.zero?(e) }
 
     def ==(other)

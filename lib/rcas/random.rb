@@ -249,13 +249,57 @@ module RCAS
     #   unimodular:    determinant +-1, so that the inverse stays integral
     #   eigenvalues:   a list - P*D*P**-1 for a unimodular P
     #   definite:      symmetric positive definite, L*L.transpose
-    def matrix(space, entries: nil, denominators: nil, density: nil, symmetric: false,
-               antisymmetric: false, diagonal: false, triangular: nil, invertible: false,
-               singular: false, unimodular: false, det: nil, rank: nil, eigenvalues: nil,
-               definite: false, random: nil)
+    #
+    # Every keyword is honoured or the call is refused: the answer is
+    # checked against all of them, because the constructions above build one
+    # property each and a second one used to be dropped without a word -
+    # rank: 1, symmetric: true came back unsymmetric (third review, L17).
+    # `triangular: true` means upper.
+    def matrix(space, random: nil, **opts)
+      opts[:triangular] = :upper if opts[:triangular] == true
       rng = source(random)
+      TRIES.times do
+        m = build_matrix(space, random: rng, **opts)
+        return m if honours?(m, opts)
+      end
+      asked = opts.reject { |k, v| %i[entries denominators density].include?(k) || v.nil? || v == false }.keys
+      raise ArgumentError, "random matrix: no construction here gives #{asked.join(', ')} together"
+    end
+
+    # Does m have every property the keywords ask for?
+    def honours?(m, opts)
+      zero = ->(i, j) { Scalar.zero?(m[i, j]) }
+      n = m.rows
+      checks = {
+        symmetric: -> { m.symmetric? },
+        antisymmetric: -> { m.square? && (m + m.transpose).zero? },
+        diagonal: -> { (0...n).all? { |i| (0...m.cols).all? { |j| i == j || zero.(i, j) } } },
+        triangular: lambda {
+          side = opts[:triangular]
+          (0...n).all? { |i| (0...m.cols).all? { |j| (side == :upper ? i <= j : i >= j) || zero.(i, j) } }
+        },
+        invertible: -> { m.square? && !Scalar.zero?(m.det) },
+        singular: -> { m.square? && Scalar.zero?(m.det) },
+        unimodular: -> { m.square? && [1, -1].any? { |u| Scalar.zero?(Scalar.sub(m.det, Scalar.lift(u))) } },
+        det: -> { Scalar.zero?(Scalar.sub(m.det, Scalar.lift(opts[:det]))) },
+        rank: -> { m.rank == opts[:rank] },
+        definite: -> { m.symmetric? }
+      }
+      checks.all? { |key, check| !opts[key] || check.call }
+    end
+
+    def build_matrix(space, entries: nil, denominators: nil, density: nil, symmetric: false,
+                     antisymmetric: false, diagonal: false, triangular: nil, invertible: false,
+                     singular: false, unimodular: false, det: nil, rank: nil, eigenvalues: nil,
+                     definite: false, random: nil)
+      rng = source(random)
+      if eigenvalues && symmetric
+        raise ArgumentError, "random matrix: symmetric with given eigenvalues needs an orthogonal matrix over #{space.base}, which rcas does not construct"
+      end
       return unimodular_matrix(space, entries, rng) if unimodular
+      return triangular_with_determinant(space, det, triangular, entries, rng) if !det.nil? && triangular
       return with_determinant(space, det, entries, rng) unless det.nil?
+      return symmetric_with_rank(space, rank, entries, rng) if !rank.nil? && symmetric
       return with_eigenvalues(space, eigenvalues, entries, rng) if eigenvalues
       return definite_matrix(space, entries, rng) if definite
       return with_rank(space, rank, entries, denominators, rng) unless rank.nil?
@@ -321,6 +365,31 @@ module RCAS
       # the two of them came out to -1 between them.
       return m if Scalar.zero?(Scalar.sub(m.det, Scalar.lift(det)))
       space.unchecked(m.to_a.each_with_index.map { |row, i| i.zero? ? row.map { |e| Scalar.neg(e) } : row })
+    end
+
+    # Triangular with the determinant on the diagonal and nothing mixed in.
+    def triangular_with_determinant(space, det, side, entries, rng)
+      square!(space, "det:")
+      n = space.rows
+      rows = Array.new(n) do |i|
+        Array.new(n) do |j|
+          next(i.zero? ? det : 1) if i == j
+          (side == :upper ? i < j : i > j) ? coefficient(space.base, entries || (-3..3), nil, rng) : 0
+        end
+      end
+      space.unchecked(rows)
+    end
+
+    # L*D*L.transpose with L of r columns: symmetric, and of rank r when D
+    # has no zero on its diagonal and L has full rank.
+    def symmetric_with_rank(space, rank, entries, rng)
+      square!(space, "symmetric:")
+      n = space.rows
+      raise ArgumentError, "random matrix: a rank between 0 and #{n} is needed, not #{rank}" unless (0..n).cover?(rank)
+      return space.zero if rank.zero?
+      l = MatrixSpace.new(space.base, n, rank).unchecked(Array.new(n) { Array.new(rank) { coefficient(space.base, entries || (-2..2), nil, rng) } })
+      d = MatrixSpace.new(space.base, rank, rank).unchecked(Array.new(rank) { |i| Array.new(rank) { |j| i == j ? coefficient(space.base, (-2..2), nil, rng, zero: false) : 0 } })
+      space.unchecked((l * d * l.transpose).simplify.to_a)
     end
 
     # P*D*P**-1 with P unimodular, so the entries stay in the ring and the

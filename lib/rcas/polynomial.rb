@@ -334,7 +334,7 @@ module RCAS
         else
           [Simplify.normalize_number(Rational(-g.coeff(0).value, g.coeff(1).value))] * m
         end
-      end.sort_by { |r| r.is_a?(Num) ? r.value.to_i : r }
+      end.sort_by { |r| r.is_a?(Num) && r.value.respond_to?(:to_i) ? [r.value.to_i, ""] : [0, r.to_s] } # a GF(p^n) element has no integer
     end
 
     # ---- coefficients in one variable -------------------------------------

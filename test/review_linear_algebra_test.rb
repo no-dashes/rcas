@@ -112,4 +112,92 @@ class ReviewLinearAlgebraTest < Minitest::Test
       end
     end
   end
+
+  def test_a_float_matrix_with_distinct_eigenvalues_is_diagonalizable
+    # Eigenvalues (5 -+ sqrt(33))/20 are distinct, so each has a one-dimensional eigenspace.
+    m = RCAS.matrix([[0.1, 0.2], [0.3, 0.4]])
+    assert m.eigenvectors.all? { |_, _, vs| vs.size == 1 }, m.eigenvectors.inspect
+    assert m.diagonalizable?
+  end
+
+  def test_charpoly_does_not_capture_an_indeterminate_of_the_entries
+    # det(x*I - A) with x also in A collapses to -1; refusing is fine.
+    m = RCAS.assume(x: RCAS::RR) { RCAS.matrix([[@x, 1], [1, @x]]) }
+    begin
+      p = m.charpoly
+    rescue ArgumentError, RCAS::DomainError
+      return assert true
+    end
+    refute_equal "-1", p.to_s
+  end
+
+  def test_the_norm_of_a_complex_vector_is_positive
+    # |(1, i)|^2 = |1|^2 + |i|^2 = 2.
+    v = RCAS.vector(1, RCAS::I)
+    assert zero?(v.norm - RCAS.sqrt(2)), "#{v.norm}"
+    q, r = RCAS.qr(RCAS.matrix([[1, RCAS::I], [RCAS::I, 1]]))
+    assert q * r == RCAS.matrix([[1, RCAS::I], [RCAS::I, 1]])
+  end
+
+  def test_a_field_with_a_singularity_is_not_certified_conservative
+    # (-y, x)/(x^2 + y^2) circulates 2*pi around the origin, so it has no potential
+    # there, and Green over the square around 0 must give 2*pi (or refuse), not 0.
+    field = [-@y / (@x**2 + @y**2), @x / (@x**2 + @y**2)]
+    verdict = begin
+      RCAS.conservative?(field)
+    rescue ArgumentError, NotImplementedError
+      false
+    end
+    refute verdict
+    begin
+      g = RCAS.green(field, x: -1..1, y: -1..1)
+    rescue ArgumentError, NotImplementedError
+      return
+    end
+    assert zero?(g - 2 * RCAS::PI), "#{g}"
+  end
+
+  def test_outer_bounds_may_not_depend_on_inner_variables
+    # x: 0..1 is innermost, so y: 0..x leaves x free: that is not a region; refuse.
+    [-> { RCAS.green([-@y, @x], x: 0..1, y: 0..@x) },
+     -> { RCAS.divergence_theorem([@x, @y, @z], x: 0..1, y: 0..@x, z: 0..1) }].each do |call|
+      begin
+        result = call.call
+      rescue ArgumentError, NotImplementedError
+        next
+      end
+      refute_includes result.variables, :x, "#{result} still depends on the integration variable"
+    end
+  end
+
+  def test_eigenvalues_over_an_extension_field
+    # Over GF(9), x^2 + 1 splits: two eigenvalues, each with det(M - l*I) = 0.
+    m = (RCAS::GF(9)**[2, 2])[[0, 2], [1, 0]]
+    values = m.eigenvalues
+    assert_equal 2, values.size
+    values.each { |l| assert_equal "0", (m - m.space.identity.scale(l)).det.to_s }
+  end
+
+  def test_random_matrices_have_every_requested_property
+    # A keyword that cannot be honoured may raise, but must not be dropped.
+    space = RCAS::ZZ**[3, 3]
+    upper = ->(m) { (0...3).all? { |i| (0...i).all? { |j| m[i, j].value.zero? } } }
+    lower = ->(m) { (0...3).all? { |i| ((i + 1)...3).all? { |j| m[i, j].value.zero? } } }
+    checks = [
+      [{ rank: 1, symmetric: true }, ->(m) { m.symmetric? && m.rank == 1 }],
+      [{ det: 6, triangular: :upper }, ->(m) { upper.(m) && m.det.value == 6 }],
+      [{ eigenvalues: [1, 2, 3], symmetric: true }, ->(m) { m.symmetric? }],
+      [{ triangular: true }, ->(m) { upper.(m) || lower.(m) }]
+    ]
+    checks.each do |opts, ok|
+      5.times do |seed|
+        begin
+          m = space.random(**opts, random: Random.new(seed))
+        rescue ArgumentError
+          next
+        end
+        assert ok.(m), "random(#{opts}) gave\n#{m}"
+      end
+    end
+  end
 end

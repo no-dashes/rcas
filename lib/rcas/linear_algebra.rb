@@ -16,7 +16,17 @@ module RCAS
   module LinearAlgebra
     module_function
 
-    def dot(u, v) = u.entries.zip(v.entries).map { |a, b| Scalar.mul(a, b) }.reduce { |x, y| Scalar.add(x, y) }.simplify
+    # The inner product, Hermitian where an entry carries an explicit
+    # complex number: (1, i).(1, i) is 1 + i*i = 0 bilinearly, and |(1, i)|
+    # is sqrt(2), not 0 (third review, L12). Symbolic entries are taken as
+    # they stand, so the real case is unchanged.
+    def dot(u, v) = u.entries.zip(v.entries).map { |a, b| Scalar.mul(a, conjugate(b)) }.reduce { |x, y| Scalar.add(x, y) }.simplify
+
+    def conjugate(e)
+      e = Expression.lift(e)
+      return e unless e.each_node.any? { |n| n.is_a?(Num) && n.value.is_a?(Complex) }
+      ComplexParts.conj(e)
+    end
 
     def norm(v) = RCAS.sqrt(dot(v, v)).simplify
 

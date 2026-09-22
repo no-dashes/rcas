@@ -210,10 +210,51 @@ module RCAS
       cross(r.map { |c| c.diff(u) }, r.map { |c| c.diff(v) })
     end
 
+    # The ranges innermost first: an inner range may depend on the outer
+    # variables, never an outer range on an inner one - y: 0..x with x
+    # innermost is no region, and the answer kept an integration variable
+    # (third review, L14).
     def integrate_over(integrand, ranges)
+      check_nesting!(ranges)
       ranges.reduce(Expression.lift(integrand)) do |acc, (var, from, to)|
         Integrate.definite(acc, Expression.lift(var), from, to)
       end
+    end
+
+    def check_nesting!(ranges)
+      names = ranges.map { |var, _, _| Expression.lift(var).name }
+      ranges.each_with_index do |(var, from, to), i|
+        inner = names.first(i)
+        used = [from, to].flat_map { |b| Expression.lift(b).variables } & inner
+        next if used.empty?
+        raise ArgumentError, "the range of #{var} depends on #{used.join(', ')}, which is integrated first; " \
+                             "list the ranges innermost first, each depending only on the ones after it"
+      end
+    end
+
+    # A field with a singularity inside the region is outside the
+    # theorems: the vortex (-y, x)/(x**2 + y**2) has zero curl everywhere it
+    # is defined and circulates 2*pi around the origin (third review, L13).
+    # Refused unless every denominator of the field is shown not to vanish
+    # on the region - a sign under real coordinates, or no zero in the one
+    # range it moves with.
+    def regular_on!(field, xs, ranges, name)
+      list(field).each do |component|
+        Analysis.denominators(Expression.lift(component), xs.first).concat(
+          xs.drop(1).flat_map { |x| Analysis.denominators(Expression.lift(component), x) }
+        ).uniq.each do |d|
+          next if nonvanishing?(d, xs, ranges)
+          raise NotImplementedError, "#{name}: the field is singular where #{d} = 0, which may meet the region; the theorem needs a field without singularities there"
+        end
+      end
+    end
+
+    def nonvanishing?(d, xs, ranges)
+      sign = RCAS.assume(**xs.to_h { |x| [x.name, RR] }) { RCAS.sign_of(d) }
+      return true if %i[positive negative].include?(sign)
+      !ranges.empty? && %i[positive negative].include?(proven_sign(d, ranges))
+    rescue StandardError
+      false
     end
 
     # ---- the three theorems ---------------------------------------------------
@@ -225,6 +266,8 @@ module RCAS
     def green(field, ranges, vars: nil)
       f = components(field, "green", [2])
       xs = region_coordinates(ranges, vars, 2, "green")
+      check_nesting!(ranges)
+      regular_on!(f, xs, ranges, "green")
       integrate_over((f[1].diff(xs[0]) - f[0].diff(xs[1])).simplify, ranges)
     end
 
@@ -242,6 +285,8 @@ module RCAS
     def divergence_theorem(field, ranges, vars: nil)
       f = components(field, "divergence_theorem", [3])
       xs = region_coordinates(ranges, vars, 3, "divergence_theorem")
+      check_nesting!(ranges)
+      regular_on!(f, xs, ranges, "divergence_theorem")
       integrate_over(Analysis.divergence(f, xs), ranges)
     end
 
@@ -260,9 +305,15 @@ module RCAS
     # A field is conservative when it is the gradient of a potential; on a
     # region without holes that is exactly the symmetry of the derivatives
     # (curl = 0 in three variables, Q_x = P_y in two).
+    #
+    # "Without holes" is the part that is easy to forget: a field with a
+    # singularity has a hole in its domain, and its symmetric derivatives
+    # prove nothing there, so such a field is refused rather than
+    # certified.
     def conservative?(field, vars = nil)
       f = components(field, "conservative?", [2, 3])
       xs = coordinates(field, vars, f.size)
+      regular_on!(f, xs, [], "conservative?")
       pairs = (0...f.size).to_a.combination(2)
       pairs.all? { |i, j| Scalar.zero?((f[i].diff(xs[j]) - f[j].diff(xs[i])).simplify) }
     end
