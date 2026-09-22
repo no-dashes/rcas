@@ -197,8 +197,9 @@ module RCAS
       hi = bound(to)
       return(digits ? Decimal.new(BigDecimal(0), digits) : 0.0) if lo == hi
       numeric_integrand!(f, var, lo, hi)
-      ends = [from, *breakpoints(f, var, lo, hi), to]
-      ends = [from, *breakpoints(f, var, lo, hi).reverse, to] if lo > hi
+      inside = breakpoints(f, var, lo, hi)
+      ends = lo > hi ? [from, *inside.reverse, to] : [from, *inside, to]
+      not_integrable!(f, var, ends)
       pieces = ends.each_cons(2).map { |a, b| piece(f, var, a, b, digits) }
       return pieces.sum if digits.nil?
       Decimal.new(pieces.map { |d| d.is_a?(Decimal) ? d.value : BigDecimal(d.to_s) }.sum, digits)
@@ -229,6 +230,35 @@ module RCAS
       # again, on a larger budget, and a refusal when it does not settle
       value = lo.infinite? || hi.infinite? ? transformed(f, var, lo, hi) : checked_simpson(caller_for(f, var), lo, hi)
       value or raise ArgumentError, "nintegrate: the quadrature of #{f} over #{from}..#{to} did not settle; it may diverge"
+    end
+
+    # Where the integrand has no value at an end of a piece, it may not be
+    # integrable there at all: when (x - p)*f(x) does not tend to 0, f is
+    # at least as large as c/(x - p) and the integral diverges [Rud76, th.
+    # 6.20 by comparison]. Saying so from the limit is quick; letting the
+    # quadrature fail to settle took seconds. A limit of 0 proves nothing
+    # either way, and the quadrature decides then.
+    def not_integrable!(f, var, ends)
+      g = caller_for(f, var)
+      ends.each_with_index do |p, i|
+        next if Limits.infinite?(p)
+        value = Analysis.numeric(p)
+        next if value.nil? || g.call(value)
+        sides = []
+        sides << :left if i.positive?
+        sides << :right if i < ends.size - 1
+        sides.each do |side|
+          limit = begin
+            Limits.limit((var - p) * f, var, p, side)
+          rescue StandardError
+            nil
+          end
+          next if limit.nil? || limit.is_a?(Limit)
+          next if limit.is_a?(Num) && limit.value.is_a?(Numeric) && limit.value.zero?
+          next unless Limits.infinite?(limit) || limit.is_a?(Num) || limit.variables.empty?
+          raise ArgumentError, "nintegrate: #{f} is not integrable at #{var} = #{p}; it grows like 1/(#{(var - p).simplify}) or faster there, so the integral diverges"
+        end
+      end
     end
 
     # A number at some point of the range, or a refusal naming why not.

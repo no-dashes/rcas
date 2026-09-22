@@ -77,6 +77,9 @@ module RCAS
         rhs = Expression.lift(solved[d]).expand
         coefficients = us.map do |u|
           c = Solve.polynomial_coefficients(rhs, u) or raise NotImplementedError, "dsolve: #{rhs} is not linear in #{u}"
+          # x' = x**2 has the coefficients [0, 0, 1]: reading c[1] alone
+          # solved it as x' = 0 (third review, L5)
+          raise NotImplementedError, "dsolve: #{rhs} is not linear in #{u}; only linear systems are solved" if c.size > 2
           value = c[1] || Num.new(0)
           raise NotImplementedError, "dsolve: the coefficient #{value} is not constant" if Solve.depends?(value, t) || us.any? { |v| Solve.depends?(value, v) }
           value
@@ -125,18 +128,21 @@ module RCAS
       out
     end
 
-    # A repeated eigenvalue with too few eigenvectors: (A - lambda)w = v gives
-    # the next vector of the chain and the solution exp(lambda*t)*(t*v + w).
+    # A repeated eigenvalue with too few eigenvectors: (A - lambda)w_k = w_(k-1)
+    # with w_0 = v gives the chain, and the k-th solution is
+    # exp(lambda*t)*sum_j t**(k - j)/(k - j)! * w_j - every vector below it,
+    # not only the one before (the third one lost v; third review, L4).
     def jordan_chain(matrix, value, vector, missing, t)
       out = []
-      previous = vector
-      order = 1
+      chain = [vector]
       while out.size < missing
-        w = solve_singular(matrix, value, previous) or break
-        combination = w.each_index.map { |i| (previous[i] * t**order / RCAS.factorial(order) + w[i]).simplify }
+        w = solve_singular(matrix, value, chain.last) or break
+        chain << w
+        k = chain.size - 1
+        combination = w.each_index.map do |i|
+          chain.each_with_index.map { |c, j| c[i] * t**(k - j) / RCAS.factorial(k - j) }.reduce(:+).simplify
+        end
         out << combination.map { |e| (e * Fn.new(:exp, [value * t])).simplify }
-        previous = w
-        order += 1
       end
       out
     end
@@ -268,7 +274,14 @@ module RCAS
         re, im, m = groups.shift
         if im
           j = groups.index { |re2, im2, m2| im2 && m2 == m && Scalar.zero?(re - re2) && Scalar.zero?(im + im2) }
-          groups.delete_at(j) if j
+          if j.nil?
+            # no conjugate (complex coefficients): exp(r*x) on its own, not
+            # a cos/sin pair, which would give the equation two constants
+            # too many (third review, L6)
+            merged << [(re + I * im).simplify, nil, m]
+            next
+          end
+          groups.delete_at(j)
           im = Simplify.negate(im).simplify if evalf_or_nil(im).to_f.negative?
         end
         merged << [re, im, m]

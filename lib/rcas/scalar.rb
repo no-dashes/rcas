@@ -26,6 +26,7 @@ module RCAS
     # a numeric evaluation decides (algebraic numbers have no canonical form here).
     def zero?(a)
       return a.value.zero? if a.is_a?(Num)
+      return identically_zero?(a) if a.is_a?(Expression) && !a.constant?
       return false unless a.is_a?(Expression) && a.constant? && a.each_node.none? { |n| n.is_a?(Integral) || n.is_a?(Derivative) }
       exact = Algebraic.exact(a)
       return exact.zero? if exact
@@ -36,6 +37,38 @@ module RCAS
       end
       return false unless v.is_a?(Numeric) && v.abs < 1e-12
       vanishes?(a)
+    end
+
+    # An expression in indeterminates is zero when it is the zero polynomial
+    # or rational function: (a**2 - 1)/(a - 1) - a - 1 is, and a symbolic
+    # pivot that vanishes identically is no pivot - rank said 2 for a
+    # singular matrix (third review, L9). This is not the generic-pivot
+    # assumption, which is about pivots that vanish only for special values.
+    def identically_zero?(a)
+      return false if a.each_node.any? { |n| n.is_a?(Integral) || n.is_a?(Derivative) || n.is_a?(Sum) || n.is_a?(Limit) }
+      expanded = a.expand
+      return true if expanded.is_a?(Num) && expanded.value.zero?
+      if expanded.each_node.any? { |n| n.is_a?(Div) || (n.is_a?(Pow) && n.exponent.is_a?(Num) && Simplify.negative?(n.exponent.value)) }
+        cancelled = expanded.cancel
+        return true if cancelled.is_a?(Num) && cancelled.value.zero?
+      end
+      trigonometric_zero?(expanded)
+    rescue StandardError
+      false
+    end
+
+    # sin(2*x) - 2*sin(x)*cos(x) and sin(x)**2 + cos(x)**2 - 1: zero by an
+    # identity, which the addition formulas and trigsimp show. Only for
+    # small expressions - this runs inside elimination.
+    def trigonometric_zero?(e)
+      return false unless e.each_node.any? { |n| n.is_a?(Fn) && Trigonometry::SQUARES.key?(n.name) }
+      return false if e.each_node.count > 200
+      rewritten = Trigonometry.expand_trig(e).expand
+      return true if rewritten.is_a?(Num) && rewritten.value.zero?
+      reduced = Trigonometry.trigsimp(rewritten).simplify
+      reduced.is_a?(Num) && reduced.value.zero?
+    rescue StandardError
+      false
     end
 
     # 1e-12 is not zero. exp(-100) is 3.7e-44, and a determinant built from

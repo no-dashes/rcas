@@ -58,7 +58,7 @@ module RCAS
     # 1, exp(a t), sin/cos(w t), sinh/cosh(w t), and exp(a t) times those.
     def table_transform(f, t, s)
       f = f.simplify
-      return 1 / s unless Solve.depends?(f, t)
+      return f / s unless Solve.depends?(f, t) # a constant a is a/s, not 1/s
       shift, rest = split_exponential(f, t)
       shifted = shift ? s - shift : s
       value =

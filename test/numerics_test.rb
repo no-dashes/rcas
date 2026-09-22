@@ -93,7 +93,7 @@ class NumericsTest < Minitest::Test
     assert_in_delta(-1.0, RCAS.nintegrate(RCAS.log(x), x: 0..1), 1e-15)
     [[1 / x**2, 0..1], [RCAS.tan(x), 0..3.14]].each do |f, range|
       e = assert_raises(ArgumentError) { RCAS.nintegrate(f, x: range) }
-      assert_match(/did not settle/, e.message)
+      assert_match(/did not settle|not integrable/, e.message)
     end
   end
 

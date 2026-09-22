@@ -23,11 +23,26 @@ module RCAS
       end
       coeff, factors = Simplify.factorize(arg)
       if coeff.is_a?(Integer) && coeff.abs >= 2 && !factors.empty?
-        u = Simplify.rebuild_product(coeff <=> 0, factors)
-        rest = Simplify.rebuild_product(coeff - (coeff <=> 0), factors)
-        return addition_formula(expr.name, u, rest)
+        return multiple_angle(expr.name, coeff, Simplify.rebuild_product(1, factors))
       end
       expr
+    end
+
+    # sin(n*u) and cos(n*u) by de Moivre, (cos u + i sin u)**n [AS64, 4.3.
+    # 29-30]: one binomial sum. Peeling one u at a time and expanding sin
+    # and cos of the rest separately doubled the work per multiple, and
+    # sin(16*x) took nine seconds (third review, section 5).
+    def multiple_angle(name, n, u)
+      s = expand_trig(Fn.new(:sin, [u]))
+      c = expand_trig(Fn.new(:cos, [u]))
+      m = n.abs
+      terms = (0..m).filter_map do |k|
+        next nil if name == :sin ? k.even? : k.odd?
+        sign = (-1)**(k / 2)
+        Num.new(sign * (0...k).reduce(1) { |acc, i| acc * (m - i) } / (1..k).reduce(1, :*)) * c**(m - k) * s**k
+      end
+      total = terms.reduce(:+).expand
+      name == :sin && n.negative? ? Simplify.negate(total).expand : total
     end
 
     def addition_formula(name, a, b)

@@ -68,4 +68,16 @@ class ReviewSummationTest < Minitest::Test
     term = RCAS.binomial(@n, @k) * base**@k / (@n - @k + 1)
     [term, ->(m) { (0..m).sum(0r) { |j| binom(m, j) * base**j / (m - j + 1) } }]
   end
+
+  def test_q_recurrence_is_not_refused_by_rounding_noise
+    # sum_k qbinomial(n,k)**2 q**(k**2) = qbinomial(2n,n); its recurrence is
+    # exact (residue 0 at q = 3), so "boundary terms do not vanish" is false.
+    rec = RCAS.qsumrecursion(RCAS.qbinomial(@n, @k, @q)**2 * @q**(@k**2), @k, @q, s(@n))
+    sums = ->(m) { (0..m).sum(0r) { |j| qbinom(m, j, 2r)**2 * 2r**(j * j) } }
+    sites = rec.lhs.each_node.select { |e| e.is_a?(RCAS::Fn) && e.name == :s }.uniq
+    (0..4).each do |m|
+      e = sites.reduce(rec.lhs) { |acc, site| acc.subs(site => sums.call(value(site.args.first, n: m))) }
+      assert_equal 0, value(e, n: m, q: 2), "residue at n = #{m}"
+    end
+  end
 end

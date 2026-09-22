@@ -34,7 +34,10 @@ module RCAS
       return Array(vars).map { |v| Expression.lift(v) } if vars && !Array(vars).empty?
       default = COORDINATES.first(dim).map { |n| Var.new(n) }
       names = list(integrand).flat_map { |f| Expression.lift(f).variables }.uniq
-      return default if (names - COORDINATES).empty? || names.size != dim
+      # a field that mentions x, y or z is read in x, y, z, and its other
+      # names are parameters: (a*y, -x, 0) with a as a coordinate did no
+      # work around the circle (third review, L8)
+      return default if (names - COORDINATES).empty? || names.size != dim || names.any? { |n| COORDINATES.include?(n) }
       names.sort.map { |n| Var.new(n) }
     end
 

@@ -81,4 +81,37 @@ class ReviewQualityTest < Minitest::Test
     domain = RCAS.real_domain(RCAS.sqrt(-(@x - 1)**2 - Rational(1, 10**26)), @x)
     assert_equal RCAS::RealSet.empty, domain
   end
+
+  def test_rank_agrees_with_singularity_for_a_disguised_zero_entry
+    # [[1, 1], [1, 1 + w]] with w = 0 has two equal rows: rank 1, and the
+    # same matrix is reported singular by inverse.
+    RCAS.assume(a: RCAS::RR) do
+      assert_equal 1, RCAS::RR.matrix([[1, 1], [1, 1 + disguised_zero]]).rank
+    end
+  end
+
+  def test_a_linear_system_with_a_disguised_zero_coefficient_keeps_its_free_unknown
+    # x + y = 1 and x + (1 + w)*y = 1 are the same equation, so y is free and
+    # x = 1 - y; {x=1, y=0} alone drops the whole line. Refusing is acceptable.
+    begin
+      solutions = RCAS.solve([@x + @y - 1, @x + (1 + disguised_zero) * @y - 1], [@x, @y])
+    rescue NotImplementedError
+      return assert true
+    end
+    refute_empty solutions
+    solutions.each do |s|
+      refute s.key?(@y), "y should stay free: #{solutions.inspect}"
+      assert_equal n(-6), s[@x].subs(y: 7).simplify.cancel
+    end
+  end
+
+  # Performance regression, not a correctness property: expand_trig peels one
+  # multiple of x at a time and expands sin and cos of the rest separately, so
+  # sin(n*x) costs 2**n; sin(16*x) took 9 s. The bound is generous.
+  def test_performance_expand_trig_of_a_multiple_angle_is_not_exponential
+    result = Timeout.timeout(1.5) { RCAS.expand_trig(RCAS.sin(16 * @x)) }
+    refute_nil result
+  rescue Timeout::Error
+    flunk 'expand_trig(sin(16*x)) took more than 1.5 s'
+  end
 end
