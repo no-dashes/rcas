@@ -62,4 +62,21 @@ class ReviewAlgebraTest < Minitest::Test
     assert_equal 2, roots.size
     roots.each { |r| v = r.is_a?(RCAS::Num) ? r.value : r; assert_predicate v * v + 1, :zero? }
   end
+
+  # log(-1) = i*pi on the principal branch, so 2*log(-1) = 2*i*pi, -log(-1) = -i*pi
+  # and 3*log(i) = 3*i*pi/2; log(1), log(-1) and log(-i) are 0, i*pi and -i*pi/2.
+  def test_logcombine_keeps_the_value
+    pi = Math::PI
+    assert_principal Complex(0, 2 * pi), RCAS.logcombine(2 * RCAS.log(-1))
+    assert_principal Complex(0, -pi), RCAS.logcombine(-RCAS.log(-1))
+    assert_principal Complex(0, 3 * pi / 2), RCAS.logcombine(3 * RCAS.log(RCAS::I))
+  end
+
+  # For x < 0, log(x**2) is real while 2*log(x) = 2*log|x| + 2*i*pi.
+  # At x = -1: log(1) = 0, not 2*i*pi.
+  def test_expand_log_respects_a_declared_negative_sign
+    RCAS.assume(@x < 0) do
+      assert_principal 0, RCAS.expand_log(RCAS.log(@x**2)).subs(x: -1)
+    end
+  end
 end

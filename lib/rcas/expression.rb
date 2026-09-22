@@ -74,7 +74,10 @@ module RCAS
       other.is_a?(Expression) && other.class == self.class && other.children == children
     end
 
-    def eql?(other) = other.is_a?(Expression) && other.class == self.class && other.children == children
+    # eql? compares the children with eql?, so that eql? implies equal
+    # hashes: x + 1 and x + 1.0 are == (1 == 1.0) but not eql?, and they
+    # hash differently (third review, C12).
+    def eql?(other) = other.is_a?(Expression) && other.class == self.class && other.children.eql?(children)
 
     # Nodes are immutable, so the hash is computed once, in the constructor,
     # before the node is frozen: recomputing it walked the whole subtree on
@@ -515,7 +518,7 @@ module RCAS
     def children = args
     def rebuild(*args) = Fn.new(name, args)
     def ==(other) = other.is_a?(Fn) && other.name == name && other.args == args
-    alias eql? ==
+    def eql?(other) = other.is_a?(Fn) && other.name == name && other.args.eql?(args)
     def to_sexp = [name, *args.map(&:to_sexp)]
   end
 end

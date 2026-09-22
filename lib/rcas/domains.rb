@@ -58,6 +58,10 @@ module RCAS
     def variables = value.respond_to?(:variables) ? value.variables : []
     def subs(*args) = Membership.new(value.subs(*args), domain)
     def simplify = Membership.new(value.simplify, domain)
+    # hold { x.in?(ZZ) }.doit evaluates the formal nodes of the value (C9)
+    def evaluate = Membership.new(value.respond_to?(:evaluate) ? value.evaluate : value, domain)
+    alias doit evaluate
+    alias unhold evaluate
 
     def ==(other) = other.is_a?(Membership) && other.value == value && other.domain == domain
     alias eql? ==
@@ -137,10 +141,24 @@ module RCAS
       when Complex    then obj.imaginary.zero? ? include?(obj.real) : rank >= 4
       when Numeric    then obj.real? ? rank >= 3 : rank >= 4
       when Symbol     then include?(Var.new(obj))
-      when Expression then (d = obj.domain) ? d.subset?(self) : false
+      when Expression then expression_member?(obj)
       when Polynomial then obj.constant? && include?(obj.constant_term)
       else false
       end
+    end
+
+    # The inferred domain answers first; a constant it cannot place is
+    # simplified and looked at again: sqrt(2)**2 is 2 and pi - pi is 0,
+    # both integers (third review, C13).
+    def expression_member?(obj)
+      d = obj.domain
+      return true if d&.subset?(self)
+      return false unless obj.constant?
+      reduced = obj.simplify
+      return include?(reduced.value) if reduced.is_a?(Num)
+      reduced != obj && (d2 = reduced.domain) ? d2.subset?(self) : false
+    rescue StandardError
+      false
     end
 
     def subset?(other)

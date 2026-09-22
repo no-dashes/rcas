@@ -32,6 +32,12 @@ module RCAS
     end
     def -@ = Equation.new(-lhs, -rhs)
 
+    # hold { integral(x**2, x) == x }.doit is x**3/3 = x: both sides
+    # evaluated, the statement kept (third review, C9)
+    def evaluate = Equation.new(lhs.evaluate, rhs.evaluate)
+    alias doit evaluate
+    alias unhold evaluate
+
     def ==(other) = other.is_a?(Equation) && other.lhs == lhs && other.rhs == rhs
     alias eql? ==
     def hash = [Equation, lhs, rhs].hash

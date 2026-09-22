@@ -24,7 +24,7 @@ module RCAS
       case n
       when Integer then n >= 0 ? Num.new((1..n).reduce(1, :*)) : nil
       when Rational then gamma_value(n + 1)
-      when Float then Num.new(Math.gamma(n + 1))
+      when Float then n < 0 && n == n.round ? UNDEFINED : Num.new(Math.gamma(n + 1))
       end
     end
 
@@ -43,7 +43,9 @@ module RCAS
           (n...0).each { |j| c /= (j + Rational(1, 2)) }
         end
         (Num.new(c) * RCAS.sqrt(PI)).simplify
-      when Float then Num.new(Math.gamma(v))
+      # a pole (0, -1, -2, ... as a Float) has no value: undefined, not a
+      # Math::DomainError reaching the user (third review, C6)
+      when Float then v <= 0 && v == v.round ? UNDEFINED : Num.new(Math.gamma(v))
       end
     end
 

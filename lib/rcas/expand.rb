@@ -138,6 +138,11 @@ module RCAS
           n >>= 1
         end
         result
+      elsif n && n < -1 && term_count(base) > 1
+        # (x + y)**-2 is 1/(x + y)**2, and expand treats that quotient by
+        # expanding the denominator: the same here, or the two spellings of
+        # one expression had two expansions (third review, C10)
+        single(Pow.new(rebuild(power(Pow.new(rebuild(base), Num.new(-n)))), Num.new(-1)))
       else
         single(Pow.new(rebuild(base), expand(exp)))
       end

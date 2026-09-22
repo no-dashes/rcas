@@ -172,6 +172,10 @@ module RCAS
     def swap = Inequality.new(rhs, FLIP[op], lhs)
     def subs(*args) = Inequality.new(lhs.subs(*args), op, rhs.subs(*args))
     def simplify = Inequality.new(lhs.simplify, op, rhs.simplify)
+    # hold { a < b }.doit: both sides evaluated, the statement kept (C9)
+    def evaluate = Inequality.new(lhs.evaluate, op, rhs.evaluate)
+    alias doit evaluate
+    alias unhold evaluate
     def variables = (lhs.variables | rhs.variables).sort
     def solve(var = nil) = Inequalities.solve(self, var)
 

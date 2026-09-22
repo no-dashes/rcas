@@ -156,12 +156,28 @@ module RCAS
     end
 
     # log(a*b**n/c) => log(a) + n*log(b) - log(c)   (arguments assumed positive)
+    #
+    # "Assumed" is the word: a base whose sign is *declared* negative is
+    # taken by its absolute value, log(x**2) = 2*log(-x) for x < 0, and the
+    # i*pi that an odd number of negative factors leaves is added back -
+    # log(x**2) = 2*log(x) there was off by 2*pi*i (third review, C4, A5).
+    # A negative base under a fractional power is not expanded at all.
     def expand_log(expr)
       expr = Expression.lift(expr).map_children { |c| expand_log(c) }
       return expr unless expr.is_a?(Fn) && expr.name == :log && expr.args.size == 1
       coeff, factors = Simplify.factorize(expr.args.first.simplify)
       return expr if factors.empty? || (factors.size == 1 && factors.values.first == 1 && coeff == 1)
-      pieces = factors.map { |base, exp| Expression.lift(exp) * Fn.new(:log, [base]) }
+      flips = 0
+      pieces = factors.map do |base, exp|
+        next Expression.lift(exp) * Fn.new(:log, [base]) unless %i[negative].include?(RCAS.sign_of(base))
+        return expr unless exp.is_a?(Integer)
+        flips += exp
+        Num.new(exp) * Fn.new(:log, [Neg.new(base).simplify])
+      end
+      pieces << I * PI if flips.odd? && !(coeff.is_a?(Numeric) && coeff.real? && coeff.negative?)
+      if flips.odd? && coeff.is_a?(Numeric) && coeff.real? && coeff.negative?
+        coeff = -coeff # two negatives: the product is positive after all
+      end
       if coeff.is_a?(Rational)
         pieces << Fn.new(:log, [Num.new(coeff.numerator)]) unless coeff.numerator == 1
         pieces << -Fn.new(:log, [Num.new(coeff.denominator)])
@@ -171,14 +187,20 @@ module RCAS
       pieces.reduce { |acc, p| acc + p }.simplify
     end
 
-    # a*log(u) + b*log(v) => log(u**a * v**b) for rational a, b.
+    # a*log(u) + b*log(v) => log(u**a * v**b) for rational a, b - for the
+    # arguments it holds for. It is a rule about positive numbers: 2*log(-1)
+    # is 2*i*pi and log((-1)**2) is 0, and 3*log(i) is not log(-i)
+    # (third review, A4). So a logarithm joins only when its argument is
+    # positive or, for an indeterminate, not declared otherwise (the same
+    # convention as expand_log).
     def logcombine(expr)
       expr = Expression.lift(expr).simplify
       constant, terms = Simplify.termize(expr)
       inside = {}
       rest = {}
       terms.each do |factors, coeff|
-        log = factors.size == 1 && factors.values.first == 1 && factors.keys.first.is_a?(Fn) && factors.keys.first.name == :log
+        log = factors.size == 1 && factors.values.first == 1 && factors.keys.first.is_a?(Fn) && factors.keys.first.name == :log &&
+              combinable?(factors.keys.first.args.first)
         if log && (coeff.is_a?(Integer) || coeff.is_a?(Rational))
           Simplify.add_factor(inside, factors.keys.first.args.first, coeff)
         else
@@ -189,6 +211,12 @@ module RCAS
       combined = Simplify.rebuild_sum(constant, rest)
       combined += Fn.new(:log, [Simplify.rebuild_product(1, inside)]) unless inside.empty?
       combined.simplify
+    end
+
+    def combinable?(u)
+      return Decide.sign(u) == :positive if u.variables.empty?
+      return false if u.each_node.any? { |n| n.is_a?(Num) && n.value.is_a?(Complex) }
+      !%i[negative nonpositive zero].include?(RCAS.sign_of(u))
     end
   end
 end

@@ -7,6 +7,11 @@ module RCAS
     module_function
 
     def diff(expr, var)
+      # an expression without var (free) is a constant in it: sqrt(y - y)
+      # has derivative 0, and the chain rule divided by sqrt(0) on the way
+      # (third review, C11)
+      return Num.new(0) if expr.is_a?(Expression) && !expr.is_a?(Derivative) && !expr.variables.include?(var.name) &&
+                           !(expr.is_a?(Const) && expr.name == :undefined)
       case expr
       when Const then expr.name == :undefined ? expr : Num.new(0)
       when Num, RootOf then Num.new(0)

@@ -82,4 +82,75 @@ class ReviewCoreTest < Minitest::Test
     cos = Complex(Math.cos(0.5) * Math.cosh(0.25), -Math.sin(0.5) * Math.sinh(0.25))
     assert_value sin / cos, RCAS.tan(@x).evalf(x: z)
   end
+
+  def test_logarithm_of_a_square_respects_a_negative_sign
+    # For y < 0, log(y**2) is the real number 2*log|y|, while 2*log(y) has
+    # imaginary part 2*pi. At y = -2 the value is log(4).
+    # (Compared through Scalar.zero? rather than evalf, which leaves a log of
+    # a negative number symbolic - a separate finding.)
+    RCAS.assume(@y < 0) do
+      got = RCAS.expand_log(RCAS.log(@y**2))
+      assert RCAS::Scalar.zero?((got - RCAS.log(4)).subs(y: -2).simplify), "expand_log gave #{got}"
+      combined = RCAS.logcombine(2 * RCAS.log(@y))
+      assert RCAS::Scalar.zero?((combined - 2 * RCAS.log(@y)).subs(y: -2).simplify), "logcombine gave #{combined}"
+    end
+  end
+
+  def test_gamma_at_a_pole_does_not_raise_a_math_error
+    # gamma has a pole at -3; the answer may be a node, oo or undefined, but
+    # Math::DomainError is an internal error that must not reach the user.
+    begin
+      RCAS.gamma(n(-3.0))
+      RCAS.gamma(@x).evalf(x: -3)
+    rescue Math::DomainError => e
+      flunk "Math::DomainError escaped: #{e.message}"
+    end
+    pass
+  end
+
+  def test_popcorn_reads_back_a_double_negation
+    # -(-x) is x; whatever POPCORN writes for it must parse to that value.
+    [RCAS::Neg.new(RCAS::Neg.new(@x)), RCAS::Neg.new(n(-2))].each do |e|
+      back = RCAS.from_popcorn(RCAS.popcorn(e))
+      assert RCAS::Scalar.zero?((back - e).simplify), "#{e} came back as #{back}"
+    end
+  end
+
+  def test_a_held_equation_can_be_evaluated
+    # integral(x**2, x) = x evaluates to the equation x**3/3 = x.
+    eq = RCAS::Equation.new(RCAS::Integral.new(@x**2, @x), @x)
+    got = eq.doit
+    assert_kind_of RCAS::Equation, got
+    assert RCAS::Scalar.zero?((got.lhs - @x**3 / 3).simplify)
+  end
+
+  def test_expand_is_idempotent_on_negative_powers
+    # (x + y)**-2 and 1/(x + y)**2 are the same expression; expand is a
+    # normal form, so it gives them one answer and is its own fixed point.
+    e = RCAS.expand((@x + @y)**-2)
+    assert_equal e, RCAS.expand(e)
+    assert_equal RCAS.expand(1 / (@x + @y)**2), e
+  end
+
+  def test_derivative_of_a_root_of_zero_is_zero
+    # sqrt(y - y) is the constant 0, so its derivative in x is 0.
+    assert_equal n(0), RCAS.diff(RCAS.sqrt(@y - @y), @x)
+  end
+
+  def test_eql_expressions_have_equal_hashes
+    # Ruby's contract: a.eql?(b) implies a.hash == b.hash.
+    a = RCAS::Fn.new(:sin, [n(1)])
+    b = RCAS::Fn.new(:sin, [n(1.0)])
+    c = RCAS::Add.new(@x, n(1))
+    d = RCAS::Add.new(@x, n(1.0))
+    assert_equal a.hash, b.hash, "sin(1) and sin(1.0) are eql?" if a.eql?(b)
+    assert_equal c.hash, d.hash, "x + 1 and x + 1.0 are eql?" if c.eql?(d)
+    refute a.eql?(b) && a.hash != b.hash
+  end
+
+  def test_membership_of_a_constant_that_is_an_integer
+    # sqrt(2)**2 = 2 and pi - pi = 0 are integers.
+    assert (RCAS.sqrt(2)**2).in?(RCAS::ZZ)
+    assert (RCAS::PI - RCAS::PI).in?(RCAS::ZZ)
+  end
 end

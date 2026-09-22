@@ -148,7 +148,9 @@ module RCAS
           return ["#{brackets.first}#{list_text(node.args, sugar)}#{brackets.last}", ATOM]
         end
         if head.key == UNARY_MINUS && node.args.size == 1
-          return ["-#{emit(node.args.first, UNARY_PRECEDENCE, sugar)}", UNARY_PRECEDENCE]
+          inner = emit(node.args.first, UNARY_PRECEDENCE, sugar)
+          inner = "(#{inner})" if inner.start_with?("-") # -(-$x), -(-2): never --
+          return ["-#{inner}", UNARY_PRECEDENCE]
         end
         if (op = INFIX[head.key]) && infix?(op, node.args.size)
           return [infix_text(op, node.args, sugar), op[1]]
@@ -336,13 +338,18 @@ module RCAS
           end
         end
 
-        # -17 is the integer -17; -$x is an application of unary_minus.
+        # -17 is the integer -17; -$x is an application of unary_minus. The
+        # minus belongs to the literal only when the literal follows it
+        # directly: -(-2) is unary_minus(-2), and --$x is two minuses (the
+        # writer used to emit that and this parser refused it: C8).
         def negation
           return product unless operator("-")
-          value = product
+          skip
+          literal = @s.check(/[0-9.]/)
+          value = @s.check(/-(?!>)/) ? negation : product
           case value
-          when Int then Int.new(-value.value)
-          when Double then Double.new(-value.value)
+          when Int then literal ? Int.new(-value.value) : apply("arith1", "unary_minus", value)
+          when Double then literal ? Double.new(-value.value) : apply("arith1", "unary_minus", value)
           else apply("arith1", "unary_minus", value)
           end
         end
