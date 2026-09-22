@@ -579,7 +579,14 @@ module RCAS
       coefficients = []
       Series.compose(s0, order) do |k|
         while coefficients.size <= k
-          coefficients << (derivative.subs(w => c).simplify / factorial).simplify
+          value = begin
+            derivative.subs(w => c).simplify
+          rescue ZeroDivisionError
+            # asin at 1, Si's sin(t)/t at 0: a derivative with no value there
+            # is no Taylor coefficient (a bare ZeroDivisionError before)
+            raise SeriesError, "#{f} has no Taylor series where its argument is #{c}"
+          end
+          coefficients << (value / factorial).simplify
           derivative = derivative.diff(w)
           factorial *= coefficients.size
         end

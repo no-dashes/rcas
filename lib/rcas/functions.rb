@@ -745,6 +745,8 @@ module RCAS
 
       exact = exact_value(fn.name, arg)
       return exact if exact
+      at_infinity = infinity_value(fn.name, arg)
+      return at_infinity if at_infinity
 
       case [fn.name, arg]
       in [_, Num => n] if n.value.is_a?(Float) && MATH_NAMES.include?(fn.name) then math_value(fn, n.value)
@@ -814,6 +816,20 @@ module RCAS
 
   # Exact special values: sin(pi/6), exp(i*pi), atan(1), asin(1/2), log(8)...
   module Functions
+    # exp, log and atan at oo and -oo, the values their limits have: exp(-oo)
+    # is 0, log(oo) and exp(oo) are oo, atan(+-oo) is +-pi/2 (third review,
+    # 3.2). log(-oo) and log(0) are left alone.
+    def self.infinity_value(name, arg)
+      plus = arg == OO
+      minus = !plus && Limits.infinite?(arg)
+      return nil unless plus || minus
+      case name
+      when :exp then plus ? OO : Num.new(0)
+      when :log then plus ? OO : nil
+      when :atan then plus ? (PI / 2).simplify : (-PI / 2).simplify
+      end
+    end
+
     # r*log(u) with a rational r, as u**r; nil for anything else.
     def self.log_power(e)
       coeff, factors = Simplify.factorize(e)

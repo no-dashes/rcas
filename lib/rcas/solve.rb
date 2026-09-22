@@ -200,7 +200,7 @@ module RCAS
           return Scalar.zero?(constant) ? everywhere(x, domain, poles) : []
         end
       roots = dedupe(found).map { |root| family(root, x, f) }
-      ordered(restrict(off_poles(merge_families(roots), poles, x), x, domain))
+      ordered(dedupe(restrict(off_poles(merge_families(roots), poles, x), x, domain)))
     end
 
     # x/(x + 1) + 1/(x + 1) - 1 is zero as a rational function, which the

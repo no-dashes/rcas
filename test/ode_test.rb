@@ -31,9 +31,11 @@ class OdeTest < Minitest::Test
   def test_separable
     eq = RCAS::Equation.new(d, 2 * X * Y)
     sols = dsolve(eq)
-    assert_equal ["y = exp(C1 + x**2)"], sols.map(&:to_s)
+    # linear, so the linear rule answers: C1*exp(x**2) includes y = 0 and
+    # the negative solutions, which exp(C1 + x**2) missed (third review)
+    assert_equal ["y = C1*exp(x**2)"], sols.map(&:to_s)
     assert_solves eq, sols
-    assert_equal ["y = exp(C1 + x)"], dsolve(d - Y).map(&:to_s)
+    assert_equal ["y = C1*exp(x)"], dsolve(d - Y).map(&:to_s)
     assert_equal ["y = C1 + x**2/2"], dsolve(d - X).map(&:to_s)
     assert_solves d - Y**2, dsolve(d - Y**2)
     assert_solves d - RCAS.sin(X) * Y, dsolve(d - RCAS.sin(X) * Y)

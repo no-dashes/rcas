@@ -178,7 +178,10 @@ module RCAS
       coeffs = Solve.polynomial_coefficients(f.subs(Derivative.new(y, x) => dy), dy)
       raise NotImplementedError, "the equation must be linear in D(#{y}, #{x})" unless coeffs && coeffs.size == 2
       rhs = (-coeffs[0] / coeffs[1]).simplify # y' = rhs(x, y)
-      separable(rhs, y, x) || linear(rhs, y, x) ||
+      # linear first: y' = y separated is log|y| = x + C, and exp(C1 + x)
+      # misses y = 0 and every negative solution, where the linear rule
+      # gives C1*exp(x) (third review, 3.6)
+      linear(rhs, y, x) || separable(rhs, y, x) ||
         raise(NotImplementedError, "#{y}' = #{rhs} is neither separable nor linear")
     end
 

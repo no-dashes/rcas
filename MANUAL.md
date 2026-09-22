@@ -3185,7 +3185,7 @@ with constants `C1`, `C2`, ...
 
 ```
 rcas> dsolve(eq(D(y, x), 2*x*y), y, x)
-=> [y = exp(C1 + x**2)]
+=> [y = C1*exp(x**2)]
 rcas> dsolve(D(y, x) - x/y, y, x)
 => [y = -(2*C1 + x**2)**(1/2), y = (2*C1 + x**2)**(1/2)]
 rcas> dsolve(eq(D(y, x) + 2*y, exp(x)), y, x)

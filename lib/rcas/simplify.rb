@@ -261,6 +261,14 @@ module RCAS
       coeff, factors = absorb_infinity(coeff, factors) if factors.key?(OO)
       return Num.new(0) if factors.nil?
       return Num.new(coeff) if factors.all? { |_, exp| exp.is_a?(Numeric) && exp.zero? }
+      # (-1)**(k/2) is i**k: sqrt(-1/4) came out as (-1)**(1/2)/2 while
+      # sqrt(-4) was 2*i (third review, 3.3)
+      minus_one = Num.new(-1)
+      half = factors[minus_one]
+      if half.is_a?(Rational) && half.denominator == 2
+        factors = factors.reject { |base, _| base == minus_one }
+        coeff = normalize_number(coeff * Complex(0, 1)**(2 * half).to_i)
+      end
       if coeff.is_a?(Complex) && coeff.real.zero?
         # The unit joins the powers of i already there: i*i**(1/2) is
         # i**(3/2), and writing i => 1 over the 1/2 would lose the root.
