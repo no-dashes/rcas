@@ -329,6 +329,11 @@ module RCAS
       return nil if depth > MAX_DEPTH
       f = f.simplify
       return f * x unless depends?(f, x)
+      # A definite integral that still moves with x is an atom whose
+      # derivative is another integral (Leibniz), so every rule that
+      # differentiates would grow one more layer for ever. rcas has no rule
+      # for the iterated integral and says so by staying formal.
+      return nil if f.each_node.any? { |n| n.is_a?(Integral) && n.definite? && depends?(n, x) }
 
       if f.is_a?(Add) || f.is_a?(Sub)
         constant, terms = Simplify.termize(f)

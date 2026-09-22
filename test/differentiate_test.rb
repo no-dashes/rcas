@@ -33,4 +33,57 @@ class DifferentiateTest < Minitest::Test
   def test_requires_a_variable
     assert_raises(ArgumentError) { (:x**2).diff(2) }
   end
+
+  # A definite integral is a number, but a number that still depends on the
+  # parameters of its integrand. Only the integration variable is bound, and
+  # looking at the bounds alone answered every such derivative with zero
+  # (22 Sept 2026, from a review).
+  def test_differentiating_under_the_integral_sign
+    x = RCAS::Var.new(:x)
+    t = RCAS::Var.new(:t)
+    f = RCAS::Integral.new(x * t, t, RCAS::Num.new(0), RCAS::Num.new(1))
+    assert_equal "integral(t, t, 0, 1)", f.diff(x).to_s
+    assert_equal "1/2", f.diff(x).doit.to_s, "integral(x*t, t, 0, 1) is x/2"
+    g = RCAS::Integral.new(RCAS.sin(x * t), t, RCAS::Num.new(0), RCAS::Num.new(1))
+    assert_equal "integral(t*cos(t*x), t, 0, 1)", g.diff(x).to_s
+    # integral(sin(x*t), t, 0, 1) is (1 - cos(x))/x, so the two agree
+    assert_equal "0", (((1 - RCAS.cos(x)) / x).diff(x) - g.diff(x).doit).cancel.to_s
+    assert_in_delta 0.3817732, g.diff(x).subs(x: RCAS::Num.new(1)).evalf, 1e-6
+  end
+
+  # The integration variable is bound: nothing that happens to be spelled
+  # the same is free, and an integrand without the parameter gives zero.
+  def test_a_bound_variable_is_not_a_parameter
+    x = RCAS::Var.new(:x)
+    t = RCAS::Var.new(:t)
+    zero = RCAS::Integral.new(RCAS.sin(t), t, RCAS::Num.new(0), RCAS::Num.new(1))
+    assert_equal "0", zero.diff(x).to_s, "no x in the integrand"
+    assert_equal "0", zero.diff(t).to_s, "t is the bound variable"
+    assert_equal "0", RCAS::Integral.new(x * t, t, RCAS::Num.new(0), RCAS::Num.new(1)).diff(t).to_s
+  end
+
+  # Bounds that move add Leibniz's two boundary terms to the integral of
+  # the parameter derivative.
+  def test_leibniz_rule_for_moving_bounds
+    x = RCAS::Var.new(:x)
+    t = RCAS::Var.new(:t)
+    # d/dx int_0^x exp(-t**2) dt is the integrand at the upper bound
+    assert_equal "exp(-x**2)", RCAS::Integral.new(RCAS.exp(-t**2), t, RCAS::Num.new(0), x).diff(x).to_s
+    assert_equal "-exp(-x**2)", RCAS::Integral.new(RCAS.exp(-t**2), t, x, RCAS::Num.new(0)).diff(x).to_s
+    # int_0^x x*t dt is x**3/2, so the derivative is 3*x**2/2
+    both = RCAS::Integral.new(x * t, t, RCAS::Num.new(0), x).diff(x)
+    assert_equal "integral(t, t, 0, x) + x**2", both.to_s
+    assert_equal "3*x**2/2", both.doit.simplify.to_s
+    # the same name bound inside and free in the bound names two things
+    assert_raises(NotImplementedError) { RCAS::Integral.new(RCAS.sin(x), x, RCAS::Num.new(0), x).diff(x) }
+  end
+
+  # An indefinite integral keeps its old two rules, with the new integrand
+  # simplified on the way in (an Integral is an atom to Simplify).
+  def test_indefinite_integrals_are_unchanged
+    x = RCAS::Var.new(:x)
+    t = RCAS::Var.new(:t)
+    assert_equal "sin(x)", RCAS::Integral.new(RCAS.sin(x), x).diff(x).to_s
+    assert_equal "integral(t*cos(t*x), t)", RCAS::Integral.new(RCAS.sin(x * t), t).diff(x).to_s
+  end
 end

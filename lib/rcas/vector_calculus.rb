@@ -120,7 +120,8 @@ module RCAS
         return nil if a.nil? || b.nil?
         SAMPLES.map { |s| [Expression.lift(var), Num.new(a + (b - a) * s)] }
       end
-      signs = grids[0].product(*grids.drop(1)).map do |point|
+      # A constant has no grid to walk; one empty point evaluates it once.
+      signs = (grids.empty? ? [[]] : grids[0].product(*grids.drop(1))).map do |point|
         value = Analysis.numeric(expr.subs(point.to_h))
         return nil if value.nil? || value.abs < 1e-9
         value.positive? ? :positive : :negative

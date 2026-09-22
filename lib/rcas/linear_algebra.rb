@@ -25,12 +25,31 @@ module RCAS
     def subtract(u, v) = u.space.unchecked(u.entries.zip(v.entries).map { |a, b| (a - b).simplify })
 
     # The projection of v onto a vector or onto the span of several.
+    #
+    # The sum of the single projections is the projection onto the span only
+    # when the targets are pairwise orthogonal; a slanted pair has to be
+    # orthogonalised first. project(e1, onto: [e1, e1 + e2]) is e1 - those
+    # two span the plane, so the projection onto it is the identity - and
+    # was (3/2, 1/2) before (22 Sept 2026, from a review). Dependent
+    # generators drop out on the way, as they do in gram_schmidt.
     def project(v, onto:)
       targets = onto.is_a?(Array) ? onto : [onto]
+      targets.each do |u|
+        raise ArgumentError, "project: cannot project onto the zero vector" if Scalar.zero?(dot(u, u))
+      end
+      targets = gram_schmidt(targets) unless orthogonal_family?(targets)
+      onto_orthogonal(v, targets)
+    end
+
+    def orthogonal_family?(targets) = targets.combination(2).all? { |u, w| orthogonal?(u, w) }
+
+    # The sum of the single projections, which is the projection itself once
+    # the targets are known to be pairwise orthogonal. gram_schmidt builds
+    # such a family as it goes and calls this directly, so that project does
+    # not orthogonalise what it has just orthogonalised.
+    def onto_orthogonal(v, targets)
       targets.reduce(v.space.unchecked(Array.new(v.entries.size, Num.new(0)))) do |sum, u|
-        square = dot(u, u)
-        raise ArgumentError, "project: cannot project onto the zero vector" if Scalar.zero?(square)
-        add(sum, scale(u, (dot(v, u) / square).simplify))
+        add(sum, scale(u, (dot(v, u) / dot(u, u)).simplify))
       end
     end
 
@@ -41,7 +60,7 @@ module RCAS
     def gram_schmidt(vectors, normalize: false)
       basis = []
       Array(vectors).each do |v|
-        w = basis.empty? ? v : subtract(v, project(v, onto: basis))
+        w = basis.empty? ? v : subtract(v, onto_orthogonal(v, basis))
         next if w.entries.all? { |e| Scalar.zero?(e) }
         basis << w
       end

@@ -188,4 +188,57 @@ class LinearAlgebraTest < Minitest::Test
     assert_equal "-2/3 + 3*x/2", line.to_s, "the same line as linreg finds"
     assert_raises(ArgumentError) { RCAS.least_squares(RCAS.matrix([[1, 2], [2, 4]]), RCAS.vector(1, 2)) }
   end
+
+  # The sum of the single projections is the projection onto the span only
+  # when the targets are pairwise orthogonal. A slanted pair is
+  # orthogonalised first: (1, 0) and (1, 1) span the plane, so projecting
+  # onto them is the identity, and the sum of the two single projections
+  # answered (3/2, 1/2) (22 Sept 2026, from a review).
+  def test_projecting_onto_a_slanted_span
+    e1 = RCAS.vector(1, 0)
+    plane = [e1, RCAS.vector(1, 1)]
+    assert_equal e1, RCAS.project(e1, onto: plane)
+    assert_equal RCAS.vector(2, -3), RCAS.project(RCAS.vector(2, -3), onto: plane), "onto the whole space: the identity"
+    assert_equal "(1/3, 8/3, 7/3)", RCAS.project(RCAS.vector(1, 2, 3), onto: [RCAS.vector(1, 1, 0), RCAS.vector(0, 1, 1)]).to_s
+  end
+
+  # What a projection has to satisfy, whatever the targets look like:
+  # v - p is orthogonal to every one of them, and projecting again changes
+  # nothing.
+  def test_a_projection_is_orthogonal_and_idempotent
+    [[RCAS.vector(1, 1, 0), RCAS.vector(0, 1, 1)],
+     [RCAS.vector(1, 0, 0), RCAS.vector(0, 1, 0)],
+     [RCAS.vector(2, 1, -1), RCAS.vector(1, 3, 1), RCAS.vector(0, 1, 5)],
+     [RCAS.vector(1, 2, 3)]].each do |targets|
+      v = RCAS.vector(1, 2, 3)
+      p = RCAS.project(v, onto: targets)
+      targets.each do |u|
+        assert_equal "0", RCAS::LinearAlgebra.dot(v - p, u).to_s, "v - p is perpendicular to #{u}"
+      end
+      assert_equal p, RCAS.project(p, onto: targets), "projecting twice is projecting once"
+    end
+  end
+
+  # Dependent generators name the same span twice; they drop out on the way
+  # rather than being counted twice.
+  def test_dependent_targets_do_not_count_twice
+    v = RCAS.vector(1, 2, 3)
+    line = RCAS.project(v, onto: [RCAS.vector(1, 1, 0)])
+    assert_equal "(3/2, 3/2, 0)", line.to_s
+    assert_equal line, RCAS.project(v, onto: [RCAS.vector(1, 1, 0), RCAS.vector(2, 2, 0)])
+    assert_equal line, RCAS.project(v, onto: [RCAS.vector(1, 1, 0), RCAS.vector(1, 1, 0)])
+    assert_raises(ArgumentError) { RCAS.project(v, onto: [RCAS.vector(0, 0, 0)]) }
+    assert_raises(ArgumentError) { RCAS.project(v, onto: [RCAS.vector(1, 1, 0), RCAS.vector(0, 0, 0)]) }
+  end
+
+  # gram_schmidt builds an orthogonal family as it goes and projects onto
+  # that directly, so it neither orthogonalises twice nor recurses.
+  def test_gram_schmidt_still_spans_the_same_space
+    vs = [RCAS.vector(1, 1, 0), RCAS.vector(1, 0, 1), RCAS.vector(0, 1, 1)]
+    basis = RCAS.gram_schmidt(vs)
+    assert_equal 3, basis.size
+    basis.combination(2) { |u, w| assert_equal "0", RCAS::LinearAlgebra.dot(u, w).to_s }
+    vs.each { |v| assert_equal v, RCAS.project(v, onto: basis), "every generator is back in the span" }
+    assert_equal 2, RCAS.gram_schmidt([RCAS.vector(1, 1, 0), RCAS.vector(2, 2, 0), RCAS.vector(0, 1, 1)]).size
+  end
 end

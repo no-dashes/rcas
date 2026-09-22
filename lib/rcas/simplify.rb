@@ -173,9 +173,14 @@ module RCAS
               exp = exponent_value(rebuild_sum(0, rest))
             end
             add_factor(factors, e.base, multiply_exponents(exp, pw))
-          elsif e.base.is_a?(Fn) && e.base.name == :exp && e.base.args.size == 1
+          elsif e.base.is_a?(Fn) && e.base.name == :exp && e.base.args.size == 1 &&
+                exp_power_mergeable?(e.base.args.first, multiply_exponents(exp, pw))
             # e**x, exp(u)**v  =>  exp(u*v)
             add_factor(factors, exp_base, multiply_exponents(multiply_exponents(exponent_value(e.base.args.first), exp), pw))
+          elsif e.base.is_a?(Fn) && e.base.name == :exp && e.base.args.size == 1
+            # The branch would move: sqrt(exp(2*pi*i)) is 1 and exp(pi*i) is
+            # -1. The power stays as it stands (see exp_power_mergeable?).
+            add_factor(factors, power_node(e.base, exp), pw)
           elsif exp.is_a?(Integer)
             stack.push([e.base, pw * exp, true])
           elsif exp.is_a?(Rational) && e.base.is_a?(Pow) && e.base.exponent.is_a?(Num) &&
@@ -215,7 +220,11 @@ module RCAS
           end
         when Fn
           if e.name == :exp && e.args.size == 1
-            add_factor(factors, exp_base, multiply_exponents(exponent_value(e.args.first), pw))
+            if exp_power_mergeable?(e.args.first, pw)
+              add_factor(factors, exp_base, multiply_exponents(exponent_value(e.args.first), pw))
+            else
+              add_factor(factors, e, pw)
+            end
           else
             unless done
               e = simplify(e)
@@ -347,6 +356,18 @@ module RCAS
       return [coeff, nil] if exp.negative? && factors.size == 1
       return [coeff, factors] if exp.negative?
       [coeff.negative? ? -1 : 1, factors.merge(OO => 1)]
+    end
+
+    # exp(u)**v is exp(u*v) only where the choice of branch cannot change.
+    # For an integer v the power is a repeated product, and for a real u the
+    # base exp(u) is a positive real whose principal power is the real one;
+    # in between the rule changes the value. sqrt(exp(x)) at x = 2*pi*i is
+    # sqrt(1) = 1, while exp(x/2) there is exp(pi*i) = -1 (22 Sept 2026,
+    # from a review). An undeclared indeterminate is not known to be real,
+    # so exp(x)**(1/2) keeps its shape until `assume(x: RR)` says otherwise.
+    def exp_power_mergeable?(u, v)
+      return true if v.is_a?(Integer)
+      ComplexParts.real_valued?(Expression.lift(u))
     end
 
     def add_factor(factors, base, exp)

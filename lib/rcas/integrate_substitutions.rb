@@ -295,7 +295,20 @@ module RCAS
         return nil if depends?(h, x)
         r = Integrate.attempt((h / (Num.new(rate) * t)).cancel, t, depth + 1)
         return nil unless r && Integrate.complete?(r)
-        r.subs(t => Fn.new(:exp, [Num.new(rate) * x])).simplify
+        real_log_exp(r.subs(t => Fn.new(:exp, [Num.new(rate) * x])), x).simplify
+      end
+
+      # log(exp(u)) is u only on the principal strip, so the general fold
+      # leaves it alone (log(exp(2*pi*i)) is 0). The integration variable is
+      # real, and the substitution t = exp(r*x) has just put that exp there
+      # itself, so here the rule does hold: without it the antiderivative of
+      # 1/(1 + exp(x)) came back as -log(1 + exp(x)) + log(exp(x)).
+      def real_log_exp(expr, x)
+        if expr.is_a?(Fn) && expr.name == :log && expr.args.size == 1 &&
+           (inner = expr.args.first).is_a?(Fn) && inner.name == :exp && depends?(inner.args.first, x)
+          return inner.args.first
+        end
+        expr.map_children { |c| real_log_exp(c, x) }
       end
 
       # sin(u)**(2k) / cos(u)**n = (1 - cos(u)**2)**k / cos(u)**n, and the same with

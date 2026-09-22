@@ -326,4 +326,34 @@ class IntegrateTest < Minitest::Test
     assert_equal "-sin(x)", sin(-:x).simplify.to_s
     assert_equal "cos(x)", cos(-:x).simplify.to_s
   end
+
+  # The substitution t = exp(r*x) puts the exp there itself, and the
+  # integration variable is real, so the antiderivative may cancel
+  # log(exp(u)) although the general simplifier must not (that pair moves
+  # the branch off the principal strip; see FunctionsTest).
+  def test_an_exponential_substitution_cancels_its_own_logarithm
+    x = RCAS::Var.new(:x)
+    assert_equal "-log(1 + exp(x)) + x", RCAS.integrate(1 / (1 + RCAS.exp(x)), x).to_s
+    assert_equal "-log(-1 + exp(2*x))/2 + x", RCAS.integrate(1 / (1 - RCAS.exp(2 * x)), x).to_s
+    assert_equal "log(1 + exp(x))", RCAS.integrate(RCAS.exp(x) / (1 + RCAS.exp(x)), x).to_s
+  end
+
+  # A definite integral that still moves with x is an atom whose derivative
+  # is another integral, so every rule that differentiates would grow one
+  # more layer for ever. The iterated integral has no rule here and stays
+  # formal (22 Sept 2026: differentiating under the integral sign is what
+  # made this reachable).
+  def test_an_iterated_integral_stays_formal
+    u = RCAS::Var.new(:u)
+    v = RCAS::Var.new(:v)
+    inner = RCAS::Integrate.definite(RCAS.sqrt(1 + 4 * u**2 + 4 * v**2), u, 0, 1)
+    assert_kind_of RCAS::Integral, inner
+    outer = RCAS::Integrate.definite(inner, v, 0, 1)
+    assert_kind_of RCAS::Integral, outer
+    assert_equal "integral(integral((1 + 4*u**2 + 4*v**2)**(1/2), u, 0, 1), v, 0, 1)", outer.to_s
+    # a value that does not move with the outer variable is still a constant
+    fixed = RCAS::Integrate.definite(RCAS.sqrt(1 + 4 * u**2), u, 0, 1)
+    refute_kind_of RCAS::Integral, fixed
+    assert_equal fixed.to_s, RCAS::Integrate.definite(fixed, v, 0, 1).to_s
+  end
 end

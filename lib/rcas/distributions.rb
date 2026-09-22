@@ -68,24 +68,65 @@ module RCAS
           return (cdf(hi) - cdf(lo)).simplify unless event.exclude_end? && !discrete? # continuous: endpoints have measure zero
           (cdf(hi) - cdf(lo)).simplify
         when Inequality
-          c = event.rhs
-          if discrete?
-            case event.op
-            when :<= then cdf(c)
-            when :< then (cdf(c) - pdf(c)).simplify
-            when :>= then (1 - cdf(c) + pdf(c)).simplify
-            when :> then (1 - cdf(c)).simplify
-            else raise ArgumentError, "probability: use <, <=, > or >="
-            end
-          else
-            case event.op
-            when :<, :<= then cdf(c)
-            when :>, :>= then (1 - cdf(c)).simplify
-            else raise ArgumentError, "probability: use <, <=, > or >="
-            end
-          end
+          return bound_probability(event.op, event.rhs) if event.lhs.is_a?(Var)
+          # "-X <= 0" is not "X <= 0": an event whose left side is not the
+          # variable itself is solved for it first and the probability taken
+          # over the set that comes out. Reading the operator and the right
+          # side alone answered P(-X <= 0) with 0 (22 Sept 2026, a review).
+          set_probability(event_set(event))
         else raise ArgumentError, "probability: give a range (a..b) or an inequality (x > 1)"
         end
+      end
+
+      # P(X op c) with the bound c, the shape every event is reduced to.
+      def bound_probability(op, c)
+        if discrete?
+          case op
+          when :<= then cdf(c)
+          when :< then (cdf(c) - pdf(c)).simplify
+          when :>= then (1 - cdf(c) + pdf(c)).simplify
+          when :> then (1 - cdf(c)).simplify
+          else raise ArgumentError, "probability: use <, <=, > or >="
+          end
+        else
+          case op
+          when :<, :<= then cdf(c)
+          when :>, :>= then (1 - cdf(c)).simplify
+          else raise ArgumentError, "probability: use <, <=, > or >="
+          end
+        end
+      end
+
+      # The set of values of the random variable that the event describes.
+      def event_set(event)
+        names = event.lhs.variables | event.rhs.variables
+        raise ArgumentError, "probability: name one random variable, got #{event}" unless names.size == 1
+        set = Inequalities.solve(event, Var.new(names.first))
+        raise ArgumentError, "probability: cannot decide #{event}" unless set.is_a?(RealSet) || set.is_a?(Interval)
+        set
+      end
+
+      # The cdf at a bound. At the two infinities it is 1 and 0, which the
+      # closed form does not reach on its own - Normal's erf(2**(1/2)*oo)
+      # does not fold, and Uniform's (x - a)/(b - a) runs away.
+      def cdf_at(v)
+        return cdf(v) unless Limits.infinite?(v)
+        Num.new(v == OO ? 1 : 0)
+      end
+
+      def set_probability(set)
+        intervals = set.is_a?(Interval) ? [set] : set.intervals
+        intervals.map { |i| piece_probability(i) }.reduce(Num.new(0)) { |a, b| a + b }.simplify
+      end
+
+      # P over one interval. A discrete distribution counts the closed ends
+      # in, which the cdf alone does not: cdf(hi) - cdf(lo) leaves out lo.
+      def piece_probability(interval)
+        total = cdf_at(interval.high) - cdf_at(interval.low)
+        return total unless discrete?
+        total += pdf(interval.low) unless interval.left_open || Limits.infinite?(interval.low)
+        total -= pdf(interval.high) if interval.right_open && !Limits.infinite?(interval.high)
+        total
       end
 
       # E[f(X)]: an integral or sum over the support (formal when rcas cannot do it).

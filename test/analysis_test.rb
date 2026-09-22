@@ -118,4 +118,89 @@ class AnalysisTest < Minitest::Test
     assert_equal "(-oo, 0) ∪ (0, oo)", RCAS.real_domain(1 / x, x).to_s
   end
 
+  # An inflection is a *change* of sign of f''. Where the third derivative
+  # vanishes too, the sign chart of f'' has to decide, and accepting its
+  # "no change" answer turned the test round: x**4 was reported as having
+  # an inflection at 0 and x**5 as having none (22 Sept 2026, a review).
+  def test_an_inflection_needs_a_change_of_curvature
+    x = RCAS::Var.new(:x)
+    assert_empty RCAS.inflections(x**4, x), "f'' = 12*x**2 is positive on both sides"
+    assert_equal ["0"], RCAS.inflections(x**5, x).map(&:to_s), "f'' = 20*x**3 changes sign"
+    assert_empty RCAS.inflections(x**6, x)
+    assert_equal ["0"], RCAS.inflections(x**7, x).map(&:to_s)
+    assert_empty RCAS.inflections(x**2, x)
+    assert_equal ["0"], RCAS.inflections(x**3, x).map(&:to_s), "a non-zero third derivative settles it at once"
+  end
+
+  # The points a curve discussion reports, read against the shapes they
+  # belong to.
+  def test_inflections_of_the_usual_curves
+    x = RCAS::Var.new(:x)
+    { x**4 => [], x**5 => ["0"], RCAS.sin(x) => ["0", "pi"],
+      x**4 - x**2 => ["-6**(1/2)/6", "6**(1/2)/6"],
+      RCAS.exp(-x**2) => ["-2**(1/2)/2", "2**(1/2)/2"],
+      x**3 - 3 * x => ["0"] }.each do |f, points|
+      assert_equal points, RCAS.inflections(f, x).map(&:to_s), "inflections of #{f}"
+    end
+  end
+
+  # A radius is a distance to the axis, so it is never negative: the
+  # cylinder of radius and length one has surface 2*pi whichever sign the
+  # function carries, and -2*pi was the answer for f = -1 (22 Sept 2026,
+  # from a review).
+  def test_a_radius_of_revolution_is_a_distance
+    x = RCAS::Var.new(:x)
+    assert_equal "2*pi", RCAS.revolution_surface(-1, x: 0..1).to_s
+    assert_equal "2*pi", RCAS.revolution_surface(1, x: 0..1).to_s
+    assert_equal "pi", RCAS.revolution_volume(1, x: -1..0, axis: :y).to_s
+    assert_equal "pi", RCAS.revolution_volume(1, x: 0..1, axis: :y).to_s
+    assert_equal "pi", RCAS.revolution_volume(-1, x: 0..1, axis: :y).to_s
+    assert_equal "pi", RCAS.revolution_volume(-1, x: 0..1).to_s, "about the x-axis f**2 was already a square"
+    # a function and its negative sweep the same surface
+    assert_equal RCAS.revolution_surface(x, x: 0..1).to_s, RCAS.revolution_surface(-x, x: 0..1).to_s
+  end
+
+  # Shells about the y-axis stand on one side of it; over a range that
+  # crosses the axis the two halves sweep the same shells, and abs(x) would
+  # count them twice. Splitting the range is the reader's call.
+  def test_shells_refuse_a_range_across_the_axis
+    e = assert_raises(ArgumentError) { RCAS.revolution_volume(1, x: -1..1, axis: :y) }
+    assert_match(/crosses the axis/, e.message)
+    assert_raises(ArgumentError) { RCAS.revolution_surface(1, x: -1..1, axis: :y) }
+    assert_equal "pi", RCAS.revolution_volume(1, x: -1..0, axis: :y).to_s, "the halves on their own are fine"
+    assert_equal "pi", RCAS.revolution_volume(1, x: 0..1, axis: :y).to_s
+  end
+
+  # The known volumes and areas are unchanged.
+  def test_the_classical_solids_are_unchanged
+    x = RCAS::Var.new(:x)
+    assert_equal "pi/5", RCAS.revolution_volume(x**2, x: 0..1).to_s
+    assert_equal "pi/2", RCAS.revolution_volume(x**2, x: 0..1, axis: :y).to_s
+    assert_equal "4*pi/3", RCAS.revolution_volume(RCAS.sqrt(1 - x**2), x: -1..1).to_s, "the unit ball"
+    assert_in_delta 4 * Math::PI, RCAS.revolution_surface(RCAS.sqrt(1 - x**2), x: -1..1).evalf, 1e-9
+    # 2*pi*int_0^1 x**2*sqrt(1 + 4*x**2) dx, by Simpson to nine digits
+    assert_in_delta 3.809729705, RCAS.revolution_surface(x**2, x: 0..1).evalf, 1e-8
+  end
+
+  # A condition on a *constant* argument is a condition too: log(-1) + x is
+  # real nowhere, and skipping it because the argument does not move with x
+  # claimed the whole line (22 Sept 2026, from a review).
+  def test_a_constant_domain_condition_is_not_skipped
+    x = RCAS::Var.new(:x)
+    assert_equal RCAS::RealSet.empty, RCAS.real_domain(RCAS.log(-1) + x, x)
+    assert_equal RCAS::RealSet.empty, RCAS.real_domain(x * RCAS.log(-2), x)
+    assert_equal RCAS::RealSet.reals, RCAS.real_domain(RCAS.log(2) + x, x), "a condition that holds costs nothing"
+    assert_equal "(0, oo)", RCAS.real_domain(RCAS.log(x) + RCAS.log(3), x).to_s
+    assert_equal "[0, oo)", RCAS.real_domain(RCAS.sqrt(x) + RCAS.sqrt(2), x).to_s
+    assert_equal "(-oo, 0) ∪ (0, oo)", RCAS.real_domain(1 / x + RCAS.log(3), x).to_s
+  end
+
+  # A condition whose argument is a *parameter* is left alone: the answer
+  # would be a case split on the parameter rather than a domain in x.
+  def test_a_parameter_is_not_a_constant_condition
+    x = RCAS::Var.new(:x)
+    a = RCAS::Var.new(:a)
+    assert_equal RCAS::RealSet.reals, RCAS.real_domain(RCAS.log(a) + x, x)
+    assert_equal "(0, oo)", RCAS.real_domain(RCAS.log(x) + RCAS.log(a), x).to_s
+  end
 end

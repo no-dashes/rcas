@@ -100,4 +100,59 @@ class DistributionsTest < Minitest::Test
     assert_equal "Binomial(n, p)", d::Binomial.new(:n, :p).to_s
   end
 
+  # The event is a statement about the random variable, not a pair of an
+  # operator and a right-hand side: P(-X <= 0) is P(X >= 0), and reading
+  # only the operator and the bound answered 0 for a variable that is never
+  # negative (22 Sept 2026, from a review).
+  def test_an_event_is_solved_for_the_random_variable
+    u = RCAS.Uniform(0, 1)
+    assert_equal "1", u.probability(-X <= 0).to_s
+    assert_equal "0", u.probability(-X > 0).to_s
+    assert_equal "1", RCAS.Exponential(1).probability(-X < 0).to_s
+    assert_equal "1/2", RCAS.Normal(0, 1).probability(-X <= 0).to_s
+  end
+
+  # A scaled or shifted left side has to be divided out first; every such
+  # event is checked against the plain one it is equivalent to.
+  def test_a_scaled_event_agrees_with_the_plain_one
+    half = RCAS::Num.new(Rational(1, 2))
+    {
+      RCAS.Uniform(0, 4) => [[2 * X <= RCAS::Num.new(3), X <= RCAS::Num.new(Rational(3, 2))],
+                             [-X >= RCAS::Num.new(-1), X <= RCAS::Num.new(1)],
+                             [X + 1 < RCAS::Num.new(3), X < RCAS::Num.new(2)]],
+      RCAS.Exponential(1) => [[2 * X <= RCAS::Num.new(2), X <= RCAS::Num.new(1)]],
+      RCAS.Normal(0, 1) => [[-X <= RCAS::Num.new(-1), X >= RCAS::Num.new(1)]],
+      RCAS.Binomial(5, half) => [[2 * X >= RCAS::Num.new(8), X >= RCAS::Num.new(4)],
+                                 [-X > RCAS::Num.new(-2), X < RCAS::Num.new(2)],
+                                 [-X <= RCAS::Num.new(-3), X >= RCAS::Num.new(3)]],
+      RCAS.Poisson(1) => [[-X <= RCAS::Num.new(-2), X >= RCAS::Num.new(2)]]
+    }.each do |d, pairs|
+      pairs.each do |solved, plain|
+        assert_equal d.probability(plain).to_s, d.probability(solved).to_s, "#{d}: #{solved} is #{plain}"
+      end
+    end
+    assert_equal "3/8", RCAS.Uniform(0, 4).probability(2 * X <= RCAS::Num.new(3)).to_s
+    assert_equal "3/16", RCAS.Binomial(5, half).probability(2 * X >= RCAS::Num.new(8)).to_s
+  end
+
+  # An event whose solution is not one half-line: the probability is taken
+  # over the whole set that comes out, piece by piece.
+  def test_an_event_that_solves_to_an_interval
+    assert_equal "1/2", RCAS.Uniform(0, 1).probability(X**2 <= RCAS::Num.new(Rational(1, 4))).to_s
+    assert_equal "1/2", RCAS.Uniform(0, 4).probability(X**2 <= RCAS::Num.new(4)).to_s, "[-2, 2] meets [0, 4] in [0, 2]"
+    assert_equal "1/4", RCAS.Uniform(0, 4).probability(X**2 <= RCAS::Num.new(1)).to_s
+    # the complement of an interval: two pieces, and they add up to one
+    inside = RCAS.Uniform(0, 4).probability(X**2 <= RCAS::Num.new(1))
+    outside = RCAS.Uniform(0, 4).probability(X**2 > RCAS::Num.new(1))
+    assert_equal "1", (inside + outside).simplify.to_s
+  end
+
+  # An event rcas cannot read as a statement about one variable is refused
+  # rather than answered.
+  def test_an_event_that_is_not_about_one_variable
+    u = RCAS.Uniform(0, 1)
+    assert_raises(ArgumentError) { u.probability(X * RCAS::Var.new(:y) <= RCAS::Num.new(1)) }
+    assert_raises(ArgumentError) { u.probability(X != RCAS::Num.new(1)) }
+    assert_raises(ArgumentError) { u.probability(2) }
+  end
 end

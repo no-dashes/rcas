@@ -18,17 +18,36 @@ module RCAS
       when Div then quotient(expr, var)
       when Pow then power(expr, var)
       when Fn  then %i[re im conj].include?(expr.name) ? Fn.new(expr.name, [diff(expr.args.first, var)]) : chain(expr, var)
-      when Integral
-        if expr.definite?
-          [expr.from, expr.to].any? { |c| c.variables.include?(var.name) } ? raise(NotImplementedError, "derivative of a definite integral with variable bounds") : Num.new(0)
-        else
-          expr.var == var ? expr.integrand : Integral.new(diff(expr.integrand, var), expr.var)
-        end
+      when Integral then integral(expr, var)
       when Derivative then expr.var == var ? Derivative.new(expr.expr, expr.var, expr.order + 1) : Num.new(0)
       when Piecewise then Piecewise.new(expr.branches.map { |cond, value| [cond, diff(value, var)] })
       else raise ArgumentError, "can't differentiate #{expr.class}"
       end
     end
+
+    # A definite integral is a number, but a number that still depends on
+    # the parameters of its integrand: d/dx integral(x*t, t, 0, 1) is 1/2,
+    # not 0. Only the *integration* variable is bound, and looking at the
+    # bounds alone answered every such derivative with zero (22 Sept 2026,
+    # from a review). Bounds that move add Leibniz's two boundary terms.
+    def integral(expr, var)
+      unless expr.definite?
+        return expr.var == var ? expr.integrand : Integral.new(differentiated(expr, var), expr.var)
+      end
+      moving = [expr.from, expr.to].any? { |c| c.variables.include?(var.name) }
+      # integral(f(x), x, 0, x) names one thing twice: bound inside, free in
+      # the bound. Which of the two is meant is the reader's business.
+      raise NotImplementedError, "derivative of a definite integral whose bound repeats its variable" if moving && expr.var == var
+      return Num.new(0) if expr.var == var
+      inside = expr.integrand.variables.include?(var.name) ? Integral.new(differentiated(expr, var), expr.var, expr.from, expr.to) : Num.new(0)
+      return inside unless moving
+      at = ->(bound) { Mul.new(expr.integrand.subs(expr.var => bound), diff(bound, var)) }
+      Add.new(inside, Sub.new(at[expr.to], at[expr.from]))
+    end
+
+    # The new integrand is simplified on the way in: an Integral is an atom
+    # to Simplify, so nothing would tidy it afterwards.
+    def differentiated(expr, var) = diff(expr.integrand, var).simplify
 
     def quotient(expr, var)
       u, v = expr.left, expr.right

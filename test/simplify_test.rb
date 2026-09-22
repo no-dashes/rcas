@@ -186,4 +186,46 @@ class SimplifyTest < Minitest::Test
     assert_equal "(4 + 4*x)**(1/3)", root.call(4 + 4 * :x, 3)
     assert_equal "-(1 - y**2)**(1/2)", RCAS.solve(:x**2 + :y**2 - 1, :x).first.to_s
   end
+
+  # exp(u)**v is exp(u*v) only where the choice of branch cannot change:
+  # for an integer v, or for a u that is known to be real. In between the
+  # rule moves the value. sqrt(exp(2*pi*i)) is sqrt(1) = 1, while the
+  # rewritten exp(pi*i) is -1, so substituting and simplifying in the two
+  # possible orders disagreed (22 Sept 2026, from a review).
+  def test_a_power_of_exp_keeps_its_branch
+    x = RCAS::Var.new(:x)
+    z = 2 * RCAS::I * RCAS::PI
+    f = RCAS.sqrt(RCAS.exp(x))
+    assert_equal "exp(x)**(1/2)", f.simplify.to_s, "x is not known to be real"
+    assert_equal "1", f.subs(x: z).simplify.to_s
+    assert_equal "1", f.simplify.subs(x: z).simplify.to_s, "and simplifying first changes nothing"
+    assert_equal "exp(2*x)**(1/2)", (RCAS.exp(2 * x)**(1 / 2r)).simplify.to_s
+    assert_equal "exp(x)**(1/3)", (RCAS.exp(x)**(1 / 3r)).simplify.to_s
+    assert_equal "exp(x)**x", (RCAS.exp(x)**x).simplify.to_s, "a symbolic exponent is not an integer either"
+  end
+
+  # The integer exponents are the ones that stay: a power of exp is then a
+  # repeated product, whatever exp(u) is, and the factor tables still have
+  # to merge them (every exponential in rcas is stored as a power of e).
+  def test_integer_powers_of_exp_still_merge
+    x = RCAS::Var.new(:x)
+    assert_equal "exp(2*x)", (RCAS.exp(x)**2).simplify.to_s
+    assert_equal "exp(-3*x)", (RCAS.exp(x)**-3).simplify.to_s
+    assert_equal "exp(-x)", (1 / RCAS.exp(x)).simplify.to_s
+    assert_equal "exp(3*x)", (RCAS.exp(x) * RCAS.exp(2 * x)).simplify.to_s
+    assert_equal "e", (RCAS.exp(2)**(1 / 2r)).simplify.to_s, "a real u needs no integer exponent"
+    assert_equal "1", RCAS.exp(2 * RCAS::I * RCAS::PI).simplify.to_s
+  end
+
+  # A declared domain is what makes the rewriting legal again, and the
+  # block form of assume cannot leak it into the next test.
+  def test_a_real_exponent_may_be_merged_once_it_is_declared
+    x = RCAS::Var.new(:x)
+    RCAS.assume(x: RCAS::RR) do
+      assert_equal "exp(x/2)", RCAS.sqrt(RCAS.exp(x)).simplify.to_s
+      assert_equal "exp(2*x/3)", (RCAS.exp(2 * x)**(1 / 3r)).simplify.to_s
+      assert_equal "exp(x**2)", (RCAS.exp(x)**x).simplify.to_s
+    end
+    assert_equal "exp(x)**(1/2)", RCAS.sqrt(RCAS.exp(x)).simplify.to_s, "and it is forgotten afterwards"
+  end
 end

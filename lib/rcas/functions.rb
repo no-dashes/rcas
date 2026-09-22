@@ -768,9 +768,25 @@ module RCAS
       in [:erfc, Const => c] if c.name == :oo then Num.new(0)
       in [:erfc, Neg => e] if e.arg.is_a?(Const) && e.arg.name == :oo then Num.new(2)
       in [:exp, Fn => inner] if inner.name == :log then inner.args.first
-      in [:log, Fn => inner] if inner.name == :exp then inner.args.first
+      in [:log, Fn => inner] if inner.name == :exp && Functions.principal_log?(inner.args.first) then inner.args.first
       else fn
       end
+    end
+  end
+
+  # log(exp(u)) is u only on the principal strip -pi < im(u) <= pi; outside
+  # it the logarithm comes back reduced, so log(exp(2*pi*i)) is log(1) = 0
+  # and not 2*pi*i (22 Sept 2026, from a review). A real u is always inside
+  # it; an undeclared indeterminate is not known to be real, so the node
+  # stays until `assume(x: RR)` says otherwise. exp(log(u)) is u for every
+  # u and needs no such guard.
+  module Functions
+    def self.principal_log?(u)
+      return true if ComplexParts.real_valued?(u)
+      v = u.evalf
+      return false unless v.is_a?(Numeric)
+      imaginary = v.is_a?(Complex) ? v.imaginary : 0
+      imaginary.is_a?(Numeric) && !imaginary.is_a?(Complex) && imaginary > -Math::PI && imaginary <= Math::PI
     end
   end
 

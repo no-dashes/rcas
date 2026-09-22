@@ -107,9 +107,16 @@ module RCAS
         []
       end
       third = f.diff(x, 3)
+      # f''' != 0 at a zero of f'' settles it. Where the third derivative
+      # vanishes too - x**4 and x**5 both have f'' = f''' = 0 at the origin
+      # - only the sign of f'' on the two sides decides, and it has to
+      # really change: sign_change answers :saddle when it does *not*, and
+      # accepting that case reported an inflection of x**4 at 0 and none of
+      # x**5 (22 Sept 2026, from a review). An undecided third derivative
+      # goes the same way rather than counting as a change by itself.
       sort_points(candidates.select { |p| real_point?(p) }.select do |point|
         value = numeric(third.subs(x => point).simplify)
-        value.nil? || value.abs > 1e-12 ? true : sign_change(second, x, point) == :saddle
+        value && value.abs > 1e-12 ? true : %i[minimum maximum].include?(sign_change(second, x, point))
       end)
     end
 
@@ -228,6 +235,14 @@ module RCAS
     # (20 Sept 2026, after the tenth pass of the review).
     BOUNDED_INVERSES = %i[asin acos].freeze
 
+    # A condition is worth recording when its argument moves with x, and
+    # also when it moves with nothing at all: log(-1) + x is real nowhere,
+    # and skipping the constant condition claimed the whole line (22 Sept
+    # 2026, from a review). An argument in a *parameter* is left alone,
+    # because the answer would then be a case split on the parameter rather
+    # than a domain.
+    def condition_argument?(u, x) = u.variables.include?(x.name) || u.variables.empty?
+
     # The conditions behind that domain, so that a caller can name them:
     # one per denominator, even root and logarithm, and two for each
     # asin or acos.
@@ -235,11 +250,11 @@ module RCAS
       conditions = denominators(f, x).map { |d| Inequality.new(d, :!=, 0) }
       f.each_node do |node|
         if node.is_a?(Pow) && node.exponent.is_a?(Num) && node.exponent.value.is_a?(Rational) &&
-           node.exponent.value.denominator.even? && node.base.variables.include?(x.name)
+           node.exponent.value.denominator.even? && condition_argument?(node.base, x)
           conditions << Inequality.new(node.base, :>=, 0)
-        elsif node.is_a?(Fn) && node.name == :log && node.args.first.variables.include?(x.name)
+        elsif node.is_a?(Fn) && node.name == :log && condition_argument?(node.args.first, x)
           conditions << Inequality.new(node.args.first, :>, 0)
-        elsif node.is_a?(Fn) && BOUNDED_INVERSES.include?(node.name) && node.args.first.variables.include?(x.name)
+        elsif node.is_a?(Fn) && BOUNDED_INVERSES.include?(node.name) && condition_argument?(node.args.first, x)
           conditions << Inequality.new(node.args.first, :>=, Num.new(-1))
           conditions << Inequality.new(node.args.first, :<=, Num.new(1))
         end
@@ -320,21 +335,57 @@ module RCAS
 
     # The volume of the solid the graph of f sweeps out: pi*integral(f**2)
     # about the x-axis, and 2*pi*integral(x*f) (cylindrical shells) about
-    # the y-axis.
+    # the y-axis. Radius and height are distances, so the shell integrand
+    # takes both of them in absolute value - the cylinder of radius and
+    # height one came out as -pi over x: -1..0 before (22 Sept 2026, from a
+    # review).
     def revolution_volume(f, var, from, to, axis: :x)
       f = Expression.lift(f)
       var = Expression.lift(var)
-      integrand = axis == :y ? 2 * PI * var * f : PI * f**2
+      integrand =
+        if axis == :y
+          one_side!(var, from, to, "revolution_volume")
+          2 * PI * distance(var, var, from, to) * distance(f, var, from, to)
+        else
+          PI * f**2
+        end
       Integrate.definite(integrand.simplify, var, from, to)
     end
 
     # The area of the surface of revolution: 2*pi*integral(f*sqrt(1 + f'**2))
     # about the x-axis, 2*pi*integral(x*sqrt(1 + f'**2)) about the y-axis.
+    # The radius is the distance to the axis, abs(f) or abs(x), and not the
+    # signed value: the cylinder of radius one had area -2*pi for f = -1.
     def revolution_surface(f, var, from, to, axis: :x)
       f = Expression.lift(f)
       var = Expression.lift(var)
+      one_side!(var, from, to, "revolution_surface") if axis == :y
+      radius = axis == :y ? distance(var, var, from, to) : distance(f, var, from, to)
       line = root(Num.new(1) + f.diff(var)**2)
-      Integrate.definite((2 * PI * (axis == :y ? var : f) * line).simplify, var, from, to)
+      Integrate.definite((2 * PI * radius * line).simplify, var, from, to)
+    end
+
+    # |u| on the interval, written without the abs where the sign of u is
+    # decided there (VectorCalculus.sign_on samples it), because an abs the
+    # integrator cannot see through would leave the answer formal.
+    def distance(u, var, from, to)
+      u = Expression.lift(u)
+      case VectorCalculus.sign_on(u, [[var, from, to]])
+      when :positive then u
+      when :negative then Neg.new(u).simplify
+      else Fn.new(:abs, [u])
+      end
+    end
+
+    # Shells about the y-axis stand on one side of it; a range that crosses
+    # the axis would have the two halves sweeping the same shells, which
+    # abs(x) would then count twice. Splitting the range is the reader's
+    # call, so rcas says so instead of answering.
+    def one_side!(var, from, to, who)
+      a = numeric(from)
+      b = numeric(to)
+      return if a.nil? || b.nil? || a * b >= 0
+      raise ArgumentError, "#{who}: the range #{var} = #{from}..#{to} crosses the axis of revolution; take the two sides separately"
     end
 
     def root(u) = Pow.new(u.simplify, Num.new(Rational(1, 2))).simplify

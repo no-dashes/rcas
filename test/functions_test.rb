@@ -174,4 +174,34 @@ class ComplexPartsAndRoundingTest < Minitest::Test
     assert_equal "asin(sin(5))", RCAS.asin(RCAS.sin(5)).to_s
   end
 
+  # log(exp(u)) is u only on the principal strip -pi < im(u) <= pi. Outside
+  # it the logarithm comes back reduced: log(exp(2*pi*i)) is log(1) = 0, and
+  # cutting the pair answered 2*pi*i instead, so substituting before and
+  # after simplifying disagreed (22 Sept 2026, from a review).
+  def test_log_of_exp_keeps_the_principal_branch
+    x = RCAS::Var.new(:x)
+    z = 2 * RCAS::I * RCAS::PI
+    f = RCAS.log(RCAS.exp(x))
+    assert_equal "log(exp(x))", f.simplify.to_s, "x is not known to be real"
+    assert_equal "0", f.subs(x: z).simplify.to_s
+    assert_equal "0", f.simplify.subs(x: z).simplify.to_s, "and simplifying first changes nothing"
+    # log(exp(4*i)) is (4 - 2*pi)*i, so 4*i would be wrong here too
+    assert_equal "log(exp(4*i))", RCAS.log(RCAS.exp(4 * RCAS::I)).simplify.to_s, "im(4*i) is past pi"
+    assert_equal "log(exp(-4*i))", RCAS.log(RCAS.exp(-4 * RCAS::I)).simplify.to_s
+  end
+
+  # Inside the strip, and for anything real, the pair does cancel; so does
+  # exp(log(u)), which needs no guard at all because it is u for every u.
+  def test_log_of_exp_still_cancels_where_it_may
+    x = RCAS::Var.new(:x)
+    assert_equal "2", RCAS.log(RCAS.exp(2)).simplify.to_s
+    assert_equal "-3/2", RCAS.log(RCAS.exp(-3 / 2r)).simplify.to_s
+    assert_equal "1 + i", RCAS.log(RCAS.exp(1 + RCAS::I)).simplify.to_s, "im = 1 is inside the strip"
+    assert_equal "x", RCAS.exp(RCAS.log(x)).simplify.to_s
+    RCAS.assume(x: RCAS::RR) do
+      assert_equal "x", RCAS.log(RCAS.exp(x)).simplify.to_s
+      assert_equal "1 + 3*x", RCAS.log(RCAS.exp(3 * x + 1)).simplify.to_s
+    end
+    assert_equal "log(exp(x))", RCAS.log(RCAS.exp(x)).simplify.to_s, "and it is forgotten afterwards"
+  end
 end

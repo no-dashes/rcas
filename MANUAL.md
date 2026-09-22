@@ -688,6 +688,32 @@ rcas> [floor(7/2r), ceil(7/2r), round(5/2r), floor(-7/2r), mod(-7, 3), floor(x)]
 => [3, 4, 3, -4, 2, floor(x)]
 ```
 
+The same caution applies to the two rules that look like plain algebra,
+`exp(u)**v = exp(u*v)` and `log(exp(u)) = u`. Both are about branches, and
+both are false off the real line: `exp(2*pi*i)` is 1, whose square root is
+1, while `exp(pi*i)` is -1, and `log(exp(2*pi*i))` is `log(1) = 0` rather
+than `2*pi*i`. rcas applies them when the choice of branch cannot change -
+for an integer exponent, which is a repeated product, and for a `u` that is
+known to be real - and otherwise leaves the expression as it stands, so
+that simplifying and substituting may be done in either order.
+
+```
+rcas> sqrt(exp(x)).simplify
+=> exp(x)**(1/2)
+rcas> sqrt(exp(x)).subs(x: 2*I*PI).simplify
+=> 1
+rcas> sqrt(exp(x)).simplify.subs(x: 2*I*PI).simplify
+=> 1
+rcas> [exp(x)**2, 1/exp(x)].map(&:simplify)
+=> [exp(2*x), exp(-x)]
+rcas> assume(x: RR)
+=> true
+rcas> [sqrt(exp(x)).simplify, log(exp(x)).simplify]
+=> [exp(x/2), x]
+rcas> forget
+=> true
+```
+
 #### Integers and primes
 
 `factor` on an integer or rational gives its prime factorization, an
@@ -991,7 +1017,11 @@ The three questions a first course in integration ends with.
 `integral(sqrt(x'**2 + y'**2))` for a parametric curve `[x(t), y(t)]`, in
 space with three components;
 `revolution_volume` and `revolution_surface` turn a graph about the x-axis
-(or about the y-axis with `axis: :y`, which is the shell formula).
+(or about the y-axis with `axis: :y`, which is the shell formula). A radius
+is the distance to the axis and never negative, so it is `abs(f)` or
+`abs(x)` where the sign is not decided on the range; the shells stand on
+one side of the axis, and a range that crosses it is refused rather than
+counted twice.
 
 ```
 rcas> arclength(x**2, x: 0..1)
@@ -1006,6 +1036,10 @@ rcas> revolution_volume(sqrt(1 - x**2), x: -1..1)
 => 4*pi/3
 rcas> revolution_surface(x, x: 0..1)
 => 2**(1/2)*pi
+rcas> revolution_surface(-1, x: 0..1)
+=> 2*pi
+rcas> revolution_volume(1, x: -1..0, axis: :y)
+=> pi
 ```
 
 The square root of a polynomial rarely has an elementary antiderivative,
@@ -1142,11 +1176,18 @@ rcas> real_domain(log(x - 1), x)
 => (1, oo)
 rcas> real_domain(asin(x)/x, x)
 => [-1, 0) ∪ (0, 1]
+rcas> real_domain(log(-1) + x, x)
+=> {}
+rcas> real_domain(log(2) + x, x)
+=> (-oo, oo)
 ```
 
 `real_domain` collects one condition per denominator, even root and
 logarithm, and two for each `asin` or `acos`, which are bounded at both
-ends; a condition it cannot solve is named rather than quietly dropped.
+ends; a condition it cannot solve is named rather than quietly dropped, and
+a condition on a constant is decided rather than skipped - `log(-1) + x` is
+real nowhere. A condition on a *parameter* is left alone, since the answer
+would be a case split on the parameter rather than a domain in x.
 
 `extrema` returns the point, the value and the kind. The second derivative
 decides; where that vanishes too, as for `x**4`, the sign of the first
@@ -3069,7 +3110,11 @@ says why.
 `gram_schmidt` turns a basis into an orthogonal one, or an orthonormal one
 with `normalize: true`, by subtracting from each vector its projection onto
 the earlier ones. `project(v, onto: u)` is that projection, for one vector
-or for a list spanning a subspace. `least_squares(A, b)` solves the normal
+or for a list spanning a subspace. The sum of the single projections is the
+projection onto the span only for pairwise orthogonal targets, so a list
+that is not orthogonal is orthogonalised first and dependent generators
+drop out: projecting onto a list that spans the whole space gives the
+vector back. `least_squares(A, b)` solves the normal
 equations, which is the best fit when `A*x = b` has no solution; it is the
 matrix form of `linreg` (section 1.10).
 
@@ -3079,6 +3124,10 @@ rcas> gram_schmidt([vector(1, 1, 0), vector(1, 0, 1)])
 rcas> gram_schmidt([vector(1, 1, 0), vector(1, 0, 1)], normalize: true)
 => [(2**(1/2)/2, 2**(1/2)/2, 0), (2**(1/2)*3**(1/2)/6, -(2**(1/2)*3**(1/2))/6, 2**(1/2)*3**(1/2)/3)]
 rcas> project(vector(1, 2), onto: vector(1, 0))
+=> (1, 0)
+rcas> project(vector(1, 2, 3), onto: [vector(1, 1, 0), vector(0, 1, 1)])
+=> (1/3, 8/3, 7/3)
+rcas> project(vector(1, 0), onto: [vector(1, 0), vector(1, 1)])
 => (1, 0)
 rcas> least_squares(matrix([[1, 1], [1, 2], [1, 3]]), vector(1, 2, 4))
 => (-2/3, 3/2)
@@ -3321,7 +3370,10 @@ are distribution objects, with symbolic parameters allowed. They answer `pdf`
 (density or probability mass), `cdf`, `quantile`, `mean`, `variance`,
 `stdev`, `median`, `skewness`, `kurtosis`, `probability` of a range or an
 inequality, `expectation(f, x)` of a function (an integral or sum over the
-support, formal when rcas cannot do it), `moment(k)` and `sample(n)`. The
+support, formal when rcas cannot do it), `moment(k)` and `sample(n)`. An
+inequality is solved for the random variable before its probability is
+taken, so `probability(-x <= 0)` is `probability(x >= 0)` and not
+`probability(x <= 0)`. The
 normal CDF is written with the error function `erf`; its quantile is
 numeric except at `1/2`.
 
@@ -3344,6 +3396,8 @@ rcas> B = Binomial(10, 1/2r)
 => Binomial(10, 1/2)
 rcas> [B.pdf(3), B.cdf(3), B.probability(x >= 8), B.mean, B.variance]
 => [15/128, 11/64, 7/128, 5, 5/2]
+rcas> [B.probability(2*x >= 16), Uniform(0, 1).probability(-x <= 0)]
+=> [7/128, 1]
 rcas> [Binomial(cnt, prob).pdf(k), Poisson(rate).pdf(k), Geometric(1/2r).cdf(k)]
 => [prob**k*binomial(cnt, k)*(1 - prob)**(cnt - k), rate**k*exp(-rate)/k!, 1 - (1/2)**k/2]
 rcas> D = DiscreteUniform(1, 6)
@@ -4191,8 +4245,12 @@ numbers, the associated Legendre functions and the multivariate
 (partial) Bell polynomials, hypergeometric solutions of *inhomogeneous* recurrences
 with polynomial coefficients, Abramov's rational solutions, the
 Almkvist-Zeilberger algorithm for hyperexponential integrals,
-multivariate (holonomic) summation, and formal power series whose
-coefficients are not hypergeometric (`tan`, `exp(x)/(1 - x)`), and of
+multivariate (holonomic) summation, formal power series whose
+coefficients are not hypergeometric (`tan`, `exp(x)/(1 - x)`), iterated
+integrals (a definite integral inside another one stays formal), and
+`real_domain` of an expression that is complex for a reason other than a
+root, a logarithm or an inverse trigonometric function (`I*x` is real only
+at 0, and rcas answers with the whole line), and of
 OpenMath the binary encoding and content MathML (Appendix D).
 
 ## 3. Files

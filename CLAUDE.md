@@ -821,6 +821,100 @@ names one without a session-wide assumption.
   `RCAS.assumptions` prints statements while `RCAS.assumption(name)` stays
   the domain that Infer and solve want.
 
+## Branch cuts (22 Sept 2026, from a review)
+
+Two rules that read like plain algebra are about *branches* and were being
+applied everywhere, so that substituting before and after `simplify` gave
+different values:
+
+- `exp(u)**v = exp(u*v)` (`Simplify.exp_power_mergeable?`) holds for an
+  integer `v`, where the power is a repeated product, and for a real `u`,
+  where `exp(u)` is a positive real whose principal power is the real one.
+  Not in between: `sqrt(exp(2*pi*i))` is `sqrt(1) = 1` and `exp(pi*i)` is
+  -1. When the guard declines, the power is stored as the atom
+  `Pow(exp(u), v)` rather than as a power of `Simplify.exp_base` - which is
+  why the `when Fn` branch of `factorize` needs the same guard, not only
+  the `when Pow` one. Integer exponents still merge, and they have to: an
+  exponential is *stored* as a power of e in every factor table.
+- `log(exp(u)) = u` (`Functions.principal_log?`) holds on the principal
+  strip `-pi < im(u) <= pi` only; `log(exp(2*pi*i))` is `log(1) = 0`. Real
+  `u` is always inside, and a numeric `u` is measured. `exp(log(u)) = u`
+  needs no guard, being true for every u.
+
+Both predicates ask `ComplexParts.real_valued?`, which is `Infer.domain(e)
+<= RR`: an undeclared indeterminate is *not* real here, so `assume(x: RR)`
+is what turns the rules back on. That is the same one-sided policy as
+`Infer.excluded?` - a simplification declined is a value kept.
+
+`Integrate::Substitutions.exponential` is the one place that may cancel
+`log(exp(u))` itself: it put the exp there by substituting `t = exp(r*x)`,
+and the integration variable is real. `real_log_exp` does it on the way
+back, or `integrate(1/(1 + exp(x)), x)` ends in `log(exp(x))`.
+
+## Differentiating under the integral sign (22 Sept 2026, same review)
+
+`Differentiate.integral` used to look at the *bounds* of a definite
+integral and answer 0 whenever they held no `var` - so `d/dx
+integral(x*t, t, 0, 1)` was 0 rather than 1/2. Only the integration
+variable is bound; the integrand's parameters are free. It now integrates
+the parameter derivative, and bounds that move add Leibniz's two boundary
+terms (`integral(f(x), x, 0, x)` names one thing twice and raises). The
+new integrand is simplified on the way in, since an Integral is an atom to
+Simplify and nothing would tidy it afterwards.
+
+This made a *nested* definite integral reachable for the first time: its
+derivative is another integral, so every integration rule that
+differentiates grew one more layer for ever, and the double integral of
+`surface_integral` never came back. `Integrate.attempt` therefore declines
+at once when the integrand carries a definite Integral that depends on x
+(rcas has no rule for the iterated integral), the same promise as the
+`NO_DERIVATIVE` path.
+
+## Radii, projections, events, curvature (22 Sept 2026, same review)
+
+Four more answers that were wrong for one reason each. They are small, and
+the reasoning behind each is what a future session needs:
+
+- **`LinearAlgebra.project`** summed the single projections, which is the
+  projection onto the span only for pairwise orthogonal targets:
+  `project(e1, onto: [e1, e1 + e2])` was `(3/2, 1/2)` although those two
+  span the plane. It orthogonalises first unless `orthogonal_family?` says
+  it need not, and `gram_schmidt` calls `onto_orthogonal` directly - it has
+  just built such a family, and going through `project` would orthogonalise
+  its own output once per step.
+- **`Distributions#probability`** read the operator and the right-hand side
+  and ignored the left: `P(-X <= 0)` was 0 for a variable that is never
+  negative. An event whose left side is not the bare variable goes through
+  `Inequalities.solve` and the probability is taken over the RealSet that
+  comes out, piece by piece; `cdf_at` answers the two infinities with 1 and
+  0, which no closed form reaches on its own.
+- **`Analysis.inflections`** accepted `sign_change == :saddle`, which is
+  the answer for *no* change of sign, so `x**4` had an inflection at 0 and
+  `x**5` had none. It wants `:minimum`/`:maximum` now, and an undecided
+  third derivative goes to the sign chart rather than counting as a change.
+- **`revolution_surface`/`revolution_volume`** used the signed `f` and `x`
+  as radii, so the cylinder of radius one had surface `-2*pi` for
+  `f = -1`. `Analysis.distance` writes `abs(u)` unless
+  `VectorCalculus.sign_on` decides the sign on the range (an abs the
+  integrator cannot see through would leave the answer formal). Shells
+  about the y-axis also need the range on one side of the axis:
+  `one_side!` refuses one that crosses it, because `abs(x)` would sweep
+  the same shells twice.
+- **`Analysis.domain_conditions`** recorded a condition only when its
+  argument moved with x, so `log(-1) + x` - real nowhere - came back as
+  the whole line. `condition_argument?` takes constant arguments too and
+  lets `Inequalities.constant_case` decide them. An argument in a
+  *parameter* is still skipped: the answer would be a case split on the
+  parameter rather than a domain in x. What is still not checked is an
+  expression that is complex for some other reason (`I*x`), which the
+  manual now lists as a gap.
+
+The reviewer also ran the suite under Ruby 4.0.7 and reported 45
+failures/errors. Under the 3.3.10 the README names it is green before and
+after this work; those 45 are Ruby 4 plus the environment (blocked ports,
+spaces in the project path, missing optional chat dependencies), not
+mathematics.
+
 ## Traps we have hit (so you do not hit them again)
 
 - `RCAS::IRB::AutoSymbol` turns an undefined `name(args)` with Expression,
@@ -1007,6 +1101,14 @@ integration), Abramov's rational solutions, hypergeometric solutions of
 q-hypergeometric series as objects of their own; the q-twin of the FPS
 algorithm (q-holonomic equations for q-Taylor coefficients) is the obvious
 next step after fps.rb.
+
+A second review (22 Sept 2026, MATHEMATICAL_REVIEW.md, also brought in by
+the user) found eight wrong answers, all reproduced and all fixed with
+tests; see "Branch cuts", "Differentiating under the integral sign" and
+"Radii, projections, events, curvature" above. Its own suggestion for
+further work is worth keeping: check *invariants* rather than transcripts -
+a projection onto the whole space is the identity, substitution and
+simplification commute, an area is not negative.
 
 A code review (19 Sept 2026, an artifact the user brought in) found four
 wrong answers, four inputs that never returned, and a list of rough edges;
