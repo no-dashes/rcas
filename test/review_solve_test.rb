@@ -132,4 +132,20 @@ class ReviewSolveTest < Minitest::Test
     set = RCAS.solve(RCAS.abs(@x) / @x > 0, @x)
     assert set.include?(1) && !set.include?(-1) && !set.include?(0)
   end
+
+  # nsolve stops on |f| < 1e-12 (numerics.rb:110, :124): (x - 3/10)/10**12
+  # is -3e-13 at 0 and vanishes only at 3/10; exp(-50x)(x - 1/2) is 1e-22
+  # at 1 and vanishes only at 1/2.
+  def test_nsolve_answers_a_root_not_a_small_value
+    assert_in_delta 0.3, RCAS.nsolve((@x - 3/10r) / 10**12, x: 0..1), 1e-9
+    assert_in_delta 0.5, RCAS.nsolve(RCAS.exp(-50 * @x) * (@x - 1/2r), x: 0..1), 1e-9
+  end
+
+  # A step from -1 to 1 changes sign without vanishing anywhere, so there is
+  # no root to report; pole? recognises only growth (numerics.rb:86).
+  def test_nsolve_refuses_a_jump
+    step = RCAS.piecewise(@x < n(1/2r) => -1, :else => 1)
+    assert_raises(ArgumentError) { RCAS.nsolve(step, x: 0..1) }
+    assert_raises(ArgumentError) { RCAS.nsolve((@x - 1/2r) / RCAS.abs(@x - 1/2r), x: 0..1) }
+  end
 end

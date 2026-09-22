@@ -204,4 +204,62 @@ class ReviewStatisticsTest < Minitest::Test
     assert_raises(ArgumentError) { RCAS.chisquare_test(observed, expected: [10, 10, 10, 10, 10]) }
     assert_raises(ArgumentError) { RCAS.chisquare_test(observed, alternative: :bogus) }
   end
+
+  def test_evalf_digits_survive_cancellation
+    # Taylor: exp(h) - 1 = h + h**2/2, log(1 + h) = h - h**2/2, cosh(h) - 1 = h**2/2,
+    # acos(1 - h) = sqrt(2h)(1 + h/12), cot(h) = 1/h - h/3; sin(k*pi) = 0.
+    tiny = Rational(1, 10**30)
+    assert_digits "1e-30", RCAS.evalf(RCAS.exp(@x) - 1, 20, x: tiny)
+    assert_digits "1e-30", RCAS.evalf(RCAS.log(@x), 20, x: 1 + tiny)
+    assert_digits "5e-31", RCAS.evalf(RCAS.cosh(@x) - 1, 20, x: Rational(1, 10**15))
+    assert_digits "1.4142135623730950488e-20", RCAS.evalf(RCAS.acos(@x), 20, x: 1 - Rational(1, 10**40))
+    assert_digits "1e30", RCAS.evalf(RCAS.tan(@x), 20, x: RCAS::PI / 2 - tiny)
+    value = RCAS.evalf(RCAS::Mul.new(RCAS::PI, n(10**15)).then { |u| RCAS::Fn.new(:sin, [u]) }, 20)
+    assert value.value.abs < BigDecimal("1e-25"), "sin(pi*10**15) is 0, rcas printed #{value}"
+  end
+
+  def test_erfc_is_accurate_where_erf_is_one
+    # erfc(10) = 2.0884875837625447570e-45 [AS64, 7.1]; Math.erfc(10) agrees to 16 digits.
+    value = RCAS.evalf(RCAS.erfc(10), 20)
+    assert_in_delta 1.0, value.to_f / 2.0884875837625447570e-45, 1e-14, "rcas printed #{value}"
+  end
+
+  def test_exponential_integral_of_a_large_negative_argument
+    # Ei(-50) = -E1(50) = -3.7832640295504590187e-24 (rcas's own series at 80 digits;
+    # scipy.special.exp1(50) = 3.783264029550459e-24).
+    assert_digits "-3.7832640295504590187e-24", RCAS.evalf(RCAS.Ei(-50), 20)
+  end
+
+  def test_nsolve_digits_at_a_double_root
+    # (x - 1)**2 has the root 1, exactly; 30 digits were asked for.
+    root = RCAS.nsolve(@x**2 - 2 * @x + 1, @x, 0.9, digits: 30)
+    assert_digits "1", root
+  end
+
+  def test_nsolve_stops_at_the_root_not_where_the_value_is_small
+    # exp(-x) = 1e-20 at x = 20 log 10 = 46.051701859880914; 1e-20 (x - 1) and
+    # (x - 1)**3 vanish at 1 only; x exp(-x) vanishes at 0 only.
+    assert_in_delta 46.051701859880914, RCAS.nsolve(RCAS.exp(-@x) - Rational(1, 10**20), x: 0..100), 1e-9
+    assert_in_delta 1.0, RCAS.nsolve(Rational(1, 10**20) * (@x - 1), x: 0..3), 1e-9
+    assert_in_delta 1.0, RCAS.nsolve((@x - 1)**3, x: 0..3), 1e-9
+    root = begin
+      RCAS.nsolve(@x * RCAS.exp(-@x), @x, 5)
+    rescue ArgumentError
+      0.0 # refusing is acceptable
+    end
+    assert_in_delta 0.0, root, 1e-9
+  end
+
+  def test_nsolve_brackets_without_a_derivative
+    # x + floor(x) = 5/2 at x = 3/2 (floor = 1), and nowhere else in 0..3.
+    assert_in_delta 1.5, RCAS.nsolve(@x + RCAS.floor(@x) - Rational(5, 2), x: 0..3), 1e-9
+  end
+
+  def test_median_of_exact_values_closer_than_a_float_can_tell
+    # Sorted, the data is 1 < 1 + 10**-20 < 1 + 2*10**-20; type-7 quantile at 1/4
+    # is halfway between the first two.
+    data = [1 + Rational(2, 10**20), 1, 1 + Rational(1, 10**20)]
+    assert_equal n(1 + Rational(1, 10**20)), RCAS.median(data)
+    assert_equal n(1 + Rational(1, 2 * 10**20)), RCAS.quantile(data, Rational(1, 4))
+  end
 end

@@ -66,13 +66,24 @@ module RCAS
       expr = Solve.to_zero(f)
       var, from, to = arguments(var, guess, range, expr)
       g = caller_for(expr, var)
-      derivative = caller_for(Expression.lift(expr).diff(var), var)
+      # bisection needs no derivative, and x + floor(x) has none to give
+      derivative = begin
+        caller_for(Expression.lift(expr).diff(var), var)
+      rescue ArgumentError
+        ->(_) { nil }
+      end
       root = to.nil? ? newton(g, derivative, from, var, expr) : bisect(g, derivative, from, to, var, expr)
       if pole?(g, root)
         raise ArgumentError, "nsolve: #{expr} has a pole at #{root}, not a root; give a range on one side of it"
       end
       digits ? Precision.refine(expr, var, root, digits) : root
     end
+
+    # Converged when the bracket is a few units in the last place wide: a
+    # small value of f is not a root - (x - 3/10)/10**12 is -3e-13 at 0 and
+    # exp(-50*x)*(x - 1/2) is 1e-22 at 1, and |f| < 1e-12 answered with
+    # those (third review, S20).
+    def narrow?(lo, hi) = (hi - lo).abs <= 4 * Float::EPSILON * [lo.abs, hi.abs, Float::MIN].max
 
     # A function changes sign across a pole as it does across a root, and
     # bisection walks straight into it: nsolve(1/x, x: -1..1) used to come
@@ -102,28 +113,45 @@ module RCAS
       [Expression.lift(var), guess.nil? ? 0.0 : Float(Expression.lift(guess).evalf), nil]
     end
 
-    # Bisection, taking a Newton step whenever it stays inside the bracket.
+    # Bisection, taking a Newton step whenever it stays inside the bracket
+    # and shrinks it; stopping when the bracket is as narrow as Floats go,
+    # or f is exactly 0.
     def bisect(g, derivative, lo, hi, var, expr)
       flo = g.call(lo)
       fhi = g.call(hi)
       raise ArgumentError, "nsolve: #{expr} is not defined at both ends of #{lo}..#{hi}" if flo.nil? || fhi.nil?
-      return lo if flo.abs < TOLERANCE
-      return hi if fhi.abs < TOLERANCE
+      return lo if flo.zero?
+      return hi if fhi.zero?
       raise ArgumentError, "nsolve: #{expr} has the same sign at #{lo} and #{hi}; give a range that brackets a root" if flo * fhi > 0
 
+      scale = [flo.abs, fhi.abs].max
       x = (lo + hi) / 2.0
-      MAX_STEPS.times do
+      steps = 0
+      until narrow?(lo, hi) || steps > 4 * MAX_STEPS
+        steps += 1
         value = defined_near(g, x, lo, hi)
         return x if value.nil? # undefined right across the bracket
         slope = derivative.call(x)
         step = slope && !slope.zero? ? x - value / slope : nil
-        x = step && step > lo && step < hi ? step : (lo + hi) / 2.0
+        # Newton only while it lands strictly inside and the bracket keeps
+        # halving at least every other step
+        x = step && step > lo && step < hi && steps.odd? ? step : (lo + hi) / 2.0
         value = defined_near(g, x, lo, hi)
         return x if value.nil?
+        return x if value.zero?
         value * flo > 0 ? (lo = x; flo = value) : (hi = x; fhi = value)
-        return x if (hi - lo).abs < TOLERANCE || value.abs < TOLERANCE
       end
+      x = flo.abs <= fhi.abs ? lo : hi
+      return x if pole?(g, x) # the caller says it is a pole
+      jump!(expr, x, [flo.abs, fhi.abs].min, scale)
       x
+    end
+
+    # A sign change whose two sides stay large as the bracket closes is a
+    # jump, not a root: a step from -1 to 1 has no zero anywhere (S20).
+    def jump!(expr, x, remaining, scale)
+      return unless remaining > 1e-6 * scale
+      raise ArgumentError, "nsolve: #{expr} changes sign at #{x} without passing through 0 - a jump, not a root"
     end
 
     # The value at x, or at the nearest point inside the bracket where the
@@ -144,21 +172,36 @@ module RCAS
     end
 
     # Newton's method from a starting point, with a bracketed retry.
+    # Converged when the step is small relative to x and a sign change or
+    # an exact zero confirms the point: x*exp(-x) from 5 runs off to where
+    # exp underflows, and a small value there is no root.
     def newton(g, derivative, start, var, expr)
       x = start
       MAX_STEPS.times do
         value = g.call(x)
         break if value.nil?
-        return x if value.abs < TOLERANCE
+        return x if value.zero? && confirmed?(g, x)
         slope = derivative.call(x)
         break if slope.nil? || slope.abs < 1e-300
         step = value / slope
         x -= step
-        return x if step.abs < TOLERANCE * [1.0, x.abs].max
+        return x if step.abs <= 1e-14 * [1.0, x.abs].max && confirmed?(g, x)
       end
       widened = scan(g, start)
       return bisect(g, derivative, widened.first, widened.last, var, expr) if widened
       raise ArgumentError, "nsolve: no root found near #{start}; give a range that brackets one"
+    end
+
+    # A root found by Newton is believed when f changes sign across it, or
+    # f is small beside its neighbours as it is at a double root.
+    def confirmed?(g, x)
+      d = 1e-7 * [1.0, x.abs].max
+      left = g.call(x - d)
+      right = g.call(x + d)
+      here = g.call(x)
+      return false if left.nil? || right.nil? || here.nil?
+      return true if left * right <= 0
+      here.abs <= 1e-6 * [left.abs, right.abs].min && [left.abs, right.abs].min.positive?
     end
 
     # Look for a sign change around the starting point.

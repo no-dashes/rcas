@@ -113,7 +113,7 @@ module RCAS
       values = []
       LEVELS.each do |digits|
         value = begin
-          Precision.evalf(e, digits)
+          Precision.evalf(e, digits, certify: false)
         rescue ZeroDivisionError
           return nil
         rescue StandardError, NotImplementedError

@@ -1112,13 +1112,16 @@ subdivided for ever.
 
 A function changes sign across a pole as it does across a root, so a
 bracket that contains one is refused rather than answered: `1/x` has no
-root between -1 and 1.
+root between -1 and 1. So is a jump - a step from -1 to 1 changes sign
+without ever being 0. The answer is where the bracket has closed to the
+last digit a Float carries, not where the value first looks small:
+`exp(-50*x)*(x - 1/2)` is 1e-22 at 1 and has its root at 1/2.
 
 ```
 rcas> nsolve(1/x - 2, x: 0.1..2)
-=> 0.4999999999999672
+=> 0.49999999999999994
 rcas> nsolve(tan(x), x: 3..4)
-=> 3.141592653589797
+=> 3.141592653589793
 ```
 
 #### As many digits as you ask for
@@ -2731,7 +2734,7 @@ rcas> integrate(Poly.legendre(3, x)**2, x: -1..1)
 rcas> solve(Poly.legendre(3, x), x)
 => [-15**(1/2)/5, 0, 15**(1/2)/5]
 rcas> nsolve(Poly.legendre(5, x), x: 0.9)
-=> 0.9061798459386641
+=> 0.906179845938664
 rcas> (diff(Poly.chebyshev_t(4, x), x) - 4*Poly.chebyshev_u(3, x)).simplify
 => 0
 ```

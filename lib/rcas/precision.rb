@@ -170,13 +170,50 @@ module RCAS
 
     module_function
 
-    def evalf(expr, digits, bindings = {})
+    # The digits are certified, not promised: the value is computed with
+    # GUARD extra digits and again with more, and only the digits the two
+    # agree on are reported - raising the guard until they agree on all
+    # that were asked for. A fixed guard printed 0.0 for exp(x) - 1 at
+    # 10**-30, 1 - erf(10) for erfc(10) and a wrong Ei(-50) from digit 14
+    # (third review, P-3): cancellation eats guard digits, and how many is
+    # not known in advance. A value that shrinks with every step is a zero
+    # (sin(pi*10**15)). `certify: false` is the single walk, for a caller
+    # that compares precisions itself (Decide).
+    GUARDS = [GUARD, 3 * GUARD, 7 * GUARD, 15 * GUARD, 31 * GUARD, 63 * GUARD].freeze
+
+    def evalf(expr, digits, bindings = {}, certify: true)
       digits = Integer(digits)
       raise ArgumentError, "evalf: digits must be positive, got #{digits}" unless digits.positive?
-      state = { limit: digits }
-      value = walk(Expression.lift(expr), digits + GUARD, table_of(bindings), state)
-      keep = [digits, state[:limit]].min
-      Decimal.new(value.mult(1, keep), keep)
+      expr = Expression.lift(expr)
+      table = table_of(bindings)
+      unless certify
+        state = { limit: digits }
+        value = walk(expr, digits + GUARD, table, state)
+        keep = [digits, state[:limit]].min
+        return Decimal.new(value.mult(1, keep), keep)
+      end
+      previous = nil
+      shrinking = 0
+      GUARDS.each do |guard|
+        state = { limit: digits }
+        value = walk(expr, digits + guard, table, state)
+        keep = [digits, state[:limit]].min
+        # a Float inside carries its own sixteen digits, and more precision
+        # cannot add to them
+        return Decimal.new(value.mult(1, keep), keep) if keep < digits
+        if previous
+          return Decimal.new(value.mult(1, digits), digits) if agree?(value, previous, digits)
+          shrinking = value.abs < previous.abs * BigDecimal("1e-#{guard / 3}") ? shrinking + 1 : 0
+          return Decimal.new(BigDecimal(0), digits) if shrinking >= 2 || (value.zero? && previous.abs < BigDecimal("1e-#{digits + guard / 3}"))
+        end
+        previous = value
+      end
+      raise NoConvergence, "evalf: #{expr} could not be certified to #{digits} digits; the working precision ran out before two evaluations agreed"
+    end
+
+    def agree?(a, b, digits)
+      return true if a.zero? && b.zero?
+      (a - b).abs <= [a.abs, b.abs].max * BigDecimal("1e-#{digits}")
     end
 
     def table_of(bindings) = bindings.to_h { |name, value| [name.to_sym, value] }
@@ -694,8 +731,21 @@ module RCAS
     # or the secant method when there is no derivative to be had [PTVF07,
     # §9.4, §9.2]. The number of correct digits doubles at every step, so a
     # handful of them is the whole cost.
+    # Refined at two working precisions and reported with the digits the
+    # two agree on, raising the precision until those are the digits asked
+    # for: at a double root f is only known to half the working digits,
+    # and a single run claimed 30 digits where 25 were right (P-3).
     def refine(expr, var, guess, digits, bindings = {})
-      work = digits + 2 * GUARD
+      previous = nil
+      [digits + 2 * GUARD, 2 * digits + 2 * GUARD, 4 * digits + 2 * GUARD, 8 * digits + 2 * GUARD].each do |work|
+        x = refine_at(expr, var, guess, work, bindings)
+        return Decimal.new(x.mult(1, digits), digits) if previous && agree?(x, previous, digits)
+        previous = x
+      end
+      raise NoConvergence, "nsolve: the root could not be certified to #{digits} digits"
+    end
+
+    def refine_at(expr, var, guess, work, bindings)
       state = { limit: work }
       f = ->(point) { walk(expr, work, bindings.merge(var.name => point), state) }
       slope = begin
@@ -705,8 +755,7 @@ module RCAS
         nil
       end
       x = BigDecimal(guess, FLOAT_DIGITS)
-      x = slope ? newton_steps(f, slope, x, work) : secant_steps(f, x, work)
-      Decimal.new(x.mult(1, digits), digits)
+      slope ? newton_steps(f, slope, x, work) : secant_steps(f, x, work)
     end
 
     def newton_steps(f, slope, x, work)

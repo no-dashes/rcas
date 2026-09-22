@@ -35,7 +35,18 @@ module RCAS
         raise ArgumentError, "#{name}: #{v} is not a real number" unless f.is_a?(Numeric) && !f.is_a?(Complex)
         [f, v]
       end
-      keyed.sort_by(&:first).map(&:last)
+      # exact numbers compare exactly, anything else by Inequalities.compare
+      # where the Floats cannot tell: 1 and 1 + 10**-20 are one Float
+      # (third review, P-10)
+      keyed.sort do |(fa, a), (fb, b)|
+        if a.is_a?(Num) && b.is_a?(Num) && a.value.real? && b.value.real?
+          a.value <=> b.value
+        elsif (fa - fb).abs > 1e-9 * [1.0, fa.abs, fb.abs].max
+          fa <=> fb
+        else
+          Inequalities.compare(a, b) || (fa <=> fb)
+        end
+      end.map(&:last)
     end
 
     def size(list) = Num.new(list.size)
