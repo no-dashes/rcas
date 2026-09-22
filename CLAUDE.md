@@ -289,6 +289,11 @@ MANUAL.md                   the user manual (usage); README.md (setup only); ass
    and `1/oo` to 0. `Expand.add_term`/`multiply_factors` keep a cancelling
    infinity in the table for the same reason. A symbolic coefficient is
    never absorbed (`x*oo` stays, because `0*oo` is undefined).
+   `1**oo` and `oo**0` are **1** (22 Sept 2026, the user's call after the
+   third review suggested undefined: an exact 1 or an exact zeroth power
+   is 1 whatever the other side is, as IEEE `pow` has it). `oo**0` has to
+   be caught in `factorize` *before* the table merges it (`infinity?`),
+   because `oo/oo` also lands as `{oo => 0}` there and must stay undefined.
 
 7. **Formal nodes**: `Integral`, `Sum`, `Product`, `Limit`, `Derivative`,
    `RootOf` and `Piecewise` are Expressions and atoms to everything else;

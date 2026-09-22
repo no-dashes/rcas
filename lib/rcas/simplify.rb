@@ -181,6 +181,8 @@ module RCAS
             # The branch would move: sqrt(exp(2*pi*i)) is 1 and exp(pi*i) is
             # -1. The power stays as it stands (see exp_power_mergeable?).
             add_factor(factors, power_node(e.base, exp), pw)
+          elsif exp == 0 && infinity?(e.base)
+            next # oo**0 is 1, as t**0 is for every t; oo/oo still cancels to undefined
           elsif exp.is_a?(Integer)
             stack.push([e.base, pw * exp, true])
           elsif exp.is_a?(Rational) && e.base.is_a?(Pow) && e.base.exponent.is_a?(Num) &&
@@ -345,6 +347,9 @@ module RCAS
       exp = factors[OO]
       coeff.zero? || (exp.is_a?(Numeric) && exp.zero?)
     end
+
+    # oo or -oo as written, before the tables merge it with anything.
+    def infinity?(e) = e == OO || (e.is_a?(Neg) && infinity?(e.arg))
 
     # Infinity swallows what multiplies it: 2*oo and oo/2 are oo, oo**2 is
     # oo, and a number over oo is 0 (nil for the factors says so). Only the

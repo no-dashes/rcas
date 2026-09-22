@@ -648,6 +648,21 @@ rcas> (x*oo).simplify
 The last one is not `oo`: the sign of `x` is unknown, and `0*oo` is
 undefined, so the product says nothing until `x` does.
 
+A power of an exact 1 is 1, and so is an exact zeroth power, infinity or
+not: `1**t` and `t**0` are 1 for every `t`.
+
+```
+rcas> [(1**oo).simplify, (oo**0).simplify]
+=> [1, 1]
+rcas> limit((1 + 1/x)**x, x, oo)
+=> e
+```
+
+The "indeterminate form 1**oo" of the calculus books is the second line: a
+base that *tends* to 1, which is a limit and has to be asked as one.
+Substituting `oo` and simplifying answers a different question -
+`((1 + 1/x)**x).subs(x: oo).simplify` is `1`, because `1/oo` is 0 first.
+
 The functions are `sin cos tan asin acos atan exp log sinh cosh sqrt zeta`.
 `sqrt(x)` is `x**(1/2)`, and `exp(a)*exp(b)` merges into `exp(a + b)`.
 

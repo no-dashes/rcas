@@ -25,6 +25,23 @@ class SimplifyTest < Minitest::Test
     assert_equal "undefined", RCAS::UNDEFINED.evalf.to_s
   end
 
+  # A power with an exact base 1 or an exact exponent 0 is 1 whatever the
+  # other side is, infinity included (the user's call, 22 Sept 2026, as
+  # IEEE pow has it). The indeterminate form 1**oo of the calculus books is
+  # about a base that tends to 1, which is limit's business; oo/oo, whose
+  # table exponent is also 0, still cancels to undefined.
+  def test_powers_of_one_and_zero_exponents_of_infinity
+    o = RCAS::OO
+    assert_equal "1", s(RCAS::Num.new(1)**o)
+    assert_equal "1", s(RCAS::Num.new(1)**-o)
+    assert_equal "1", s(o**0)
+    assert_equal "1", s((-o)**0)
+    assert_equal "x", s(:x * o**0)
+    assert_equal "1", (o**0).expand.to_s
+    assert_equal "undefined", s(o / o)
+    assert_equal "e", RCAS.limit((1 + 1 / :x)**:x, :x, o).to_s
+  end
+
   # What infinity does absorb: a numeric factor, a positive power and any
   # finite term beside it. The sign is all that survives.
   def test_infinity_absorbs_the_finite
