@@ -25,13 +25,7 @@ module RCAS
       Var.new(names.first)
     end
 
-    def numeric(value)
-      v = Expression.lift(value).evalf
-      v.is_a?(Numeric) && !v.is_a?(Complex) && v.finite? ? v.to_f : nil
-    rescue StandardError => rescued
-      RCAS.guard!(rescued)
-      nil
-    end
+    def numeric(value) = RCAS.real_float(value)
 
     # ---- one variable ----------------------------------------------------------
 

@@ -138,12 +138,12 @@ module RCAS
     # groebner([f, g], [x, y]) with expressions: the ring is QQ[x, y], or
     # Frac(QQ[params])[x, y] when other symbols occur in the coefficients.
     def groebner(polys, vars = nil, order: :lex)
-      ring, elements = lift(polys, vars)
+      _ring, elements = lift(polys, vars)
       basis(elements, order)
     end
 
     def normal_form(f, basis, vars = nil, order: :lex)
-      ring, elements = lift(basis + [f], vars)
+      _ring, elements = lift(basis + [f], vars)
       reduce(elements.last, elements[0...-1], order)
     end
 

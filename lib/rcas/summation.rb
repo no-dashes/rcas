@@ -316,7 +316,7 @@ module RCAS
       x_expr = xk.subs(solution).subs(xs.to_h { |v| [v, Num.new(0)] }) # free unknowns: any value works
       g = (bm.to_expr * x_expr * f / c.to_expr).cancel
       check = (g.subs(k => k + 1) - g - f).cancel
-      Scalar.zero?(check) || numerically_zero?(check, k) ? g : nil
+      Scalar.zero?(check) || Decide.identically_zero?(check) ? g : nil
     rescue DomainError, NotImplementedError, ZeroDivisionError
       nil
     end
@@ -375,19 +375,6 @@ module RCAS
     end
 
     # Random-point check for identities the canonical form does not prove.
-    def numerically_zero?(expr, _k)
-      rng = Random.new(7)
-      3.times do
-        values = expr.variables.to_h { |v| [v, rng.rand(2.0..5.0)] }
-        value = expr.evalf(**values)
-        return false unless value.is_a?(Numeric) && value.abs < 1e-9 * [1, expr.variables.size].max
-      end
-      true
-    rescue StandardError => rescued
-      RCAS.guard!(rescued)
-      false
-    end
-
     # lim_{k -> oo} g(k) for the antidifference: geometric factors with
     # |ratio| < 1 vanish, anything else goes to Limits.limit.
     # The geometric factors of a term are taken together: 2**k/3**k is

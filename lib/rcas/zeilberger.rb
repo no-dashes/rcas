@@ -97,20 +97,11 @@ module RCAS
 
     # Is this expression definitely not zero? Exactly where it can be
     # decided, at random values for whatever parameters are left otherwise.
+    # Only a decided non-zero counts (Decide.identically_zero?): a float
+    # residue said "non-zero" for rounding noise and refused a true
+    # q-recurrence (third review, S8).
     def nonzero?(value)
-      simplified = value.simplify
-      return false if Scalar.zero?(simplified)
-      names = simplified.variables.to_a
-      return !Scalar.zero?(simplified.cancel) if names.empty?
-      random = Random.new(20140610)
-      3.times do
-        point = names.to_h { |v| [v, random.rand(3..29)] }
-        number = simplified.evalf(**point)
-        next unless number.is_a?(Numeric) && number.finite?
-        return true if number.abs > 1e-9 * [1, number.abs].max
-        return false
-      end
-      false
+      Decide.identically_zero?(value.simplify) == false
     rescue ZeroDivisionError, DomainError, ArgumentError, TypeError
       false
     end

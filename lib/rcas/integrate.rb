@@ -388,15 +388,7 @@ module RCAS
       :unknown
     end
 
-    def real_number(expr)
-      value = Expression.lift(expr).evalf
-      value = value.value if value.is_a?(Num)
-      return nil unless value.is_a?(Numeric) && value.real?
-      value.to_f
-    rescue StandardError => rescued
-      RCAS.guard!(rescued)
-      nil
-    end
+    def real_number(expr) = RCAS.real_float(expr, finite: false)
 
     # No imaginary unit, and no logarithm of a number that is not positive.
     def real_valued?(expr)
@@ -864,13 +856,9 @@ module RCAS
     end
 
     # A constant expression that is definitely positive (radicals included).
-    def positive?(e)
-      v = e.evalf
-      v.is_a?(Numeric) && v.real? && v > 1e-12
-    rescue StandardError => rescued
-      RCAS.guard!(rescued)
-      false
-    end
+    # Decided, not read off a Float against 1e-12 (Decide): the branch of
+    # the real quadratic factors depends on this sign.
+    def positive?(e) = Decide.sign(Expression.lift(e).simplify) == :positive
 
     # Mack's linear Hermite reduction: a/d = g' + a2/d* with d* squarefree.
     def hermite(a, d)

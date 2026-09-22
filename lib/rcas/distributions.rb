@@ -642,7 +642,6 @@ class ChiSquare < Distribution
     # (x/2)**149/149! overflow at k = 300 (P-4)
     return Num.new(Special.gamma_p(numeric(k, "cdf") / 2.0, x.value / 2.0)) if x.is_a?(Num) && x.value.is_a?(Float)
     if k.is_a?(Num) && k.value.is_a?(Integer) && k.value.even? && k.value.positive?
-      j = Var.new(:j)
       half = (x / 2).simplify
       tail = (0...k.value / 2).map { |m| half**m / RCAS.factorial(m) }.reduce(:+)
       return (1 - Fn.new(:exp, [-half]) * tail).simplify

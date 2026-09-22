@@ -388,7 +388,7 @@ module RCAS
       (start..start + LOOKAHEAD).all? do |t|
         value = term.subs(k => Num.new(t)).simplify
         difference = (opened(value) - Coefficients.coeff(taylor, x, m * t + residue)).expand
-        Scalar.zero?(difference) || Scalar.zero?(difference.cancel) || numerically_zero?(difference)
+        Scalar.zero?(difference) || Scalar.zero?(difference.cancel) || Decide.identically_zero?(difference) == true
       end
     rescue ZeroDivisionError, NotImplementedError, DomainError
       false
@@ -400,23 +400,6 @@ module RCAS
       expr = expr.map_children { |child| opened(child) }
       return expr unless expr.is_a?(Fn) && expr.name == :binomial
       Combinatorics.expand_binomial(*expr.args) || expr
-    end
-
-    # gamma(1 - a)/gamma(-a) is -a, and no normal form here says so: with a
-    # parameter left in the difference, the check is the one the rest of the
-    # library makes, at a few points.
-    def numerically_zero?(difference)
-      names = difference.variables
-      return false if names.empty?
-      random = Random.new(20260916)
-      3.times.all? do
-        point = names.to_h { |name| [name, Num.new(Rational(random.rand(3..97), random.rand(2..11)))] }
-        value = difference.subs(point).evalf
-        value = value.value if value.is_a?(Num)
-        value.is_a?(Numeric) && value.abs < 1e-9
-      end
-    rescue ZeroDivisionError, NotImplementedError, DomainError, Math::DomainError
-      false
     end
 
     # The first index of the class: past the point where the recurrence takes

@@ -471,14 +471,7 @@ module RCAS
       0
     end
 
-    def real_float(e)
-      v = e.evalf
-      v = v.value if v.is_a?(Num)
-      v.is_a?(Numeric) && v.real? && v.to_f.finite? ? v.to_f : nil
-    rescue StandardError, Math::DomainError => rescued
-      RCAS.guard!(rescued)
-      nil
-    end
+    def real_float(e) = RCAS.real_float(e)
 
     def distinct(points)
       points.each_with_object([]) { |p, out| out << p unless out.any? { |q| compare(p, q)&.zero? } }

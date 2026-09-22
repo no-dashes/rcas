@@ -414,7 +414,7 @@ module RCAS
     # g is the zero function: a straight graph has no curvature to report,
     # and a constant one no monotonicity.
     def constant_zero?(g)
-      Scalar.zero?(g.simplify) || Scalar.zero?(Fraction.cancel(g))
+      Scalar.zero?(g.simplify) # identically zero, cancelled and trig identities included
     rescue *UNDECIDED
       false
     end

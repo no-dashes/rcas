@@ -45,7 +45,7 @@ module RCAS
     def to_s = "#{lhs} = #{rhs}"
     alias inspect to_s
 
-    def to_latex(wrap: nil) = "#{LaTeX.print(lhs)} = #{LaTeX.print(rhs)}"
+    # to_latex: latex.rb's (the one with wrap:), which replaced this one
   end
 
   # {2*pi*k | k in ZZ}: a solution that is a family rather than a number.
@@ -128,14 +128,7 @@ module RCAS
 
     private
 
-    def numeric(value)
-      found = Expression.lift(value).evalf
-      found = found.value if found.is_a?(Num)
-      found.is_a?(Numeric) && found.real? ? found.to_f : nil
-    rescue StandardError => rescued
-      RCAS.guard!(rescued)
-      nil
-    end
+    def numeric(value) = RCAS.real_float(value, finite: false)
   end
 
   # Equation solving.

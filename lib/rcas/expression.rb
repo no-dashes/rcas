@@ -17,6 +17,22 @@ module RCAS
     raise error if strict? && error.is_a?(NameError) # NoMethodError too
   end
 
+  # The value of an expression or number as a real Float, or nil when it
+  # has none (not constant, complex, undefined; infinite unless finite:
+  # false). Six private copies of this read "Float or nil" slightly
+  # differently (third review, section 5); they all delegate here now.
+  def self.real_float(value, finite: true)
+    v = value.is_a?(Numeric) ? value : Expression.lift(value).evalf
+    v = v.value if v.is_a?(Num)
+    return nil unless v.is_a?(Numeric) && v.real?
+    f = v.to_f
+    return nil if f.nan? || (finite && f.infinite?)
+    f
+  rescue StandardError, Math::DomainError => rescued
+    guard!(rescued) if rescued.is_a?(StandardError)
+    nil
+  end
+
   # Base class of every node in an expression tree.
   #
   # Trees are immutable and built faithfully from the Ruby expression that

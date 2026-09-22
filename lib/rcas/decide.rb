@@ -78,6 +78,37 @@ module RCAS
       complex_float_zero?(e) # log(-1) is complex without an i in sight
     end
 
+    # An expression in indeterminates that no normal form reduces
+    # (gamma(1 - a)/gamma(-a) + a): true when it vanishes at several random
+    # rational points, each decided exactly; false as soon as one point
+    # shows it does not; nil when no point could be decided. A nonzero
+    # rational function vanishing at four random rational points is not a
+    # risk worth naming; a Float residue under 1e-9 was, and four copies of
+    # that test with their own seeds and tolerances were one of the third
+    # review's duplications (section 5).
+    def identically_zero?(expr, points: 4, seed: 20260922)
+      e = Expression.lift(expr)
+      return zero?(e) if e.variables.empty?
+      return true if Scalar.identically_zero?(e)
+      random = Random.new(seed)
+      decided = 0
+      points.times do
+        point = e.variables.to_h { |name| [name, Num.new(Rational(random.rand(3..97), random.rand(2..11)))] }
+        value = begin
+          e.subs(point).simplify
+        rescue ZeroDivisionError
+          next # a pole: this point says nothing
+        end
+        verdict = zero?(value)
+        return false if verdict == false
+        decided += 1 if verdict
+      end
+      decided.positive? ? true : nil
+    rescue StandardError, NotImplementedError => rescued
+      RCAS.guard!(rescued) if rescued.is_a?(StandardError)
+      nil
+    end
+
     def positive?(e) = sign(e) == :positive
     def negative?(e) = sign(e) == :negative
     def nonzero?(e) = zero?(e) == false
