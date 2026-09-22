@@ -199,4 +199,28 @@ class ReviewSolveTest < Minitest::Test
   rescue ArgumentError, NotImplementedError
     assert true
   end
+
+  # tan(1) = 1.557 > tan(2) = -2.185, so tan is not increasing on (0, pi):
+  # the chart merges across the pole at pi/2 (discussion.rb:362).
+  def test_monotonicity_does_not_bridge_a_pole
+    chart = RCAS.discuss(RCAS.tan(@x), @x).monotonicity
+    refute chart.any? { |piece, _| piece.include?(Math::PI / 2) }, chart.inspect
+  end
+
+  # 1 + exp(-x) > 0 for real x: the logistic function has no gap, no
+  # vertical asymptote. -log(-1) = -i*pi is complex (real_point?,
+  # analysis.rb:60, counts an unevaluated log(-1) as real).
+  def test_complex_points_are_not_gaps_of_a_real_function
+    report = RCAS.discuss(1 / (1 + RCAS.exp(-@x)), @x)
+    assert_empty report.gaps
+    assert_empty report.asymptotes[:vertical]
+  end
+
+  # sin(x)/x vanishes at every k*pi, k != 0, and is not periodic, so the
+  # principal zeros [pi] are a truncation (discussion.rb:291); -pi and 2*pi
+  # are zeros too. "not determined" (nil) would be honest.
+  def test_zeros_of_a_nonperiodic_function_are_not_truncated
+    zeros = RCAS.discuss(RCAS.sin(@x) / @x, @x).zeros
+    assert zeros.nil? || (covers?(zeros, -Math::PI) && covers?(zeros, 2 * Math::PI)), zeros.inspect
+  end
 end

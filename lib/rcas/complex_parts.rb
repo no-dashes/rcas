@@ -48,6 +48,10 @@ module RCAS
         if real_valued?(term)
           real += a * term
           imaginary += b * term
+        elsif (known = known_parts(term))
+          tr, ti = known
+          real += a * tr - b * ti
+          imaginary += b * tr + a * ti
         else
           tr = Fn.new(:re, [term])
           ti = Fn.new(:im, [term])
@@ -56,6 +60,24 @@ module RCAS
         end
       end
       [real.simplify, imaginary.simplify]
+    end
+
+    # The parts of a term that is real factors times one logarithm of a
+    # constant: log(u) = log|u| + i*arg(u), so im(log(-1)) is pi and
+    # -log(-1) is not a real point (third review, S14). nil otherwise.
+    def known_parts(term)
+      coeff, factors = Simplify.factorize(term)
+      real, other = factors.partition { |base, exp| real_valued?(Simplify.power_node(base, exp)) }
+      return nil unless other.size == 1
+      base, exp = other.first
+      return nil unless exp == 1 && base.is_a?(Fn) && base.name == :log && base.args.size == 1 && constant?(base.args.first)
+      u = base.args.first
+      angle = arg(u)
+      return nil if angle.is_a?(Fn)
+      scale = Simplify.rebuild_product(coeff, real.to_h)
+      [(scale * Fn.new(:log, [Fn.new(:abs, [u]).simplify])).simplify, (scale * angle).simplify]
+    rescue StandardError
+      nil
     end
 
     def real_of(v) = v.is_a?(Complex) ? v.real : v

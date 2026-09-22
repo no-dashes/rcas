@@ -114,4 +114,10 @@ class ReviewQualityTest < Minitest::Test
   rescue Timeout::Error
     flunk 'expand_trig(sin(16*x)) took more than 1.5 s'
   end
+
+  def test_complex_zeros_are_not_reported_as_real_zeros
+    # (x - 1)**2 + 10**-26 > 0 for every real x; its zeros 1 +- 10**-13*i are
+    # not real, so the discussion of the real function has no zeros.
+    assert_empty RCAS.discuss((@x - 1)**2 + Rational(1, 10**26), @x).zeros
+  end
 end

@@ -670,6 +670,9 @@ module RCAS
     # acosh(t) = log(t + sqrt(t**2 - 1)) for t >= 1,
     # acos(x) = (x > 1 ? 0 : pi) - i*acosh(|x|) and asin(x) = pi/2 - acos(x).
     def self.real_branch(name, value)
+      # log of a negative Float is its principal value log|x| + i*pi, a
+      # value and not an error (third review, C7)
+      return Complex(Math.log(-value), Math::PI) if name == :log && value.is_a?(Float) && value.negative?
       return nil unless %i[asin acos].include?(name) && value.is_a?(Float) && value.abs > 1
       t = value.abs
       acosh = Math.log(t + Math.sqrt(t * t - 1))
@@ -745,7 +748,7 @@ module RCAS
 
       case [fn.name, arg]
       in [_, Num => n] if n.value.is_a?(Float) && MATH_NAMES.include?(fn.name) then math_value(fn, n.value)
-      in [_, Num => n] if n.value.is_a?(Complex) && (n.value.real.is_a?(Float) || n.value.imaginary.is_a?(Float)) && %i[exp sin cos].include?(fn.name)
+      in [_, Num => n] if n.value.is_a?(Complex) && (n.value.real.is_a?(Float) || n.value.imaginary.is_a?(Float)) && CMath_lite::NAMES.include?(fn.name)
         Num.new(CMath_lite.public_send(fn.name, n.value))
       in [:sin, Num => n] if n.zero? then Num.new(0)
       in [:cos, Num => n] if n.zero? then Num.new(1)
@@ -881,12 +884,26 @@ module RCAS
   end
 
   # Complex-valued exp/sin/cos on floats without the deprecated CMath gem.
+  # The principal branches throughout [AS64, 4.1-4.6]: log with its
+  # imaginary part in (-pi, pi], the inverse functions through log and
+  # sqrt of complex numbers. evalf of log, tan and the rest at a complex
+  # point used to stay symbolic (third review, C7).
   module CMath_lite
+    NAMES = %i[exp sin cos log tan sinh cosh asin acos atan].freeze
+
     module_function
 
     def exp(z) = Complex(Math.exp(z.real) * Math.cos(z.imaginary), Math.exp(z.real) * Math.sin(z.imaginary))
     def sin(z) = Complex(Math.sin(z.real) * Math.cosh(z.imaginary), Math.cos(z.real) * Math.sinh(z.imaginary))
     def cos(z) = Complex(Math.cos(z.real) * Math.cosh(z.imaginary), -Math.sin(z.real) * Math.sinh(z.imaginary))
+    def log(z) = Complex(Math.log(z.abs), Math.atan2(z.imaginary.to_f, z.real.to_f))
+    def tan(z) = sin(z) / cos(z)
+    def sinh(z) = (exp(z) - exp(-z)) / 2
+    def cosh(z) = (exp(z) + exp(-z)) / 2
+    def sqrt(z) = exp(log(z) / 2)
+    def asin(z) = Complex(0, -1) * log(Complex(0, 1) * z + sqrt(1 - z * z))
+    def acos(z) = Complex(Math::PI / 2) - asin(z)
+    def atan(z) = Complex(0, 0.5) * (log(1 - Complex(0, 1) * z) - log(1 + Complex(0, 1) * z))
   end
 
   extend Functions

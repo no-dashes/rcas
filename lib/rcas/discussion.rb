@@ -125,6 +125,10 @@ module RCAS
       domain = domain_of(f, x)
       inside = domain || RealSet.reals
       cycle = period(f, x)
+      # zeros are counted in full unless f is periodic, when one period is
+      # the chart and the answer: sin(x)/x has zeros at every k*pi, k != 0,
+      # and "pi" alone was a truncation (third review, S14)
+      @principal = !cycle.nil?
       first = derivative(f, x)
       second = first && derivative(first, x)
       holes = gaps(f, x)
@@ -214,8 +218,9 @@ module RCAS
     def gaps(f, x)
       points = Analysis.denominators(f, x).flat_map { |d| solutions(d, x) || [] }.uniq
       Analysis.sort_points(points).map do |point|
-        left = one_sided(f, x, point, :left)
-        right = one_sided(f, x, point, :right)
+        probe = point.is_a?(ImageSet) ? point.at(0) : point # a family stands for its members
+        left = one_sided(f, x, probe, :left)
+        right = one_sided(f, x, probe, :right)
         kind = if left.nil? || right.nil? then :gap
                elsif Limits.infinite?(left) || Limits.infinite?(right) then :pole
                else :removable
@@ -273,22 +278,29 @@ module RCAS
     # reach: "none" and "I could not tell" are different answers.
     def extrema(f, x, first)
       points = first && solutions(first, x) or return nil
+      return nil if points.any? { |p| p.is_a?(ImageSet) } # infinitely many, not charted
       Analysis.extrema(f, x, points: Analysis.sort_points(points))
+    rescue *UNDECIDED
+      nil
     end
 
     def inflections(f, x, second)
       points = second && solutions(second, x) or return nil
+      return nil if points.any? { |p| p.is_a?(ImageSet) }
       Analysis.inflections(f, x, points: points).map { |point| [point, f.subs(x => point).simplify] }
     rescue *UNDECIDED
       nil # a curvature rcas cannot decide is "not determined", not "none"
     end
 
-    # The real zeros of g, or nil when rcas cannot solve g = 0.
+    # The real zeros of g, or nil when rcas cannot solve g = 0. One period
+    # of them for a periodic f, all of them (families included) otherwise.
     def solutions(g, x)
       g = Expression.lift(g)
       return [] unless g.variables.include?(x.name)
       begin
-        Solve.solve(g, x, principal: true).select { |root| real?(root) }
+        found = Solve.solve(g, x, principal: @principal != false)
+        return nil unless found.is_a?(Array)
+        found.select { |root| root.is_a?(ImageSet) ? !root.nonreal? : real?(root) }
       rescue NotImplementedError, ArgumentError, DomainError
         factor_solutions(g, x)
       end
@@ -329,14 +341,18 @@ module RCAS
     end
 
     def vanishes?(g, x, root)
-      value = Analysis.numeric(g.subs(x => root).simplify)
-      value.nil? || value.abs < 1e-9
+      Decide.zero?(g.subs(x => root).simplify) != false
+    rescue *UNDECIDED
+      true
     end
 
+    # Decided, not measured: 1 + 10**-13*i is not a real zero of
+    # (x - 1)**2 + 10**-26, and an |Im| < 1e-12 test said it was (Q1). A
+    # point whose realness cannot be told is kept.
     def real?(value)
-      found = Expression.lift(value).evalf
-      return true unless found.is_a?(Numeric)
-      !found.is_a?(Complex) || found.imaginary.abs < 1e-12
+      Inequalities.real?(value)
+    rescue NotImplementedError
+      true
     rescue *UNDECIDED
       false
     end
@@ -359,7 +375,10 @@ module RCAS
         return nil if sign.nil?
         piece = Interval.new(low, high, left_open: true, right_open: true)
         last = pieces.last
-        if last && last[1] == sign && last[0].high == low && domain.include?(low_value)
+        # never across a gap: tan is increasing on (0, pi/2) and on
+        # (pi/2, pi), and not on (0, pi) (S13)
+        across_gap = extra.any? { |e| (v = Analysis.numeric(e)) && (v - low_value).abs <= 1e-12 * [1.0, v.abs].max }
+        if last && last[1] == sign && last[0].high == low && domain.include?(low_value) && !across_gap
           pieces[-1] = [Interval.open(last[0].low, high), sign]
         else
           pieces << [piece, sign]
@@ -371,6 +390,7 @@ module RCAS
     # [[value, expression], ...] in order, the ends included.
     def chart_cuts(g, x, domain, extra, cycle)
       points = solutions(g, x) or return nil
+      return nil if (points + extra).any? { |p| p.is_a?(ImageSet) } # infinitely many pieces
       cuts = (points + extra).map { |p| [Analysis.numeric(p), p] }
       return nil if cuts.any? { |value, _| value.nil? }
       cuts = window(cuts, cycle) or return nil if cycle

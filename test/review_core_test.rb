@@ -60,4 +60,26 @@ class ReviewCoreTest < Minitest::Test
     assert_value 3, RCAS.sqrt((@y**2 + 1)**2).simplify.subs(y: two_i).simplify
     assert_value 1, RCAS.abs(@y**2).simplify.subs(y: RCAS::I).simplify
   end
+
+  def test_log_of_zero_is_not_a_real_number
+    # log(0) has no value (its limit is -oo), so it is not a member of RR,
+    # and log(x) for x in NN is not real at x = 0.
+    refute RCAS.log(0).in?(RCAS::RR)
+    RCAS.assume(x: RCAS::NN) do
+      d = RCAS.log(@x).domain
+      refute d && d <= RCAS::RR, "log(x) for x in NN inferred as #{d}"
+    end
+  end
+
+  def test_numeric_evaluation_of_principal_complex_values
+    # Principal values: log(-2) = log(2) + i*pi, and at z = 1/2 + i/4
+    # log(z) = log|z| + i*atan2(1/4, 1/2), tan(z) = sin(z)/cos(z).
+    assert_value Complex(Math.log(2), Math::PI), RCAS.log(-2)
+    z = Complex(0.5, 0.25)
+    log_z = Complex(Math.log(z.abs), Math.atan2(0.25, 0.5))
+    assert_value log_z, RCAS.log(@x).evalf(x: z)
+    sin = Complex(Math.sin(0.5) * Math.cosh(0.25), Math.cos(0.5) * Math.sinh(0.25))
+    cos = Complex(Math.cos(0.5) * Math.cosh(0.25), -Math.sin(0.5) * Math.sinh(0.25))
+    assert_value sin / cos, RCAS.tan(@x).evalf(x: z)
+  end
 end

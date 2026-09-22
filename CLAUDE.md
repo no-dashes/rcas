@@ -1112,9 +1112,11 @@ causes are seven mistakes repeated, so the fixes are policies:
   argument that carries no signed zero. On the negative side rcas's own
   oddness decides instead (`asin(-u)` is `-asin(u)`, so `asin(-2.0)`
   differs from C in the sign of its imaginary part), and what has to hold
-  either way does: `sin(asin(u))` is `u`. `log(-1.0)` is deliberately
-  *not* in this list - the node staying is what tells a divergent sum it
-  diverged. `INVERSE_PAIRS` is the other half: `cos(acos(u))` folds to `u`
+  either way does: `sin(asin(u))` is `u`. `log(-1.0)` was
+  deliberately left out of this list until the third review (C7): it is the
+  principal value `log|x| + i*pi` now, and divergent series are caught by
+  their radius (`Combinatorics.within_radius?`) instead of by a node that
+  failed to evaluate. `INVERSE_PAIRS` is the other half: `cos(acos(u))` folds to `u`
   for every `u`, and only that direction, since `acos(cos(u))` is `u` only
   on `[0, pi]`; `tan(atan(i))` is the one exception, because `atan` has no
   value at `+-i`.

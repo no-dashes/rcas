@@ -472,9 +472,24 @@ module RCAS
       when :conj then arg
       when :fibonacci then arg <= NN ? NN : ZZ
       when :bernoulli, :harmonic then QQ
-      when :log then arg <= NN ? RR : CC
+      when :log then log_domain(expr.args.first, arg)
       else CC
       end
+    end
+  end
+
+  module Infer
+    module_function
+
+    # log(u) is real for a u shown to be positive; log(0) has no value at
+    # all, so it lies in no set (it was RR, and so was log(x) for x in NN,
+    # where 0 is a member: third review, C5); anything else may be complex.
+    def log_domain(u, arg)
+      return nil if u.is_a?(Num) && u.value.is_a?(Numeric) && u.value.zero?
+      sign = u.variables.empty? ? Decide.sign(u) : RCAS.sign_of(u)
+      return RR if sign == :positive
+      return nil if sign == :nonnegative || (sign.nil? && arg <= NN) # 0 may be among the values
+      CC
     end
   end
 

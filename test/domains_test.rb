@@ -171,7 +171,7 @@ class DomainsTest < Minitest::Test
     assert_equal ZZ, (:x**:n).domain
     assert_equal QQ, (:x**(-:n)).domain
     assert_equal RR, RCAS.sin(:y).domain
-    assert_equal RR, RCAS.log(:n).domain
+    assert_nil RCAS.log(:n).domain, "n = 0 is a natural number, and log(0) has no value (third review, C5)"
     assert_equal CC, RCAS.log(:x).domain
     assert_equal RR, (:r * :x).domain
     assert_equal CC, (Complex(0, 1) * :x).domain

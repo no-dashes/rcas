@@ -70,8 +70,9 @@ class CombinatoricsTest < Minitest::Test
     assert_equal "2", RCAS.sum((1r / 2)**k, k, 0, RCAS::OO).to_s
     assert_equal "32", RCAS.sum(RCAS.binomial(5, k), k, 0, RCAS::OO).to_s
     assert_equal "2**n*n/2", RCAS.sum(k * RCAS.binomial(RCAS::Var.new(:n), k), k, 0, RCAS::OO).to_s
-    # and log of a negative float no longer leaves Ruby's error in the open
-    assert_equal "log(-1.0)", RCAS.log(-1.0).to_s
+    # and log of a negative float no longer leaves Ruby's error in the open:
+    # it is the principal value, log|x| + i*pi (third review, C7)
+    assert_equal "3.141592653589793*i", RCAS.log(-1.0).to_s
     # asin and acos past the interval are the one case where the value
     # outside the reals is the answer rather than a symptom, and it is the
     # branch every C library takes. On the negative side rcas's own oddness
