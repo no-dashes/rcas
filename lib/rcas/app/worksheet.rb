@@ -233,7 +233,7 @@ module RCAS
       def assumptions
         declared = RCAS.assumptions
         return info("no assumptions") if declared.empty?
-        rows = declared.map do |name, value|
+        rows = declared.flat_map { |name, value| Array(value).map { |v| [name, v] } }.map do |name, value|
           text = RCAS.unicode? ? value.to_s.sub(" in ", " ∈ ") : value.to_s
           { name: name.to_s, text: text, latex: (LaTeX.of(value) if @format.typesettable?(value)) }
         end

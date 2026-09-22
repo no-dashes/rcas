@@ -230,18 +230,32 @@ module RCAS
     #
     # which is Mathematica's Assuming and Maple's `assuming`, written the
     # way Ruby scopes anything else. The value is the block's.
+    #
+    # A statement is taken whole or not at all: everything is checked before
+    # anything is recorded, so a refused `assume(x: ZZ, y: 3)` leaves x as it
+    # was. A sign that no member of the declared domain has (x in NN and
+    # x < 0) is refused as well.
     def assume(*facts, **table, &block)
       return assuming(facts, table, &block) if block
-      facts.each do |fact|
+      signs = facts.map do |fact|
         raise TypeError, "#{fact.inspect} is not a domain or a sign like x > 0" unless fact.is_a?(Inequality)
-        assume_sign(fact)
+        parse_sign(fact)
       end
-      table.each do |name, domain|
+      domains = table.map do |name, domain|
         name = name.name if name.is_a?(Var)
         raise TypeError, "#{name.inspect} is not a variable" unless name.is_a?(Symbol)
         raise TypeError, "#{domain.inspect} is not a number set" unless domain.is_a?(NumberSet)
-        @assumptions[name] = domain
+        [name, domain]
       end
+      new_domains = @assumptions.merge(domains.to_h)
+      new_signs = @signs.merge(signs.to_h)
+      new_signs.each do |name, sign|
+        domain = new_domains[name]
+        next unless domain && domain <= NN && %i[negative].include?(sign)
+        raise ArgumentError, "assume: #{name} in #{domain} cannot be negative"
+      end
+      @assumptions.replace(new_domains)
+      @signs.replace(new_signs)
       true
     end
 
@@ -259,14 +273,14 @@ module RCAS
     end
 
     # x > 0, x <= 0: the sign of a variable, which simplification and abs use.
-    def assume_sign(fact)
+    def parse_sign(fact)
       variable, relation = fact.lhs.is_a?(Var) ? [fact.lhs, fact.op] : [fact.rhs, Inequality::FLIP[fact.op]]
       other = fact.lhs.is_a?(Var) ? fact.rhs : fact.lhs
       sign = SIGNS[relation]
       unless variable.is_a?(Var) && sign && other.is_a?(Num) && other.value.zero?
         raise TypeError, "assume: a sign is x > 0, x >= 0, x < 0 or x <= 0, got #{fact}"
       end
-      @signs[variable.name] = sign
+      [variable.name, sign]
     end
 
     def forget(*names)
@@ -288,9 +302,11 @@ module RCAS
     # Inequality, and a domain is a Membership rather than the bare set.
     # `assumption(name)` is the domain itself, which is what Infer and solve
     # want.
+    # A name with both a domain and a sign lists both, as an Array: merging
+    # the two tables used to let the sign overwrite the domain.
     def assumptions
       domains = @assumptions.to_h { |name, domain| [name, Membership.new(Var.new(name), domain)] }
-      domains.merge(@signs.to_h { |name, sign| [name, sign_statement(name, sign)] })
+      domains.merge(@signs.to_h { |name, sign| [name, sign_statement(name, sign)] }) { |_, domain, sign| [domain, sign] }
     end
 
     def sign_statement(name, sign)

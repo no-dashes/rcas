@@ -107,9 +107,9 @@ module RCAS
             polynomial[e] += coeff
           elsif factors.size == 1 && e.is_a?(Integer) && e.negative? && (ab = Integrate.linear(base, x)) && ab.all? { |v| exact_num?(v) }
             slope, offset = ab.map(&:value)
-            alpha = -offset / slope
+            alpha = (-offset).quo(slope) # Integers: -1/2 is not -1
             part = linear_denominator(alpha, -e, root, [a, b, c], x, depth) or return nil
-            result += Num.new(coeff / slope**(-e)) * part
+            result += Num.new(coeff.quo(slope**(-e))) * part
           else
             return nil # an irreducible quadratic denominator: not covered
           end
@@ -153,7 +153,7 @@ module RCAS
         disc = b * b - 4 * a * c
         if a.positive?
           sa = RCAS.sqrt(Num.new(a))
-          Fn.new(:log, [sa * y + Num.new(a) * x + Num.new(b / 2)]) / sa
+          Fn.new(:log, [sa * y + Num.new(a) * x + Num.new(b.quo(2))]) / sa
         elsif disc.positive?
           sa = RCAS.sqrt(Num.new(-a))
           Fn.new(:asin, [(Num.new(-2 * a) * x - Num.new(b)) / RCAS.sqrt(Num.new(disc))]) / sa

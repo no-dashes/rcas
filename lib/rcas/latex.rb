@@ -59,7 +59,7 @@ module RCAS
       when Symbol  then print(Var.new(obj))
       when Numeric then print(Num.new(obj))
       when Array   then array(obj, wrap: wrap)
-      when Hash    then hash(obj)
+      when Hash    then table(obj)
       when true, false, nil then "\\mathrm{#{obj.inspect}}"
       when String  then text(obj)
       else
@@ -78,11 +78,14 @@ module RCAS
     end
 
     # { x: ZZ } reads as a membership list, anything else as a mapping.
-    def hash(table)
+    # Not `hash`: that would replace Module#hash on the module object, and
+    # then any Hash keyed by RCAS::LaTeX raised.
+    def table(table)
       return '\left\{\,\right\}' if table.empty?
       pairs = table.map do |k, v|
         case v
         when Membership, Inequality, Equation then of(v)
+        when Array then v.map { |s| of(s) }.join(',\; ')
         when Domain then "#{of(k)} \\in #{of(v)}"
         else "#{of(k)} \\mapsto #{of(v)}"
         end
@@ -547,5 +550,5 @@ class Array
 end
 
 class Hash
-  def to_latex = RCAS::LaTeX.hash(self)
+  def to_latex = RCAS::LaTeX.table(self)
 end

@@ -285,7 +285,7 @@ module RCAS
           locals.each { |k, v| @ui.puts "  #{Style.cyan(k.to_s.ljust(width))}  #{@ui.text_of(v).gsub("\n", "\n#{' ' * (width + 4)}")}" }
         when "/assumptions"
           a = RCAS.assumptions
-          a.empty? ? @ui.info("no assumptions") : a.each_value { |v| @ui.puts("  #{v.to_s.sub(' in ', ' ∈ ')}") }
+          a.empty? ? @ui.info("no assumptions") : a.values.flatten.each { |v| @ui.puts("  #{v.to_s.sub(' in ', ' ∈ ')}") }
         when "/forget"
           RCAS.forget(*arg.split.map(&:to_sym))
           @ui.info("forgot #{arg.empty? ? 'all assumptions' : arg}")

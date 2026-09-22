@@ -802,19 +802,24 @@ module RCAS
       conditions = Analysis.domain_conditions(f, x)
       return roots if conditions.empty?
       roots.select do |root|
+        # The sign of the condition at the root is decided, not measured
+        # against 1e-9: the root 10**-12 of log(x)*(x - 10**-12) is inside
+        # the domain of log, and a tolerance said it was on the edge.
+        # Undecided keeps the root.
+        next true unless root.is_a?(Expression) && root.variables.empty?
         conditions.all? do |condition|
-          value = begin
-            Expression.lift(condition.lhs - condition.rhs).evalf(x.name => root.evalf)
+          sign = begin
+            Decide.sign(Expression.lift(condition.lhs - condition.rhs).subs(x => root))
           rescue StandardError
             nil
           end
-          next true unless value.is_a?(Numeric) && value.real?
+          next true if sign.nil?
           case condition.op
-          when :> then value > 1e-9
-          when :>= then value > -1e-9
-          when :< then value < -1e-9
-          when :<= then value < 1e-9
-          when :!= then value.abs > 1e-9
+          when :> then sign == :positive
+          when :>= then sign != :negative
+          when :< then sign == :negative
+          when :<= then sign != :positive
+          when :!= then sign != :zero
           else true
           end
         end
@@ -949,16 +954,26 @@ module RCAS
 
     def unity?(value, target) = Scalar.zero?(Expression.lift(Simplify.normalize_number(value - target)))
 
-    # Drop candidates that numerically fail the equation (spurious branches).
+    # Drop the candidates that demonstrably fail the equation: the roots a
+    # squaring or a case split invented. The residual f(r) is decided by
+    # Decide, so a root is dropped only when the residual is shown to be
+    # non-zero - a residual of 4e-5 at exp(x) = 10**10 is rounding, and
+    # an unknown x is not always called x (the old check substituted the
+    # literal keyword x: and was a no-op for every other name). A root with
+    # a parameter in it cannot be checked by a number and stays.
     def verify(f, x, roots)
       roots.select do |r|
-        next true unless (r.variables - f.variables + [x.name]).empty? || r.variables.empty?
-        value = begin
-          f.evalf(x: r.evalf)
+        next true unless r.is_a?(Expression)
+        next false unless Integrate.defined_value?(r) # log(0) is no number, let alone a root
+        next true unless r.variables.empty?
+        residual = begin
+          f.subs(x => r).simplify
+        rescue ZeroDivisionError
+          next false
         rescue StandardError
-          nil
+          next true
         end
-        !value.is_a?(Numeric) || value.abs < 1e-8
+        Integrate.defined_value?(residual) && Decide.zero?(residual) != false
       end
     end
 

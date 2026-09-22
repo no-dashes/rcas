@@ -77,12 +77,14 @@ module RCAS
 
       def self.through(p, q)
         raise Error, "the two points are the same" if p == q
-        new(q.y - p.y, p.x - q.x, p.x * (q.y - p.y) * -1 + p.y * (q.x - p.x) * -1 + 0)
+        a = q.y - p.y
+        b = p.x - q.x
+        new(a, b, -(a * p.x + b * p.y))
       end
 
       def self.point_slope(p, slope)
         slope = Expression.lift(slope)
-        new(slope, -1, (p.y - slope * p.x) * -1)
+        new(slope, -1, p.y - slope * p.x)
       end
 
       def slope = Scalar.zero?(b) ? nil : (-a / b).simplify         # nil: vertical
@@ -161,7 +163,7 @@ module RCAS
       return line_distance(a, b) if a.is_a?(Point) && b.is_a?(Line)
       if a.is_a?(Line) && b.is_a?(Line)
         raise Error, "the lines meet, so their distance is zero only there" unless a.parallel?(b)
-        return line_distance(a, point_on(b))
+        return line_distance(point_on(b), a)
       end
       raise Error, "distance: give two points, a point and a line, or two parallel lines"
     end

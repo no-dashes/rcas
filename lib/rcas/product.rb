@@ -13,6 +13,7 @@ module RCAS
       freeze
     end
 
+    def bound_variable = var
     def children = [term, var, from, to]
     def rebuild(term, var, from, to) = Product.new(term, var, from, to)
     def to_sexp = [:product, term.to_sexp, var.to_sexp, from.to_sexp, to.to_sexp]

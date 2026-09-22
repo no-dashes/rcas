@@ -998,6 +998,44 @@ bind a loopback port, and the .app icon is asserted only when `sips` and
 Check this the way it was found: copy the tree into a directory whose name
 has a space in it and run `ruby -S rake` there.
 
+## The third review (22 Sept 2026): policies, not cases
+
+REVIEW.md and PEER_REVIEW2.md in `review/round3/` (gitignored) came with
+151 failing regression tests; each one that passes moves into
+`test/review_<area>_test.rb`. The review's point is that about 110 root
+causes are seven mistakes repeated, so the fixes are policies:
+
+- **`Decide` (decide.rb) is the one numeric decision procedure.**
+  `Decide.sign(e)` (:positive/:negative/:zero/nil) and `Decide.zero?(e)`
+  (true/false/nil) try a Num, then `Algebraic.exact`, then
+  `Precision.evalf` at 30/60(/120) digits - a zero shrinks with the
+  precision, a small value stays put - and last a Float, believed only
+  well clear of the rounding of the largest intermediate value. A complex
+  constant is split by `ComplexParts.parts` and each part decided. **nil
+  is undecided and must be treated so**; never write a private tolerance
+  again. `Solve.verify` (which substituted the literal `x:` and was a
+  no-op for any other unknown name), `defined_roots` and
+  `Scalar.vanishes?` go through it.
+- **Bound variables.** `Expression#bound_variable` is the var of a
+  definite Integral, a Sum, a Product and a Limit (not an indefinite
+  integral, not a Derivative). `variables`, `constant?` and
+  `each_free_variable` skip bound occurrences, and `replace_with` does not
+  let a pattern that mentions the bound name into the body and renames the
+  bound variable (`Expression.fresh_variable`: x1, x2, ...) when a
+  replacement would be captured. That is what makes Leibniz's boundary
+  terms right for nested integrals (T3). The body is `children[0]`, the
+  var `children[1]`, the rest are bounds - keep that shape for a new
+  binder.
+- **Hash writes that should merge**: `rebuild_product` (i*i**(1/2)),
+  `Functions.fold`'s reflection (Normal.cdf(-2) lost its sqrt(2)),
+  `RCAS.assumptions` (a sign hid the domain; both are listed now, as an
+  Array). Use `Simplify.add_factor`, never `factors[b] = e`, on a table
+  that may already hold b.
+- `assume` checks the whole statement before recording any of it, and
+  refuses a negative sign for a variable declared in NN.
+- `LaTeX.hash` was renamed `LaTeX.table`: a module method named `hash`
+  replaces `Module#hash` and breaks every Hash keyed by the module.
+
 ## Traps we have hit (so you do not hit them again)
 
 - `RCAS::IRB::AutoSymbol` turns an undefined `name(args)` with Expression,

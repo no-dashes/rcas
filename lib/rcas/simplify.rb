@@ -262,8 +262,21 @@ module RCAS
       return Num.new(0) if factors.nil?
       return Num.new(coeff) if factors.all? { |_, exp| exp.is_a?(Numeric) && exp.zero? }
       if coeff.is_a?(Complex) && coeff.real.zero?
-        factors = factors.merge(Num.new(Complex(0, 1)) => 1)
+        # The unit joins the powers of i already there: i*i**(1/2) is
+        # i**(3/2), and writing i => 1 over the 1/2 would lose the root.
+        unit = Num.new(Complex(0, 1))
+        exp = (factors[unit] || 0) + 1
         coeff = coeff.imaginary
+        factors = factors.reject { |base, _| base == unit }
+        if exp.is_a?(Integer) || (exp.is_a?(Rational) && exp.denominator == 1)
+          coeff = normalize_number(coeff * Complex(0, 1)**exp.to_i)
+          if coeff.is_a?(Complex) && coeff.real.zero?
+            factors[unit] = 1
+            coeff = coeff.imaginary
+          end
+        else
+          factors[unit] = exp
+        end
       end
 
       # 2**(-1/2) => 2**(1/2)/2, 2**(3/2) => 2*2**(1/2): a positive integer base keeps a

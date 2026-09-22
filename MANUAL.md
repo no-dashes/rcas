@@ -1827,7 +1827,7 @@ unevaluated:
 rcas> sumrecursion(binomial(n, k)**3, k, s(n))
 => s(1 + n)*(-16 - 21*n - 7*n**2) + s(n)*(-8 - 16*n - 8*n**2) + s(2 + n)*(4 + 4*n + n**2) = 0
 rcas> sum(binomial(n, k)**3, k: 0..n)
-=> sum(binomial(n, k)**3, k, 0, oo)
+=> sum(binomial(n, k)**3, k, 0, n)
 ```
 
 `sumcertificate(F, k, s(n))` gives the rational function `R` behind it: with

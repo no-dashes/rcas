@@ -15,6 +15,7 @@ module RCAS
       freeze
     end
 
+    def bound_variable = var
     def children = [expr, var, point]
     def rebuild(expr, var, point) = Limit.new(expr, var, point)
     def to_sexp = [:limit, expr.to_sexp, var.to_sexp, point.to_sexp]

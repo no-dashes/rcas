@@ -179,6 +179,17 @@ module RCAS
       value.abs < 1
     end
 
+    # |x| <= 1, decided; a symbolic x is assumed inside, as elsewhere here.
+    # A constant whose modulus cannot be compared with 1 is not.
+    def within_radius?(x)
+      return true unless x.variables.empty?
+      re, im = ComplexParts.parts(x)
+      sign = Decide.sign((re**2 + im**2 - 1).simplify)
+      sign == :negative || sign == :zero
+    rescue StandardError
+      false
+    end
+
     def divergent?(value)
       value.each_node.any? do |n|
         (n.is_a?(Fn) && n.name == :log && n.args.first.is_a?(Num) && n.args.first.zero?) || n == OO
@@ -209,10 +220,10 @@ module RCAS
       candidates << [0, ->(x) { Fn.new(:sin, [x]) / x }, (r * (2 * k + 2) * (2 * k + 3)).cancel, :neg_square]
       candidates << [0, ->(x) { Fn.new(:cosh, [x]) }, (r * (2 * k + 1) * (2 * k + 2)).cancel, :square]
       candidates << [0, ->(x) { Fn.new(:sinh, [x]) / x }, (r * (2 * k + 2) * (2 * k + 3)).cancel, :square]
-      candidates << [1, ->(x) { Fn.new(:log, [one + x]) / x }, (r * (k + 1) / k).cancel, :negated]
-      candidates << [0, ->(x) { Fn.new(:atan, [x]) / x }, (r * (2 * k + 3) / (2 * k + 1)).cancel, :neg_square]
+      candidates << [1, ->(x) { Fn.new(:log, [one + x]) / x }, (r * (k + 1) / k).cancel, :negated, true]
+      candidates << [0, ->(x) { Fn.new(:atan, [x]) / x }, (r * (2 * k + 3) / (2 * k + 1)).cancel, :neg_square, true]
       [true, false].each do |exact_roots_only|
-        candidates.each do |m0, template, p, kind|
+        candidates.each do |m0, template, p, kind, radius_one|
           next if p.variables.include?(k.name)
           x =
             case kind
@@ -222,6 +233,10 @@ module RCAS
             when :neg_square then root_of((-p).simplify, exact_roots_only)
             end
           next if x.nil? || (x.is_a?(Num) && x.zero?)
+          # log(1 + x) and atan(x) are power series of radius 1: outside it
+          # the terms do not tend to 0 and the sum has no value, whatever
+          # the formula gives there (sum((-2)**k/k) is not -log(3)).
+          next if radius_one && !within_radius?(x)
           value = template.call(x).simplify
           next if divergent?(value) # log(1 + x) at x = -1: the harmonic series
           return [m0, value]

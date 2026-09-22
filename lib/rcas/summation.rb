@@ -13,6 +13,7 @@ module RCAS
       freeze
     end
 
+    def bound_variable = var
     def children = [term, var, from, to]
     def rebuild(term, var, from, to) = Sum.new(term, var, from, to)
     def to_sexp = [:sum, term.to_sexp, var.to_sexp, from.to_sexp, to.to_sexp]
@@ -57,10 +58,11 @@ module RCAS
         return z
       end
 
-      # sum_{k=0}^{n} binomial(n, k) ... is the full series (terms vanish beyond n)
-      upper = to
-      binomial_top = f.each_node.find { |e| e.is_a?(Fn) && e.name == :binomial && e.args.first == to && e.args.last == k }
-      to = OO if binomial_top
+      # sum_{k=0}^{n} binomial(n, k) ... is the full series when the terms
+      # vanish beyond n - which binomial(n, k)/(n - k + 1) does not: the
+      # pole at k = n + 1 cancels the zero of the binomial there.
+      original = upper = to
+      to = OO if vanishes_past_upper?(f, k, to)
 
       g = gosper(f, k)
       if g
@@ -73,10 +75,34 @@ module RCAS
       if (telescoped = creative_telescoping(f, k, from, upper))
         return telescoped
       end
-      direct = direct_sum(f, k, from, to)
+      direct = direct_sum(f, k, from, original)
       return direct if direct
-      return Fn.new(:harmonic, [to]) if from == Num.new(1) && !Limits.infinite?(to) && Scalar.one?((f * k).simplify) # sum 1/k = H_n
-      Sum.new(f, k, from, to)
+      return Fn.new(:harmonic, [original]) if from == Num.new(1) && !Limits.infinite?(original) && Scalar.one?((f * k).simplify) # sum 1/k = H_n
+      Sum.new(f, k, from, original)
+    end
+
+    # f = binomial(n, k)*r(k) with a symbolic n, and r has no pole at
+    # k = n + 1, n + 2, ...: then every term past n is 0 and the sum may run
+    # to infinity. r has to be a product of powers in k (a rational function
+    # times c**k); anything else is not examined and keeps the bound.
+    def vanishes_past_upper?(f, k, to)
+      return false unless to.is_a?(Expression) && !to.variables.empty? && !to.variables.include?(k.name)
+      top = f.each_node.find { |e| e.is_a?(Fn) && e.name == :binomial && e.args.first == to && e.args.last == k }
+      return false unless top
+      rest = (f / top).simplify
+      return false if rest.each_node.any? { |e| e.is_a?(Fn) && e.variables.include?(k.name) && e.name != :exp }
+      _, factors = Simplify.factorize(rest)
+      factors.all? do |base, exp|
+        next true unless base.variables.include?(k.name)
+        next true unless exp.is_a?(Numeric) && exp.negative?
+        coeffs = Solve.polynomial_coefficients(base, k) or next false
+        next false unless coeffs.size == 2 # a linear factor: its root can be named
+        root = (-coeffs[0] / coeffs[1]).simplify
+        shift = (root - to).simplify
+        !(shift.is_a?(Num) && shift.value.is_a?(Integer) && shift.value.positive?) &&
+          !(shift.is_a?(Num) && shift.value.is_a?(Rational) && shift.value.denominator == 1 && shift.value.positive?) &&
+          shift.variables.empty?
+      end
     end
 
     # A definite sum in one other variable, over bounds that make the terms

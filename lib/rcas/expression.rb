@@ -98,11 +98,37 @@ module RCAS
 
     # ---- queries ----------------------------------------------------------
 
-    # Sorted array of the symbols appearing in the expression.
+    # Sorted array of the symbols appearing *free* in the expression: the x
+    # of integral(f(x), x, 0, 1) is bound and is not one of them.
     def variables
       result = Set.new
-      each_node { |n| result << n.name if n.is_a?(Var) }
+      each_free_variable { |name| result << name }
       result.to_a.sort
+    end
+
+    # The variable this node binds in its first child, or nil. A definite
+    # integral, a sum, a product and a limit bind theirs: the value of
+    # integral(f(x), x, 0, 1) does not depend on x, and renaming the x
+    # changes nothing. The bounds are outside the binding.
+    def bound_variable = nil
+
+    # Yields the name of every free occurrence of a variable (with
+    # repetitions). Iterative, like each_node, so deep trees are safe.
+    def each_free_variable
+      stack = [[self, nil]]
+      until stack.empty?
+        node, bound = stack.pop
+        if node.is_a?(Var)
+          yield node.name unless bound&.include?(node.name)
+        elsif (b = node.bound_variable)
+          body, _var, *rest = node.children
+          stack << [body, bound ? bound + [b.name] : [b.name]]
+          rest.each { |c| stack << [c, bound] }
+        else
+          node.children.each { |c| stack << [c, bound] }
+        end
+      end
+      self
     end
 
     def each_node(&block)
@@ -119,7 +145,7 @@ module RCAS
     # No Var anywhere. Asking `variables.empty?` built a Set and sorted it
     # to throw both away; this stops at the first one.
     def constant?
-      each_node { |n| return false if n.is_a?(Var) }
+      each_free_variable { return false }
       true
     end
 
@@ -330,7 +356,38 @@ module RCAS
 
     def replace_with(table)
       return table[self] if table.key?(self)
-      map_children { |c| c.replace_with(table) }
+      return map_children { |c| c.replace_with(table) } unless (b = bound_variable)
+      replace_under_binding(table, b)
+    end
+
+    # Substitution under a binder: the bounds take the table as it is; the
+    # body does not see a pattern that mentions the bound variable (that is
+    # another x), and when a replacement would bring in a free variable of
+    # the bound name, the bound variable is renamed first so that it does
+    # not capture it - integral(y*f(x), x, 0, 1) with y := x is
+    # x*integral(f(x1), x1, 0, 1), not integral(x*f(x), x, 0, 1).
+    def replace_under_binding(table, b)
+      body, var, *rest = children
+      rest = rest.map { |c| c.replace_with(table) }
+      inner = table.reject { |k, _| k.variables.include?(b.name) }
+      return rebuild(body, var, *rest) if inner.empty?
+      if inner.each_value.any? { |v| v.variables.include?(b.name) }
+        taken = Set.new
+        body.each_node { |n| taken << n.name if n.is_a?(Var) }
+        inner.each { |k, v| taken.merge(k.variables).merge(v.variables) }
+        rest.each { |c| taken.merge(c.variables) }
+        fresh = Expression.fresh_variable(b.name, taken)
+        body = body.replace_with({ b => fresh })
+        var = fresh
+      end
+      rebuild(body.replace_with(inner), var, *rest)
+    end
+
+    # x1, x2, ... : the first name built on +name+ that is not taken.
+    def self.fresh_variable(name, taken)
+      base = name.to_s.sub(/\d+\z/, "")
+      base = "t" if base.empty?
+      (1..).lazy.map { |i| :"#{base}#{i}" }.find { |candidate| !taken.include?(candidate) }.then { |n| Var.new(n) }
     end
   end
 

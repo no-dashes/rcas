@@ -39,23 +39,13 @@ module RCAS
     end
 
     # 1e-12 is not zero. exp(-100) is 3.7e-44, and a determinant built from
-    # it used to come out as 0. A true zero is cancellation and shrinks as
-    # the precision rises; a small number sits where it is.
+    # it used to come out as 0; i*exp(-40) is complex and has no
+    # arbitrary-precision value, so it went on the float verdict and was
+    # zero too. Decide takes the parts apart and asks each at two
+    # precisions. Only what it cannot decide falls back on the float.
     def vanishes?(expr)
-      coarse = decimal(expr, 20)
-      return true if coarse.nil? || coarse.zero?
-      fine = decimal(expr, 40)
-      return true if fine.nil? || fine.zero?
-      fine < coarse * BigDecimal("1e-15")
-    end
-
-    # nil when arbitrary precision has nothing to say (a complex value, an
-    # unsupported function): the float verdict then stands.
-    def decimal(expr, digits)
-      value = Precision.evalf(expr, digits)
-      value.respond_to?(:to_d) ? value.to_d.abs : nil
-    rescue StandardError, NotImplementedError
-      nil # no more precision to be had: the float verdict stands
+      decided = Decide.zero?(expr)
+      decided.nil? ? true : decided
     end
     def one?(a) = a.is_a?(Num) && a.value == 1
     def negative?(a) = a.is_a?(Num) && Simplify.negative?(a.value)

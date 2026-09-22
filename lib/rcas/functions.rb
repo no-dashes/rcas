@@ -713,7 +713,10 @@ module RCAS
         if !negative && (pair = factors.find { |b, e| e == 1 && Simplify.negative_sum?(b) })
           factors = factors.dup
           factors.delete(pair.first)
-          factors[Simplify.simplify(Neg.new(pair.first))] = 1
+          # add, not assign: -(-2 - 0) is 2, which may already be a base
+          # (2**(-1/2) in (-2 - 0)/sqrt(2)), and writing 2 => 1 over it
+          # lost the root - Normal(0, 1).cdf(-2) came out as erf(2)
+          Simplify.add_factor(factors, Simplify.simplify(Neg.new(pair.first)), 1)
           negative = true
         end
         if negative

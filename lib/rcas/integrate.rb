@@ -14,6 +14,7 @@ module RCAS
     end
 
     def definite? = !from.nil?
+    def bound_variable = definite? ? var : nil
     def children = definite? ? [integrand, var, from, to] : [integrand, var]
     def rebuild(integrand, var, from = nil, to = nil) = Integral.new(integrand, var, from, to)
     def to_sexp = [:integral, *children.map(&:to_sexp)]
