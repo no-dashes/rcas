@@ -2,6 +2,7 @@
 
 require_relative "test_helper"
 require "open3"
+require "rbconfig"
 
 # Drives bin/rcas with piped input, so this covers the real irb integration.
 class IrbTest < Minitest::Test
@@ -10,7 +11,9 @@ class IrbTest < Minitest::Test
   # Returns the result lines irb printed. Without a tty irb echoes each
   # input line followed by its inspected value, with no "=> " prefix.
   def run_session(*lines, env: {})
-    out, _err, status = Open3.capture3(env, BIN, stdin_data: lines.join("\n") + "\n")
+    # The interpreter and the script as separate arguments: Open3 hands a
+    # lone string to the shell, which splits a project path on its spaces.
+    out, _err, status = Open3.capture3(env, RbConfig.ruby, BIN, stdin_data: lines.join("\n") + "\n")
     assert status.success?, out
     out.lines.map(&:chomp)
   end

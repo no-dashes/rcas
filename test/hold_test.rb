@@ -115,7 +115,11 @@ class HoldTest < Minitest::Test
 
   def test_available_in_irb
     require "open3"
-    out, _err, status = Open3.capture3(File.expand_path("../bin/rcas", __dir__), stdin_data: "hold { 1 + 2 }\nhold { 1/2 }.simplify\n")
+    require "rbconfig"
+    # RbConfig.ruby and the path as separate arguments: one string would go
+    # through the shell, which breaks on a project path containing a space.
+    out, _err, status = Open3.capture3(RbConfig.ruby, File.expand_path("../bin/rcas", __dir__),
+                                       stdin_data: "hold { 1 + 2 }\nhold { 1/2 }.simplify\n")
     assert status.success?, out
     lines = out.lines.map(&:chomp)
     assert_includes lines, "1 + 2"

@@ -195,12 +195,124 @@ class AnalysisTest < Minitest::Test
     assert_equal "(-oo, 0) ∪ (0, oo)", RCAS.real_domain(1 / x + RCAS.log(3), x).to_s
   end
 
-  # A condition whose argument is a *parameter* is left alone: the answer
-  # would be a case split on the parameter rather than a domain in x.
-  def test_a_parameter_is_not_a_constant_condition
+  # R1. The sign of the radius must be *proved*, not sampled: five samples
+  # at 1/6..5/6 all found x - 1/10 positive on 0..1 and dropped the abs,
+  # which understated the surface by 2.4% (22 Sept 2026, the second review).
+  # A line is enough to show it; no high frequency is needed.
+  def test_a_radius_keeps_its_absolute_value_where_the_sign_is_not_proved
+    x = RCAS::Var.new(:x)
+    f = x - Rational(1, 10)
+    # 2*pi*sqrt(2)*int_0^1 |x - 1/10| dx = 2*pi*sqrt(2)*(1/200 + 81/200)
+    assert_equal "41*2**(1/2)*pi/50", RCAS.revolution_surface(f, x: 0..1).to_s
+    # 2*pi*int_0^1 x*|x - 1/10| dx = 2*pi*(1/6000 + 1701/6000)
+    assert_equal "851*pi/1500", RCAS.revolution_volume(f, x: 0..1, axis: :y).to_s
+    assert_in_delta 41 * Math.sqrt(2) * Math::PI / 50, RCAS.revolution_surface(f, x: 0..1).evalf, 1e-12
+    assert_in_delta 851 * Math::PI / 1500, RCAS.revolution_volume(f, x: 0..1, axis: :y).evalf, 1e-12
+  end
+
+  # The decision itself, in both directions: a zero strictly inside the
+  # range means there is no single sign, a zero at an end does not, and a
+  # zero rcas cannot name leaves the question open.
+  def test_the_sign_on_an_interval_is_decided_by_the_zeros
+    x = RCAS::Var.new(:x)
+    sign = ->(u, from, to) { RCAS::Analysis.sign_on_interval(u, x, RCAS::Num.new(from), RCAS::Num.new(to)) }
+    assert_nil sign.call(x - Rational(1, 10), 0, 1), "a zero strictly inside"
+    assert_nil sign.call(x, -1, 1)
+    assert_equal :positive, sign.call(x, 0, 1), "a zero at the end is no obstacle"
+    assert_equal :negative, sign.call(x, -1, 0)
+    assert_equal :positive, sign.call(x - Rational(1, 10), Rational(1, 2), 1)
+    assert_equal :negative, sign.call(x - Rational(1, 10), -1, 0)
+    assert_equal :positive, sign.call(RCAS.sqrt(1 - x**2), -1, 1), "zeros at both ends"
+    assert_equal :negative, sign.call(RCAS::Num.new(-1), 0, 1), "a constant"
+    assert_equal :positive, sign.call(x**2 + 1, -1, 1), "no real zero at all"
+    assert_nil sign.call(RCAS::Var.new(:a) * x, 0, 1), "a parameter in it"
+  end
+
+  # The same decision under the length element, which removes a square root
+  # the same way. With more than one parameter the box is still sampled,
+  # which the manual lists as a limit.
+  def test_the_length_element_proves_its_sign_too
+    v = RCAS::Var.new(:v)
+    norm = ->(f, from, to) { RCAS::VectorCalculus.norm(f, [[v, from, to]]).to_s }
+    assert_equal "abs(-1/10 + v)", norm.call([v - Rational(1, 10), 0], RCAS::Num.new(0), RCAS::Num.new(1))
+    assert_equal "-1/10 + v", norm.call([v - Rational(1, 10), 0], RCAS::Num.new(Rational(1, 2)), RCAS::Num.new(1))
+    assert_equal "sin(v)", norm.call([RCAS.sin(v), 0], RCAS::Num.new(0), RCAS::PI)
+    assert_equal "abs(sin(v))", norm.call([RCAS.sin(v), 0], RCAS::Num.new(0), 2 * RCAS::PI)
+  end
+
+  # R5. A zero of f'' is an inflection exactly when f'' vanishes there to an
+  # odd order. The old test asked whether f''' was numerically above 10**-12
+  # and otherwise sampled at a fixed 10**-4: with a second zero at 10**-5
+  # both readings were wrong (22 Sept 2026, the second review).
+  def test_inflections_with_a_second_zero_next_door
+    x = RCAS::Var.new(:x)
+    a = Rational(1, 100_000)
+    # f'' = x**2*(x - a): even order at 0, odd at a
+    assert_equal ["1/100000"], RCAS.inflections(x**5 / 20 - a * x**4 / 12, x).map(&:to_s)
+    # f'' = x**3*(x - a): odd at both
+    assert_equal ["0", "1/100000"], RCAS.inflections(x**6 / 30 - a * x**5 / 20, x).map(&:to_s)
+    # f'''(a) = a**3 = 10**-15 is exactly non-zero, and below the old threshold
+    refute RCAS::Scalar.zero?((x**6 / 30 - a * x**5 / 20).diff(x, 3).subs(x => RCAS::Num.new(a)).simplify)
+  end
+
+  # The order itself, which is what the test now reads.
+  def test_the_order_to_which_a_derivative_vanishes
+    x = RCAS::Var.new(:x)
+    order = ->(g, at) { RCAS::Analysis.vanishing_order(RCAS::Expression.lift(g), x, RCAS::Num.new(at)) }
+    assert_equal 2, order.call(x**2, 0)
+    assert_equal 3, order.call(x**3, 0)
+    assert_equal 1, order.call(x - 1, 1)
+    assert_equal 2, order.call(x**2 * (x - Rational(1, 100_000)), 0)
+    assert_equal 3, order.call(x**3 * (x - Rational(1, 100_000)), 0)
+    assert_equal 1, order.call(x**3 * (x - Rational(1, 100_000)), Rational(1, 100_000))
+    assert_equal 1, order.call(RCAS.sin(x), 0)
+  end
+
+  # An undecided candidate is not a proven absence: the answer says so
+  # instead of dropping it, and `discuss` turns that into "not determined"
+  # rather than into "no inflections" (22 Sept 2026, the second review
+  # asked for the three cases to be told apart).
+  def test_an_undecided_curvature_is_refused_not_denied
+    x = RCAS::Var.new(:x)
+    c = RCAS::Var.new(:c)
+    e = assert_raises(NotImplementedError) { RCAS::Analysis.inflection_at?(RCAS::Num.new(0), x, c, []) }
+    assert_match(/not decided/, e.message)
+    assert_nil RCAS::Analysis.vanishing_order(RCAS::Num.new(0), x, c)
+    assert_nil RCAS::Analysis.sign_change(RCAS::Num.new(0), x, c)
+    # the decided cases still answer, and discuss reports them as before
+    assert_empty RCAS.discuss(x**4, x).inflections
+    assert_equal [[0, 0]], RCAS.discuss(x**5, x).inflections.map { |p, v| [p.to_s.to_i, v.to_s.to_i] }
+  end
+
+  # R6. A condition about a parameter is decided when the assumptions
+  # settle it, and refused when they do not: with assume(a < 0) the
+  # logarithm has no real value anywhere, and the answer was the whole line
+  # (22 Sept 2026, the second review, correcting the first round's answer).
+  def test_a_parameter_condition_is_decided_or_refused
     x = RCAS::Var.new(:x)
     a = RCAS::Var.new(:a)
-    assert_equal RCAS::RealSet.reals, RCAS.real_domain(RCAS.log(a) + x, x)
-    assert_equal "(0, oo)", RCAS.real_domain(RCAS.log(x) + RCAS.log(a), x).to_s
+    RCAS.assume(a < 0) do
+      assert_equal RCAS::RealSet.empty, RCAS.real_domain(RCAS.log(a) + x, x)
+      assert_equal RCAS::RealSet.empty, RCAS.real_domain(RCAS.log(a) + RCAS.log(x), x)
+    end
+    RCAS.assume(a > 0) do
+      assert_equal RCAS::RealSet.reals, RCAS.real_domain(RCAS.log(a) + x, x)
+      assert_equal "(0, oo)", RCAS.real_domain(RCAS.log(a) + RCAS.log(x), x).to_s
+    end
+    e = assert_raises(NotImplementedError) { RCAS.real_domain(RCAS.log(a) + x, x) }
+    assert_match(/depends on a/, e.message)
+    assert_raises(NotImplementedError) { RCAS.real_domain(RCAS.sqrt(a) + x, x) }
+  end
+
+  # An expression carrying i is real only where its imaginary part vanishes.
+  def test_where_a_complex_expression_is_real
+    x = RCAS::Var.new(:x)
+    assert_equal "{0}", RCAS.real_domain(RCAS::I * x, x).to_s
+    assert_equal "{0}", RCAS.real_domain(RCAS.sqrt(-1) * x, x).to_s
+    assert_equal "{-1/2}", RCAS.real_domain(2 * RCAS::I * x + RCAS::I, x).to_s
+    assert_equal "{0}", RCAS.real_domain(RCAS::I * x**2, x).to_s
+    assert_equal RCAS::RealSet.empty, RCAS.real_domain(x + RCAS::I, x), "a constant imaginary part"
+    assert_equal RCAS::RealSet.reals, RCAS.real_domain(RCAS::I * RCAS::I * x, x), "i**2 is real"
+    assert_equal RCAS::RealSet.reals, RCAS.real_domain(x**2 + 1, x), "and nothing without an i pays for this"
   end
 end

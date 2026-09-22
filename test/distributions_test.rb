@@ -155,4 +155,55 @@ class DistributionsTest < Minitest::Test
     assert_raises(ArgumentError) { u.probability(X != RCAS::Num.new(1)) }
     assert_raises(ArgumentError) { u.probability(2) }
   end
+
+  # R3. The direct cdf route is for "X op c" alone: the right side must be
+  # free of the random variable too. P(X <= X) is 1, not X, and
+  # P(X <= -X) is P(X >= 0) (22 Sept 2026, the second review).
+  def test_the_variable_may_stand_on_either_side
+    assert_equal "1/2", RCAS.Uniform(-1, 1).probability(X <= -X).to_s
+    assert_equal "1", RCAS.Uniform(0, 1).probability(X <= X).to_s, "a tautology"
+    assert_equal "0", RCAS.Uniform(0, 1).probability(X < X).to_s, "and an impossible event"
+    assert_equal "1", RCAS.Uniform(0, 1).probability(X >= X).to_s
+    assert_equal "1/2", RCAS.Normal(0, 1).probability(X <= -X).to_s
+    assert_equal "1", RCAS.Binomial(5, RCAS::Num.new(Rational(1, 2))).probability(X <= X).to_s
+    assert_equal "0", RCAS.Poisson(1).probability(2 * X < X).to_s, "X < 0 for a Poisson variable"
+    # both sides moving, and the same event written three ways
+    u = RCAS.Uniform(0, 4)
+    half = RCAS::Num.new(Rational(1, 2))
+    assert_equal u.probability(X <= RCAS::Num.new(1)).to_s, u.probability(2 * X <= X + RCAS::Num.new(1)).to_s
+    assert_equal u.probability(X <= RCAS::Num.new(1)).to_s, u.probability(half * X <= half).to_s
+  end
+
+  # R4. The two infinities are probability 1 and 0 on every public form of
+  # the event, not only on the set route: P(X <= oo) came back as oo, which
+  # is not a probability at all (22 Sept 2026, the second review).
+  def test_infinite_bounds_on_every_form_of_event
+    [RCAS.Uniform(0, 1), RCAS.Normal(0, 1), RCAS.Exponential(1),
+     RCAS.Poisson(1), RCAS.Binomial(5, RCAS::Num.new(Rational(1, 2)))].each do |d|
+      assert_equal "1", d.probability(X <= RCAS::OO).to_s, "#{d}: P(X <= oo)"
+      assert_equal "1", d.probability(X < RCAS::OO).to_s, "#{d}: P(X < oo)"
+      assert_equal "1", d.probability(X >= RCAS::Neg.new(RCAS::OO).simplify).to_s, "#{d}: P(X >= -oo)"
+      assert_equal "0", d.probability(X > RCAS::OO).to_s, "#{d}: P(X > oo)"
+      assert_equal "0", d.probability(X <= RCAS::Neg.new(RCAS::OO).simplify).to_s, "#{d}: P(X <= -oo)"
+      assert_equal "1", d.probability(RCAS::Neg.new(RCAS::OO).simplify..RCAS::OO).to_s, "#{d}: the whole line as a range"
+      assert_equal "1", d.probability(-X <= RCAS::OO).to_s, "#{d}: through the solved route"
+    end
+    assert_equal "1", RCAS.Uniform(0, 1).probability(0..RCAS::OO).to_s
+    assert_equal "1", RCAS.Poisson(1).probability(0..RCAS::OO).to_s
+  end
+
+  # Whatever the route, a probability is a number between 0 and 1.
+  def test_every_answer_is_a_probability
+    half = RCAS::Num.new(Rational(1, 2))
+    events = [X <= RCAS::OO, X > RCAS::OO, X <= X, X < X, -X <= 0, 2 * X <= X + half,
+              X <= half, X**2 <= RCAS::Num.new(4), 0..RCAS::OO, 0..1]
+    [RCAS.Uniform(0, 1), RCAS.Normal(0, 1), RCAS.Poisson(1), RCAS.Binomial(5, half)].each do |d|
+      events.each do |event|
+        value = d.probability(event).evalf
+        next unless value.is_a?(Numeric) && !value.is_a?(Complex)
+        assert_operator value, :>=, -1e-12, "#{d}: P(#{event}) = #{value}"
+        assert_operator value, :<=, 1 + 1e-12, "#{d}: P(#{event}) = #{value}"
+      end
+    end
+  end
 end

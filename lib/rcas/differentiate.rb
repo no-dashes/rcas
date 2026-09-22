@@ -30,18 +30,28 @@ module RCAS
     # not 0. Only the *integration* variable is bound, and looking at the
     # bounds alone answered every such derivative with zero (22 Sept 2026,
     # from a review). Bounds that move add Leibniz's two boundary terms.
+    #
+    # The rule is applied, not checked: differentiating under the integral
+    # sign needs the integrand and its parameter derivative continuous on
+    # the rectangle (and, over an infinite range, the differentiated
+    # integral uniformly convergent) - [DLMF, 1.5(iv)]. rcas does not verify
+    # that, which is why the answer is another integral rather than a value:
+    # what comes out is the derivative wherever the rule applies, and the
+    # caller keeps the hypotheses.
     def integral(expr, var)
       unless expr.definite?
         return expr.var == var ? expr.integrand : Integral.new(differentiated(expr, var), expr.var)
       end
       moving = [expr.from, expr.to].any? { |c| c.variables.include?(var.name) }
-      # integral(f(x), x, 0, x) names one thing twice: bound inside, free in
-      # the bound. Which of the two is meant is the reader's business.
-      raise NotImplementedError, "derivative of a definite integral whose bound repeats its variable" if moving && expr.var == var
-      return Num.new(0) if expr.var == var
-      inside = expr.integrand.variables.include?(var.name) ? Integral.new(differentiated(expr, var), expr.var, expr.from, expr.to) : Num.new(0)
+      # A name bound by the integral is not the free one outside it, even
+      # where the two are spelled alike: integral(sin(x), x, 0, x) is the
+      # integral(sin(t), t, 0, x) that renaming the bound variable gives, so
+      # the integrand contributes nothing and only the bound moves. Refusing
+      # it as ambiguous was wrong (22 Sept 2026, the second review).
+      bound = expr.var == var
+      inside = !bound && expr.integrand.variables.include?(var.name) ? Integral.new(differentiated(expr, var), expr.var, expr.from, expr.to) : Num.new(0)
       return inside unless moving
-      at = ->(bound) { Mul.new(expr.integrand.subs(expr.var => bound), diff(bound, var)) }
+      at = ->(edge) { Mul.new(expr.integrand.subs(expr.var => edge), diff(edge, var)) }
       Add.new(inside, Sub.new(at[expr.to], at[expr.from]))
     end
 

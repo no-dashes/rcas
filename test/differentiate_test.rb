@@ -74,8 +74,15 @@ class DifferentiateTest < Minitest::Test
     both = RCAS::Integral.new(x * t, t, RCAS::Num.new(0), x).diff(x)
     assert_equal "integral(t, t, 0, x) + x**2", both.to_s
     assert_equal "3*x**2/2", both.doit.simplify.to_s
-    # the same name bound inside and free in the bound names two things
-    assert_raises(NotImplementedError) { RCAS::Integral.new(RCAS.sin(x), x, RCAS::Num.new(0), x).diff(x) }
+    # A name bound by the integral is not the free one outside it, however
+    # it is spelled: integral(sin(x), x, 0, x) is integral(sin(t), t, 0, x)
+    # after renaming, and its derivative is sin(x) (22 Sept 2026, the
+    # second review - rcas used to refuse this as ambiguous).
+    assert_equal "sin(x)", RCAS::Integral.new(RCAS.sin(x), x, RCAS::Num.new(0), x).diff(x).to_s
+    assert_equal "sin(x)", RCAS::Integral.new(RCAS.sin(t), t, RCAS::Num.new(0), x).diff(x).to_s
+    assert_equal "x**2", RCAS::Integral.new(x**2, x, RCAS::Num.new(0), x).diff(x).to_s
+    # int_{x-1}^{x} t dt = x - 1/2, so the derivative is 1
+    assert_equal "1", RCAS::Integral.new(x, x, x - 1, x).diff(x).to_s
   end
 
   # An indefinite integral keeps its old two rules, with the new integrand

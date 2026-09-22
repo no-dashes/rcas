@@ -64,34 +64,38 @@ module RCAS
           lo = Expression.lift(event.begin || Neg.new(OO))
           hi = Expression.lift(event.end || OO)
           hi = hi - 1 if event.exclude_end? && !event.end.nil? && discrete?
-          return (cdf(hi) - cdf(lo) + pdf(lo)).simplify if discrete? && !Limits.infinite?(lo) # inclusive lower end
-          return (cdf(hi) - cdf(lo)).simplify unless event.exclude_end? && !discrete? # continuous: endpoints have measure zero
-          (cdf(hi) - cdf(lo)).simplify
+          return (cdf_at(hi) - cdf_at(lo) + pdf(lo)).simplify if discrete? && !Limits.infinite?(lo) # inclusive lower end
+          (cdf_at(hi) - cdf_at(lo)).simplify # continuous: endpoints have measure zero
         when Inequality
-          return bound_probability(event.op, event.rhs) if event.lhs.is_a?(Var)
-          # "-X <= 0" is not "X <= 0": an event whose left side is not the
-          # variable itself is solved for it first and the probability taken
-          # over the set that comes out. Reading the operator and the right
-          # side alone answered P(-X <= 0) with 0 (22 Sept 2026, a review).
+          # The direct route is for "X op c" alone: both that the left side
+          # is the variable and that the right side is free of it. P(X <= X)
+          # is 1, not X (22 Sept 2026, the second review). Everything else is
+          # solved for the variable and the probability taken over the set
+          # that comes out - reading the operator and the right side alone
+          # answered P(-X <= 0) with 0.
+          return bound_probability(event.op, event.rhs) if direct_event?(event)
           set_probability(event_set(event))
         else raise ArgumentError, "probability: give a range (a..b) or an inequality (x > 1)"
         end
       end
 
+      def direct_event?(event) = event.lhs.is_a?(Var) && !event.rhs.variables.include?(event.lhs.name)
+
       # P(X op c) with the bound c, the shape every event is reduced to.
       def bound_probability(op, c)
+        c = Expression.lift(c)
         if discrete?
           case op
-          when :<= then cdf(c)
-          when :< then (cdf(c) - pdf(c)).simplify
-          when :>= then (1 - cdf(c) + pdf(c)).simplify
-          when :> then (1 - cdf(c)).simplify
+          when :<= then cdf_at(c)
+          when :< then (cdf_at(c) - pdf_at(c)).simplify
+          when :>= then (1 - cdf_at(c) + pdf_at(c)).simplify
+          when :> then (1 - cdf_at(c)).simplify
           else raise ArgumentError, "probability: use <, <=, > or >="
           end
         else
           case op
-          when :<, :<= then cdf(c)
-          when :>, :>= then (1 - cdf(c)).simplify
+          when :<, :<= then cdf_at(c)
+          when :>, :>= then (1 - cdf_at(c)).simplify
           else raise ArgumentError, "probability: use <, <=, > or >="
           end
         end
@@ -110,8 +114,15 @@ module RCAS
       # closed form does not reach on its own - Normal's erf(2**(1/2)*oo)
       # does not fold, and Uniform's (x - a)/(b - a) runs away.
       def cdf_at(v)
+        v = Expression.lift(v)
         return cdf(v) unless Limits.infinite?(v)
         Num.new(v == OO ? 1 : 0)
+      end
+
+      # No mass sits at an infinite point, whatever the closed form says.
+      def pdf_at(v)
+        v = Expression.lift(v)
+        Limits.infinite?(v) ? Num.new(0) : pdf(v)
       end
 
       def set_probability(set)
@@ -124,8 +135,8 @@ module RCAS
       def piece_probability(interval)
         total = cdf_at(interval.high) - cdf_at(interval.low)
         return total unless discrete?
-        total += pdf(interval.low) unless interval.left_open || Limits.infinite?(interval.low)
-        total -= pdf(interval.high) if interval.right_open && !Limits.infinite?(interval.high)
+        total += pdf_at(interval.low) unless interval.left_open
+        total -= pdf_at(interval.high) if interval.right_open
         total
       end
 

@@ -216,13 +216,21 @@ class AppServerTest < Minitest::Test
     RCAS::Results.clear
     @sheet = RCAS::App::Worksheet.new
     @server = RCAS::App.build(@sheet, port: 0)
-    @server.start
+    begin
+      @server.start
+    rescue SystemCallError => e
+      # A sandbox that refuses to bind a loopback port is an environment
+      # fact, not a defect: say so rather than reporting nine failures
+      # nobody can act on (22 Sept 2026, after a review could not run these).
+      @server = nil
+      skip "cannot open a loopback port here (#{e.class}: #{e.message})"
+    end
     @thread = Thread.new { @server.run }
   end
 
   def teardown
-    @server.stop
-    @thread.kill
+    @server&.stop
+    @thread&.kill
     RCAS.forget
     RCAS::Results.clear
   end
@@ -365,9 +373,29 @@ class AppLauncherTest < Minitest::Test
       assert_path_exists runner
       assert File.executable?(runner)
       assert_includes File.read(runner), "bin/rcas-app"
-      # sips and iconutil are part of macOS, so the icon should be there.
-      assert_path_exists File.join(bundle, "Contents", "Resources", "rcas.icns")
+      # sips and iconutil are part of macOS and normally produce the icon,
+      # but an environment that refuses to run them still gets a working
+      # bundle - that is what the library promises, and it is what the
+      # assertions above check.
+      icns = File.join(bundle, "Contents", "Resources", "rcas.icns")
+      if icon_tools?
+        assert_path_exists icns
+      else
+        refute_path_exists icns, "no sips/iconutil, so there should be no icon either"
+      end
     end
+  end
+
+  # Present *and* runnable: a sandbox may have the binaries on PATH and
+  # still refuse to spawn them.
+  def icon_tools?
+    sips = RCAS::Render.which("sips")
+    iconutil = RCAS::Render.which("iconutil")
+    return false unless sips && iconutil
+    RCAS::Render.run(sips, "--help")
+    true
+  rescue RCAS::Render::Error, SystemCallError
+    false
   end
 
   def test_the_command_is_this_ruby_and_this_program

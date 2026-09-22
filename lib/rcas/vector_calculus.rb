@@ -97,12 +97,32 @@ module RCAS
     def shorter(a, b) = [a, b].min_by { |e| [e.each_node.count, e.to_s.size] }
 
     # sqrt(u**2) is u, -u or abs(u), by the sign of u on the parameter ranges.
+    # In one variable the sign is proved from the zeros of u
+    # (Analysis.sign_on_interval); with more of them the box is still only
+    # sampled, which can miss a sign change and is why `sign_on` says so in
+    # its own comment.
     def root_factor(base, ranges)
-      case sign_on(base, ranges)
+      case proven_sign(base, ranges)
       when :positive then base
       when :negative then Neg.new(base).simplify
       else Fn.new(:abs, [base])
       end
+    end
+
+    # In one variable the zeros decide, and a zero inside the range means
+    # there is no single sign - the abs stays. With more variables the box
+    # is still only sampled, which can miss a sign change; that limit is the
+    # one `sign_on` states in its own comment and the manual lists.
+    def proven_sign(base, ranges)
+      one = single_range(base, ranges)
+      return Analysis.sign_on_interval(base, one[0], one[1], one[2]) if one
+      sign_on(base, ranges)
+    end
+
+    # The one range the expression actually moves with, when there is one.
+    def single_range(base, ranges)
+      wanted = ranges.select { |var, _, _| Expression.lift(base).variables.include?(Expression.lift(var).name) }
+      wanted.size == 1 && Expression.lift(base).variables.size == 1 ? wanted.first : nil
     end
 
     SAMPLES = [1, 2, 3, 4, 5].map { |i| Rational(i, 6) }.freeze

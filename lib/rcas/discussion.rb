@@ -279,6 +279,8 @@ module RCAS
     def inflections(f, x, second)
       points = second && solutions(second, x) or return nil
       Analysis.inflections(f, x, points: points).map { |point| [point, f.subs(x => point).simplify] }
+    rescue *UNDECIDED
+      nil # a curvature rcas cannot decide is "not determined", not "none"
     end
 
     # The real zeros of g, or nil when rcas cannot solve g = 0.

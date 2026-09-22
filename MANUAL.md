@@ -1019,9 +1019,10 @@ space with three components;
 `revolution_volume` and `revolution_surface` turn a graph about the x-axis
 (or about the y-axis with `axis: :y`, which is the shell formula). A radius
 is the distance to the axis and never negative, so it is `abs(f)` or
-`abs(x)` where the sign is not decided on the range; the shells stand on
-one side of the axis, and a range that crosses it is refused rather than
-counted twice.
+`abs(x)` unless the sign on the range has been *proved* - which means
+naming the zeros of the radius and finding none inside the range, since a
+handful of samples can step over one. The shells stand on one side of the
+axis, and a range that crosses it is refused rather than counted twice.
 
 ```
 rcas> arclength(x**2, x: 0..1)
@@ -1180,14 +1181,22 @@ rcas> real_domain(log(-1) + x, x)
 => {}
 rcas> real_domain(log(2) + x, x)
 => (-oo, oo)
+rcas> assume(a < 0) { real_domain(log(a) + x, x) }
+=> {}
+rcas> real_domain(I*x, x)
+=> {0}
 ```
 
 `real_domain` collects one condition per denominator, even root and
 logarithm, and two for each `asin` or `acos`, which are bounded at both
 ends; a condition it cannot solve is named rather than quietly dropped, and
 a condition on a constant is decided rather than skipped - `log(-1) + x` is
-real nowhere. A condition on a *parameter* is left alone, since the answer
-would be a case split on the parameter rather than a domain in x.
+real nowhere. A condition on a *parameter* is decided from the assumptions
+in force (`assume(a < 0)` makes `log(a) + x` real nowhere) and refused by
+name when they do not settle it, since the honest answer would then be a
+case split on the parameter rather than a set of reals. An expression that
+carries `i` is real only where its imaginary part vanishes, so
+`real_domain(I*x, x)` is `{0}`.
 
 `extrema` returns the point, the value and the kind. The second derivative
 decides; where that vanishes too, as for `x**4`, the sign of the first
@@ -4247,10 +4256,10 @@ with polynomial coefficients, Abramov's rational solutions, the
 Almkvist-Zeilberger algorithm for hyperexponential integrals,
 multivariate (holonomic) summation, formal power series whose
 coefficients are not hypergeometric (`tan`, `exp(x)/(1 - x)`), iterated
-integrals (a definite integral inside another one stays formal), and
-`real_domain` of an expression that is complex for a reason other than a
-root, a logarithm or an inverse trigonometric function (`I*x` is real only
-at 0, and rcas answers with the whole line), and of
+integrals (a definite integral inside another one stays formal), the sign
+of an expression on a box of *several* parameter ranges, which the length
+element in `vector_calculus.rb` still decides by sampling (in one variable
+it is proved from the zeros), and of
 OpenMath the binary encoding and content MathML (Appendix D).
 
 ## 3. Files
@@ -4370,7 +4379,10 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | double-exponential (tanh-sinh) quadrature | precision.rb | [TM74] |
 | erf, Si, Ci, Ei, li and zeta in BigDecimal | precision.rb | the series of [AS64, §5.1, §5.2, §7.1]; Euler-Maclaurin [AS64, §23.2] |
 | worked solutions: the rules named as they are used | steps.rb | [Spi08, ch. 10, 18, 19]; Euclid [Knu98, §4.5.2] |
-| arc length, solids of revolution | analysis.rb | [Spi08, ch. 13] |
+| arc length, solids of revolution (radii as distances; shells on one side of the axis) | analysis.rb | [Spi08, ch. 13] |
+| differentiation under the integral sign, Leibniz's rule for moving bounds | differentiate.rb | [DLMF, §1.5(iv)]; [Spi08, ch. 13] |
+| the principal branch of the logarithm and the strip it cancels an exponential on | functions.rb | [DLMF, §4.2(i), eq. 4.2.5] |
+| a sign change of f'' from the order to which it vanishes | analysis.rb | [Spi08, ch. 11] |
 | line and surface integrals, Green, Stokes and the divergence theorem | vector_calculus.rb | [MT12, ch. 7-8]; [Spi65, ch. 4-5] |
 | LU, QR, Cholesky, diagonalization | decompositions.rb | [Str16, ch. 2, 4, 6] |
 | Jordan normal form from chains of generalized eigenvectors | decompositions.rb | [HK71, ch. 7] |
@@ -4500,6 +4512,10 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   Comp.* 28 (1974), 1153-1157.
 - [Mil76] G. L. Miller, Riemann's hypothesis and tests for primality, *J.
   Comput. System Sci.* 13 (1976), 300-317.
+- [DLMF] F. W. J. Olver et al. (eds.), *NIST Digital Library of
+  Mathematical Functions*, https://dlmf.nist.gov/ (§1.5(iv) for
+  differentiation under the integral sign, §4.2(i) for the principal
+  logarithm).
 - [MT00] G. Marsaglia, W. W. Tsang, A simple method for generating gamma
   variables, *ACM Trans. Math. Software* 26 (2000), 363-372.
 - [MT12] J. E. Marsden, A. Tromba, *Vector Calculus*, 6th ed., W. H.

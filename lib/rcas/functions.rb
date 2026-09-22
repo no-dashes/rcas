@@ -781,12 +781,26 @@ module RCAS
   # stays until `assume(x: RR)` says otherwise. exp(log(u)) is u for every
   # u and needs no such guard.
   module Functions
+    # pi > PI_LOWER, an exact rational, is what lets an exact imaginary part
+    # be decided without ever comparing it against a Float: |im| <= 31/10
+    # proves |im| < pi. The strip's own edge, im = +-pi, is a rational
+    # multiple of pi and is decided exactly by that route instead. Deciding
+    # it by Float missed im = pi*(1 + 10**-20), which rounds to Math::PI and
+    # is outside (22 Sept 2026, from the second review). The strip is the
+    # principal branch's own: [DLMF, §4.2(i), eq. 4.2.5].
+    PI_LOWER = Rational(31, 10)
+
     def self.principal_log?(u)
       return true if ComplexParts.real_valued?(u)
-      v = u.evalf
-      return false unless v.is_a?(Numeric)
-      imaginary = v.is_a?(Complex) ? v.imaginary : 0
-      imaginary.is_a?(Numeric) && !imaginary.is_a?(Complex) && imaginary > -Math::PI && imaginary <= Math::PI
+      imaginary = ComplexParts.im(u)
+      return false unless imaginary.variables.empty?
+      # im = r*pi: -1 < r <= 1, compared as rationals
+      if (r = Trig.pi_multiple(imaginary))
+        return r > -1 && r <= 1
+      end
+      # any other exact real im: |im| <= 31/10 < pi is inside, and nothing
+      # else is decided here
+      imaginary.is_a?(Num) && imaginary.value.real? && imaginary.value.abs <= PI_LOWER
     end
   end
 

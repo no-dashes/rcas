@@ -83,10 +83,14 @@ module RCAS
       end
     end
 
-    # The shape of a critical point from the sign of g on both sides.
-    def sign_change(g, x, point)
+    # The shape of a critical point from the sign of g on both sides. The
+    # step must stay inside the point's own neighbourhood: with a zero of g
+    # at 10**-5 next door, the default 10**-4 samples the far side of it and
+    # reads the wrong sign (22 Sept 2026, from the second review).
+    def sign_change(g, x, point, step: nil)
       centre = numeric(point) or return nil
-      step = 1e-4 * [1.0, centre.abs].max
+      step ||= 1e-4 * [1.0, centre.abs].max
+      return nil unless step.positive?
       left = numeric(g.subs(x => Num.new(centre - step)))
       right = numeric(g.subs(x => Num.new(centre + step)))
       return nil if left.nil? || right.nil?
@@ -106,18 +110,51 @@ module RCAS
       rescue NotImplementedError, ArgumentError
         []
       end
-      third = f.diff(x, 3)
-      # f''' != 0 at a zero of f'' settles it. Where the third derivative
-      # vanishes too - x**4 and x**5 both have f'' = f''' = 0 at the origin
-      # - only the sign of f'' on the two sides decides, and it has to
-      # really change: sign_change answers :saddle when it does *not*, and
-      # accepting that case reported an inflection of x**4 at 0 and none of
-      # x**5 (22 Sept 2026, from a review). An undecided third derivative
-      # goes the same way rather than counting as a change by itself.
-      sort_points(candidates.select { |p| real_point?(p) }.select do |point|
-        value = numeric(third.subs(x => point).simplify)
-        value && value.abs > 1e-12 ? true : %i[minimum maximum].include?(sign_change(second, x, point))
-      end)
+      real = candidates.select { |p| real_point?(p) }
+      sort_points(real.select { |point| inflection_at?(second, x, point, real) })
+    end
+
+    # How far a derivative of g has to be taken before it stops vanishing.
+    MAX_VANISHING = 12
+
+    # f'' changes sign at one of its zeros exactly when it vanishes there to
+    # an *odd* order [Spi08, ch. 11], and that order is the first derivative of f'' that
+    # does not vanish - which `Scalar.zero?` decides exactly for a rational
+    # point of a polynomial. This replaces the old test, which asked whether
+    # f''' was numerically above 10**-12 and fell back to a sign chart: with
+    # f'' = x**2*(x - a) and a = 10**-5 the chart stepped over a and
+    # reported an inflection at 0, and with f'' = x**3*(x - a) the exactly
+    # non-zero f'''(a) = a**3 = 10**-15 was read as zero (22 Sept 2026, the
+    # second review). The chart is now the fallback, on a step that stays
+    # inside the point's own neighbourhood; when even that cannot decide,
+    # the answer is "undecided" and not "no inflection".
+    def inflection_at?(second, x, point, others)
+      order = vanishing_order(second, x, point)
+      return order.odd? if order
+      change = sign_change(second, x, point, step: safe_step(point, others))
+      return change != :saddle if change
+      raise NotImplementedError, "inflections: whether the curvature changes at #{point} is not decided here"
+    end
+
+    # The smallest k >= 1 with g^(k)(point) != 0, or nil when no derivative
+    # up to MAX_VANISHING could be told apart from zero.
+    def vanishing_order(g, x, point, limit = MAX_VANISHING)
+      limit.times do |k|
+        g = g.diff(x)
+        return k + 1 unless Scalar.zero?(g.subs(x => point).simplify)
+      end
+      nil
+    rescue ArgumentError, NotImplementedError
+      nil
+    end
+
+    # Half the way to the nearest other candidate, at most the default step:
+    # no sample may cross a neighbouring zero.
+    def safe_step(point, others)
+      centre = numeric(point) or return nil
+      step = 1e-4 * [1.0, centre.abs].max
+      gaps = others.filter_map { |q| (v = numeric(q)) && (v - centre).abs }.reject { |d| d < 1e-15 }
+      gaps.empty? ? step : [step, gaps.min / 2].min
     end
 
     # { vertical: [...], horizontal: [...], oblique: [...] }; the horizontal
@@ -212,9 +249,52 @@ module RCAS
     def real_domain(f, var = nil)
       f = Expression.lift(f)
       x = variable(f, var)
-      conditions = domain_conditions(f, x)
-      return RealSet.reals if conditions.empty?
-      conditions.map { |c| solved_condition(c, x) }.reduce(:&)
+      parameters, conditions = domain_conditions(f, x).partition { |c| parameter_condition?(c, x) }
+      parameters.each do |c|
+        decided = decide_without_x(c)
+        raise NotImplementedError, "real_domain: whether #{c} holds depends on #{c.lhs.variables.join(', ')}; assume a sign for it" if decided.nil?
+        return RealSet.empty unless decided
+      end
+      set = conditions.empty? ? RealSet.reals : conditions.map { |c| solved_condition(c, x) }.reduce(:&)
+      real = real_locus(f, x)
+      real ? set & real : set
+    end
+
+    # A condition about parameters alone. It cannot be solved for x, so it
+    # is decided instead: with `assume(a < 0)` the logarithm in log(a) + x
+    # has no real value anywhere, and skipping the condition claimed the
+    # whole line (22 Sept 2026, from the second review).
+    def parameter_condition?(c, x) = !c.lhs.variables.empty? && !c.lhs.variables.include?(x.name)
+
+    # true, false, or nil when the assumptions do not settle it.
+    def decide_without_x(c)
+      return nil unless c.rhs.is_a?(Num) && c.rhs.zero?
+      sign = RCAS.sign_of(c.lhs)
+      case c.op
+      when :> then POSITIVE.include?(sign) ? true : (NONPOSITIVE.include?(sign) ? false : nil)
+      when :>= then NONNEGATIVE.include?(sign) ? true : (sign == :negative ? false : nil)
+      when :!= then sign == :zero ? false : (SIGNED.include?(sign) ? true : nil)
+      end
+    end
+
+    POSITIVE = %i[positive].freeze
+    NONPOSITIVE = %i[negative nonpositive zero].freeze
+    NONNEGATIVE = %i[positive nonnegative zero].freeze
+    SIGNED = %i[positive negative].freeze
+
+    # Where an expression carrying i is real at all: its imaginary part has
+    # to vanish, so real_domain(I*x, x) is {0} and not the whole line, and
+    # x + i is real nowhere (22 Sept 2026, from the second review; the first
+    # review had asked for this and the answer then was that it was a gap).
+    # Only an explicit complex number puts the question, so nothing without
+    # one pays for it. => a RealSet, or nil when there is no condition.
+    def real_locus(f, x)
+      return nil unless f.each_node.any? { |n| n.is_a?(Num) && n.value.is_a?(Complex) && !n.value.imaginary.zero? }
+      imaginary = RCAS.assume(x.name => RR) { ComplexParts.im(f) }
+      return nil if Scalar.zero?(imaginary)
+      return RealSet.empty if imaginary.variables.empty? # a constant that is not 0
+      raise NotImplementedError, "real_domain: where #{f} is real is not decided here (its imaginary part is #{imaginary})" unless imaginary.variables == [x.name]
+      points_of(imaginary, x)
     end
 
     # A condition rcas cannot solve is not an empty one: dropping it would
@@ -226,6 +306,15 @@ module RCAS
     rescue NotImplementedError => e
       # cause: nil, or irb prints this backtrace and the one underneath it
       raise NotImplementedError, "real_domain: where #{condition} holds is not decided here (#{e.message})", cause: nil
+    end
+
+    # The zeros of g as a set of single points: the one condition that is an
+    # equation rather than an inequality.
+    def points_of(g, x)
+      roots = Solve.solve(g, x) or raise NotImplementedError, "the zeros of #{g}"
+      RealSet.new(roots.select { |r| real_point?(r) }.map { |r| Interval.point(r) })
+    rescue ArgumentError => e
+      raise NotImplementedError, "real_domain: the zeros of #{g} are not named here (#{e.message})", cause: nil
     end
 
     # The inverse functions whose real argument has to stay in [-1, 1].
@@ -241,7 +330,7 @@ module RCAS
     # 2026, from a review). An argument in a *parameter* is left alone,
     # because the answer would then be a case split on the parameter rather
     # than a domain.
-    def condition_argument?(u, x) = u.variables.include?(x.name) || u.variables.empty?
+    def condition_argument?(u, x) = true
 
     # The conditions behind that domain, so that a caller can name them:
     # one per denominator, even root and logarithm, and two for each
@@ -365,27 +454,86 @@ module RCAS
       Integrate.definite((2 * PI * radius * line).simplify, var, from, to)
     end
 
-    # |u| on the interval, written without the abs where the sign of u is
-    # decided there (VectorCalculus.sign_on samples it), because an abs the
-    # integrator cannot see through would leave the answer formal.
+    # |u| on the interval, written without the abs only where the sign of u
+    # there has been *proved*. Sampling five points said x - 1/10 was
+    # positive on 0..1 and dropped the abs, which understated the surface of
+    # revolution by 2.4% (22 Sept 2026, from the second review); an abs the
+    # integrator can see through is a far smaller price.
     def distance(u, var, from, to)
       u = Expression.lift(u)
-      case VectorCalculus.sign_on(u, [[var, from, to]])
+      case sign_on_interval(u, var, from, to)
       when :positive then u
       when :negative then Neg.new(u).simplify
       else Fn.new(:abs, [u])
       end
     end
 
+    # The sign of u on the interval, or nil. A continuous u keeps one sign
+    # on an interval in which it has no zero, so the zeros are what decides
+    # it: Solve names them, a zero strictly inside means there is no single
+    # sign, and a zero Solve cannot name means rcas does not know. Only then
+    # is the interior sampled, and the samples are a veto rather than the
+    # proof - they can catch a root Solve did not report, never establish
+    # that there is none.
+    def sign_on_interval(u, var, from, to)
+      u = Expression.lift(u)
+      var = Expression.lift(var)
+      return constant_sign(u) unless u.variables.include?(var.name)
+      return nil unless u.variables == [var.name]
+      a = numeric(from)
+      b = numeric(to)
+      return nil if a.nil? || b.nil?
+      lo, hi = [a, b].minmax
+      return nil unless lo < hi
+      roots = begin
+        Solve.solve(u, var, principal: true)
+      rescue StandardError, NotImplementedError
+        nil
+      end
+      return nil if roots.nil? || roots.any? { |r| splits?(r, lo, hi) }
+      signs_on(u, var, lo, hi)
+    end
+
+    # Does this root cut the interval open? A real one strictly inside does;
+    # a root off the real line cannot; a root rcas cannot place might, and
+    # "might" is enough to leave the abs alone.
+    def splits?(root, lo, hi)
+      v = numeric(root)
+      return v > lo && v < hi if v
+      value = Expression.lift(root).evalf
+      !(value.is_a?(Numeric) && value.is_a?(Complex) && !Scalar.zero?(Num.new(value.imaginary)))
+    end
+
+    def constant_sign(u)
+      v = numeric(u)
+      return nil if v.nil? || v.abs < 1e-12
+      v.positive? ? :positive : :negative
+    end
+
+    # The interior read at several points; they must agree, and the middle
+    # one carries the answer.
+    INTERIOR = [1, 2, 3, 4, 5, 6, 7].map { |i| Rational(i, 8) }.freeze
+
+    def signs_on(u, var, lo, hi)
+      signs = INTERIOR.map do |t|
+        v = numeric(u.subs(var => Num.new(lo + (hi - lo) * t)))
+        return nil if v.nil? || v.abs < 1e-12
+        v.positive? ? :positive : :negative
+      end
+      signs.uniq.size == 1 ? signs.first : nil
+    end
+
     # Shells about the y-axis stand on one side of it; a range that crosses
     # the axis would have the two halves sweeping the same shells, which
     # abs(x) would then count twice. Splitting the range is the reader's
-    # call, so rcas says so instead of answering.
+    # call, so rcas says so instead of answering - and says too that the two
+    # halves are a union and not a sum wherever they overlap.
     def one_side!(var, from, to, who)
       a = numeric(from)
       b = numeric(to)
       return if a.nil? || b.nil? || a * b >= 0
-      raise ArgumentError, "#{who}: the range #{var} = #{from}..#{to} crosses the axis of revolution; take the two sides separately"
+      raise ArgumentError, "#{who}: the range #{var} = #{from}..#{to} crosses the axis of revolution; " \
+                           "take the two sides separately - where their shells overlap the two answers are not to be added"
     end
 
     def root(u) = Pow.new(u.simplify, Num.new(Rational(1, 2))).simplify

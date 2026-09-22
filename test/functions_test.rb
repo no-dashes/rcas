@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require_relative "test_helper"
+require "open3"
+require "rbconfig"
 
 # Top-level convenience functions that wrap methods, and interpolation.
 class FunctionsTest < Minitest::Test
@@ -151,7 +153,7 @@ class ComplexPartsAndRoundingTest < Minitest::Test
     assert_includes RCAS::Functions::MATH_NAMES, :sin
     script = 'include RCAS::Functions; puts [floor(2.5), ceil(2.5), round(2.5), bernoulli(3), ' \
              'fibonacci(10), harmonic(3), sin(1.0)].inspect'
-    out = `ruby -I#{File.expand_path('../lib', __dir__)} -rrcas -e #{script.inspect} 2>&1`
+    out, = Open3.capture3(RbConfig.ruby, "-I#{File.expand_path('../lib', __dir__)}", "-rrcas", "-e", script)
     assert_equal "[2, 3, 3, 0, 55, 11/6, 0.8414709848078965]", out.strip
   end
 
@@ -203,5 +205,43 @@ class ComplexPartsAndRoundingTest < Minitest::Test
       assert_equal "1 + 3*x", RCAS.log(RCAS.exp(3 * x + 1)).simplify.to_s
     end
     assert_equal "log(exp(x))", RCAS.log(RCAS.exp(x)).simplify.to_s, "and it is forgotten afterwards"
+  end
+
+  # R2. The strip's edge has to be decided exactly. im(u) = pi*(1 + 10**-20)
+  # is strictly outside it, but rounds to Math::PI as a Float, and the Float
+  # comparison let the cancellation through - an error of 2*pi*i, not a
+  # rounding error (22 Sept 2026, the second review).
+  def test_the_principal_strip_is_decided_exactly
+    eps = Rational(1, 10**20)
+    just_past = (RCAS::I * RCAS::PI * (1 + eps)).simplify
+    refute RCAS::Functions.principal_log?(just_past)
+    assert_equal "log(exp(#{just_past}))", RCAS.log(RCAS.exp(just_past)).simplify.to_s
+    just_inside = (RCAS::I * RCAS::PI * (1 - eps)).simplify
+    assert RCAS::Functions.principal_log?(just_inside)
+    assert_equal just_inside.to_s, RCAS.log(RCAS.exp(just_inside)).simplify.to_s
+    # the two edges themselves: pi is in the strip, -pi is not
+    assert RCAS::Functions.principal_log?((RCAS::I * RCAS::PI).simplify)
+    refute RCAS::Functions.principal_log?((-RCAS::I * RCAS::PI).simplify)
+  end
+
+  # A rational multiple of pi is compared as a rational; any other exact
+  # imaginary part is admitted only below 31/10, which is a proof because
+  # 31/10 < pi.
+  def test_which_imaginary_parts_are_admitted
+    { RCAS::I * RCAS::PI / 2 => true, RCAS::I * RCAS::PI * Rational(999, 1000) => true,
+      RCAS::I * RCAS::PI * Rational(1001, 1000) => false, 2 * RCAS::I * RCAS::PI => false,
+      -2 * RCAS::I * RCAS::PI => false, RCAS::I * 3 => true, RCAS::I * 4 => false,
+      RCAS::I * Rational(31, 10) => true, RCAS::I * Rational(63, 20) => false,
+      RCAS::I * Rational(157, 50) => false, # 3.14 < pi, declined all the same
+      RCAS::Num.new(2) => true, 1 + RCAS::I => true }.each do |u, want|
+      got = RCAS::Functions.principal_log?(RCAS::Expression.lift(u).simplify)
+      assert_equal want, got, "principal_log?(#{u})"
+    end
+    # 31/10 < pi < 63/20: everything admitted by that bound really is
+    # inside the strip, and 157/50 shows the price - a value below pi that
+    # is declined, which keeps a node rather than moving a value.
+    assert_operator Rational(31, 10), :<, Math::PI
+    assert_operator Rational(63, 20), :>, Math::PI
+    assert_operator Rational(157, 50), :<, Math::PI
   end
 end

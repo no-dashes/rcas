@@ -915,6 +915,84 @@ after this work; those 45 are Ruby 4 plus the environment (blocked ports,
 spaces in the project path, missing optional chat dependencies), not
 mathematics.
 
+## The second review (22 Sept 2026): proofs, not samples
+
+A peer review of `95f0a1c` found twelve counterexamples in six groups. All
+of them reproduced, all are fixed. The theme is one sentence: **an exact
+symbolic rewriting may not rest on finitely many samples or on an
+uncertified float.** Four of the six were exactly that mistake.
+
+- **A radius is not decided by sampling.** `Analysis.distance` asked
+  `VectorCalculus.sign_on`, which reads five points; on 0..1 they all found
+  `x - 1/10` positive and the abs came off, understating the surface of
+  revolution by 2.4%. `Analysis.sign_on_interval` proves it instead: a
+  continuous u keeps one sign on an interval in which it has no zero, so
+  `Solve` names the zeros, one strictly inside means there is no single
+  sign, and one it cannot name means rcas does not know. The interior
+  samples stayed on as a *veto* - they can catch a root Solve did not
+  report, never establish that there is none. `VectorCalculus.root_factor`
+  goes through the same test in one variable (`proven_sign`); on a box of
+  several ranges it still samples, and the manual lists that as a gap.
+  Keeping the `abs` costs little, because `Integrate`'s piecewise rule
+  integrates it when the argument is linear.
+- **The principal strip is decided exactly.** `Functions.principal_log?`
+  compared `im(u).evalf` against `Math::PI`, and `pi*(1 + 10**-20)` rounds
+  to exactly that float: `log(exp(u))` was cut for a u outside the strip,
+  an error of `2*pi*i` decided by a rounding error. It now takes `im(u)`
+  with `ComplexParts`, compares a rational multiple of pi as a *rational*,
+  and otherwise admits only `|im| <= PI_LOWER = 31/10`, which is a proof
+  because 31/10 < pi. A value between 31/10 and pi is declined though it is
+  inside - a node kept, never a value moved.
+- **An inflection is decided by the order of vanishing.** The test asked
+  whether `f'''(p)` was numerically above `1e-12` and otherwise sampled
+  `f''` at `+-1e-4`. With `f'' = x**2*(x - a)` and `a = 10**-5` the sample
+  stepped over `a` and reported an inflection at 0; with
+  `f'' = x**3*(x - a)` the exactly non-zero `f'''(a) = 10**-15` read as
+  zero and both real inflections were lost. `vanishing_order` now takes
+  derivatives of f'' until `Scalar.zero?` says one of them is not zero:
+  the order is exact for a rational point of a polynomial, and **odd order
+  = sign change** is the whole rule. The chart is the fallback, on a step
+  bounded by the distance to the nearest other candidate (`safe_step`), and
+  when even that cannot decide, `inflection_at?` *raises* - `discuss`
+  turns that into "not determined", which is the third answer the review
+  asked the API to be able to give.
+- **An event is a statement, not an operator and a bound.**
+  `probability` took the direct cdf route whenever the left side was a
+  bare variable, without asking whether the *right* side was free of it,
+  so `P(X <= X)` was `X`. `direct_event?` now tests both sides. And the
+  infinity handling that `cdf_at` added in the first round only ever ran on
+  the solved route, so `P(X <= oo)` was `oo` - not a probability at all;
+  every public form goes through `cdf_at`/`pdf_at` now.
+- **A parameter condition is decided or refused, never skipped.**
+  `real_domain(log(a) + x, x)` answered with the whole line even under
+  `assume(a < 0)`. `decide_without_x` reads `RCAS.sign_of`; what the
+  assumptions do not settle raises `NotImplementedError` naming the
+  parameter, which is the policy `solved_condition` already had. And
+  `real_locus` closes the gap the first review had named and the first
+  round had only documented: an expression carrying `i` is real only where
+  `im(f)` vanishes, so `real_domain(I*x, x)` is `{0}` and `x + i` is empty.
+
+Three smaller things the same review was right about:
+
+- `integral(f(x), x, 0, x)` is **not** ambiguous. The bound name is not the
+  free one, and renaming gives `integral(f(t), t, 0, x)`, whose derivative
+  is `f(x)`. `Differentiate.integral` computes it instead of refusing.
+- Differentiating under the integral sign is applied, not verified. The
+  hypotheses ([DLMF, 1.5(iv)]) belong to the caller, and the comment says
+  so rather than implying the rule is unconditional.
+- The shell refusal now says that two overlapping halves are a union and
+  not a sum.
+
+Finally, **the suite must run from a path containing a space.**
+`Open3.capture3(BIN, ...)` with one string goes through the shell, which
+split the project path and failed nine tests for the reviewer; the
+interpreter and the script are separate arguments now
+(`RbConfig.ruby, BIN`). `AppServerTest` skips when a sandbox refuses to
+bind a loopback port, and the .app icon is asserted only when `sips` and
+`iconutil` can actually be *run* - both were failures nobody could act on.
+Check this the way it was found: copy the tree into a directory whose name
+has a space in it and run `ruby -S rake` there.
+
 ## Traps we have hit (so you do not hit them again)
 
 - `RCAS::IRB::AutoSymbol` turns an undefined `name(args)` with Expression,
@@ -1108,7 +1186,12 @@ tests; see "Branch cuts", "Differentiating under the integral sign" and
 "Radii, projections, events, curvature" above. Its own suggestion for
 further work is worth keeping: check *invariants* rather than transcripts -
 a projection onto the whole space is the identity, substitution and
-simplification commute, an area is not negative.
+simplification commute, an area is not negative. A third (PEER_REVIEW.md,
+the same day) then showed that four of those fixes still rested on samples
+or on a float and found twelve more counterexamples: "The second review"
+above is what came of it, and its lesson is the one to keep - **a
+non-negative answer is a necessary invariant, not a sufficient one**, and
+an exact rewriting needs a proof, not agreement at five points.
 
 A code review (19 Sept 2026, an artifact the user brought in) found four
 wrong answers, four inputs that never returned, and a list of rough edges;
