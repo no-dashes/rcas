@@ -32,7 +32,8 @@ module RCAS
       return exact.zero? if exact
       v = begin
         a.evalf
-      rescue StandardError
+      rescue StandardError => rescued
+        RCAS.guard!(rescued)
         return false
       end
       return false unless v.is_a?(Numeric) && v.abs < 1e-12
@@ -53,7 +54,8 @@ module RCAS
         return true if cancelled.is_a?(Num) && cancelled.value.zero?
       end
       trigonometric_zero?(expanded)
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       false
     end
 
@@ -67,7 +69,8 @@ module RCAS
       return true if rewritten.is_a?(Num) && rewritten.value.zero?
       reduced = Trigonometry.trigsimp(rewritten).simplify
       reduced.is_a?(Num) && reduced.value.zero?
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       false
     end
 

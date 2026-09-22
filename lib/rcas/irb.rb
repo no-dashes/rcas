@@ -30,7 +30,7 @@ module RCAS
 
       def binding_for_session
         ::IRB.CurrentContext&.workspace&.binding
-      rescue StandardError
+      rescue StandardError # user code: a NameError is an answer here
         nil
       end
     end

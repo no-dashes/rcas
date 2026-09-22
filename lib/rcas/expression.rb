@@ -3,6 +3,20 @@
 require "set"
 
 module RCAS
+  # The broad rescues in the mathematical code turn a failure into "not
+  # decided here", which is right for the mathematics and wrong for a bug:
+  # the third review's fault injection had 31 NoMethodErrors quietly turned
+  # into unevaluated answers, and a caller's Timeout::Error (a
+  # StandardError) swallowed. Every such rescue calls guard! first. A
+  # timeout always goes through; with RCAS_STRICT=1 (the test task sets it)
+  # so do NoMethodError and NameError, which are never mathematics.
+  def self.strict? = ENV["RCAS_STRICT"] == "1"
+
+  def self.guard!(error)
+    raise error if defined?(::Timeout::Error) && error.is_a?(::Timeout::Error)
+    raise error if strict? && error.is_a?(NameError) # NoMethodError too
+  end
+
   # Base class of every node in an expression tree.
   #
   # Trees are immutable and built faithfully from the Ruby expression that
@@ -296,7 +310,8 @@ module RCAS
       precise = Precision.evalf(self, Precision::FLOAT_DIGITS, bindings)
       v = precise.to_f
       v.finite? ? v : nil
-    rescue StandardError, NotImplementedError
+    rescue StandardError, NotImplementedError => rescued
+      RCAS.guard!(rescued)
       nil
     end
 
@@ -307,7 +322,8 @@ module RCAS
       again = Expression.floatify_tree(value).call
       again = again.value if again.is_a?(Num)
       again.is_a?(Numeric) ? again : nil
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       nil
     end
 

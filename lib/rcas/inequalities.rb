@@ -475,7 +475,8 @@ module RCAS
       v = e.evalf
       v = v.value if v.is_a?(Num)
       v.is_a?(Numeric) && v.real? && v.to_f.finite? ? v.to_f : nil
-    rescue StandardError, Math::DomainError
+    rescue StandardError, Math::DomainError => rescued
+      RCAS.guard!(rescued)
       nil
     end
 

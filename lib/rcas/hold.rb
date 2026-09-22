@@ -81,7 +81,7 @@ module RCAS
       def evaluate(node)
         source = begin
           node.source
-        rescue StandardError
+        rescue StandardError # user code: a NameError is an answer here
           nil
         end
         raise ArgumentError, "hold: can't keep a #{node.type} node (line #{node.first_lineno})" if source.nil?

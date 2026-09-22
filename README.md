@@ -169,7 +169,11 @@ $ ruby -S rake
 ```
 
 runs the whole suite, including `test/manual_test.rb`, which executes every
-`rcas>` transcript in MANUAL.md and compares the printed results.
+`rcas>` transcript in MANUAL.md and compares the printed results. The task
+sets `RCAS_STRICT=1`: where the library catches an error to answer "not
+decided here", a `NoMethodError` or `NameError` is re-raised instead,
+because that is a bug and not mathematics. Set it yourself when running a
+single file (`RCAS_STRICT=1 ruby -Ilib -Itest test/solve_test.rb`).
 
 ## Documentation
 

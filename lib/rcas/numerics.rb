@@ -52,7 +52,8 @@ module RCAS
           result = result.value if result.is_a?(Num)
         end
         result.is_a?(Numeric) && !result.is_a?(Complex) && result.finite? ? result.to_f : nil
-      rescue StandardError
+      rescue StandardError => rescued
+        RCAS.guard!(rescued)
         nil
       end
     end
@@ -293,7 +294,8 @@ module RCAS
         sides.each do |side|
           limit = begin
             Limits.limit((var - p) * f, var, p, side)
-          rescue StandardError
+          rescue StandardError => rescued
+            RCAS.guard!(rescued)
             nil
           end
           next if limit.nil? || limit.is_a?(Limit)
@@ -349,7 +351,8 @@ module RCAS
       end
       poles = begin
         Integrate.singular_points(f, var, Num.new(Rational(a)), Num.new(Rational(b)))
-      rescue StandardError, NotImplementedError
+      rescue StandardError, NotImplementedError => rescued
+        RCAS.guard!(rescued)
         nil
       end
       found.concat(poles) if poles
@@ -358,7 +361,8 @@ module RCAS
         v && v > a && v < b ? [v, p] : nil
       end
       values.uniq { |v, _| v }.sort_by(&:first).first(MAX_BREAKPOINTS).map(&:last)
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       []
     end
 
@@ -367,7 +371,8 @@ module RCAS
       roots = Solve.solve(u, var)
       return [] unless roots.is_a?(Array)
       roots.flat_map { |r| r.is_a?(ImageSet) ? (r.between(a, b, limit: MAX_BREAKPOINTS) || []) : [r] }
-    rescue StandardError, NotImplementedError
+    rescue StandardError, NotImplementedError => rescued
+      RCAS.guard!(rescued)
       []
     end
 
@@ -554,7 +559,8 @@ module RCAS
       # give nintegrate the infinity back, or it takes the finite route
       value = nintegrate(expr.integrand, expr.var, infinite_bound(expr.from), infinite_bound(expr.to))
       value.is_a?(Numeric) && value.finite? ? Num.new(value) : expr
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       expr
     end
 

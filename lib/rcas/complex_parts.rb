@@ -46,7 +46,8 @@ module RCAS
     def precise_float(e)
       v = Precision.evalf(e, 20).to_f
       v.finite? ? v : nil
-    rescue StandardError, NotImplementedError
+    rescue StandardError, NotImplementedError => rescued
+      RCAS.guard!(rescued)
       v = e.evalf
       v.is_a?(Numeric) && !v.is_a?(Complex) ? v.to_f : nil
     end
@@ -91,7 +92,8 @@ module RCAS
       return nil if angle.is_a?(Fn)
       scale = Simplify.rebuild_product(coeff, real.to_h)
       [(scale * Fn.new(:log, [Fn.new(:abs, [u]).simplify])).simplify, (scale * angle).simplify]
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       nil
     end
 

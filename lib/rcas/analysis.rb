@@ -28,7 +28,8 @@ module RCAS
     def numeric(value)
       v = Expression.lift(value).evalf
       v.is_a?(Numeric) && !v.is_a?(Complex) && v.finite? ? v.to_f : nil
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       nil
     end
 
@@ -77,7 +78,8 @@ module RCAS
       Inequalities.real?(point)
     rescue NotImplementedError
       true # not knowing is not knowing it is complex
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       true
     end
 
@@ -180,7 +182,8 @@ module RCAS
     def vanishing_limit(g, x)
       coefficients = Solve.polynomial_coefficients(g.expand, x)
       coefficients ? [coefficients.size, 1].max : MAX_VANISHING
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       MAX_VANISHING
     end
 
@@ -248,7 +251,8 @@ module RCAS
     def runs_away?(f, x, point)
       probe = point.is_a?(ImageSet) ? point.at(0) : point
       Limits.infinite?(Limits.limit(f, x, probe, :right)) || Limits.infinite?(Limits.limit(f, x, probe, :left))
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       false
     end
 
@@ -608,7 +612,8 @@ module RCAS
       return false unless g.variables.include?(var.name)
       roots = begin
         Solve.solve(g, var)
-      rescue StandardError, NotImplementedError
+      rescue StandardError, NotImplementedError => rescued
+        RCAS.guard!(rescued)
         return nil
       end
       return nil unless roots.is_a?(Array) # an identity or a set: no single sign to read

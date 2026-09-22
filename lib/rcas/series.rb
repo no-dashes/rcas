@@ -522,7 +522,8 @@ module RCAS
       return unless KINKED.include?(f.name)
       value = begin
         Expression.lift(c).evalf
-      rescue StandardError
+      rescue StandardError => rescued
+        RCAS.guard!(rescued)
         nil
       end
       value = value.value if value.is_a?(Num)

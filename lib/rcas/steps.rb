@@ -450,7 +450,8 @@ module RCAS
       candidates(expr, var).each do |u|
         derivative = begin
           u.diff(var).simplify
-        rescue StandardError
+        rescue StandardError => rescued
+          RCAS.guard!(rescued)
           next
         end
         next if Scalar.zero?(derivative)
@@ -460,7 +461,8 @@ module RCAS
         t = Var.new(:_u)
         replaced = begin
           Div.new(expr, derivative).subs(u => t).cancel.simplify
-        rescue StandardError
+        rescue StandardError => rescued
+          RCAS.guard!(rescued)
           next
         end
         next if replaced.variables.include?(var.name) || !replaced.variables.include?(t.name)
@@ -605,7 +607,8 @@ module RCAS
       equations = Coefficients.coeffs((identity - numerator).expand, var)
       solution = begin
         Solve.linear_system(equations.map(&:simplify), unknowns).first
-      rescue StandardError
+      rescue StandardError => rescued
+        RCAS.guard!(rescued)
         nil
       end
       if solution

@@ -253,7 +253,8 @@ module RCAS
       sign = RCAS.assume(**xs.to_h { |x| [x.name, RR] }) { RCAS.sign_of(d) }
       return true if %i[positive negative].include?(sign)
       !ranges.empty? && %i[positive negative].include?(proven_sign(d, ranges))
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       false
     end
 

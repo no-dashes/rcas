@@ -751,7 +751,8 @@ module RCAS
       slope = begin
         derivative = Expression.lift(expr).diff(var)
         ->(point) { walk(derivative, work, bindings.merge(var.name => point), state) }
-      rescue StandardError
+      rescue StandardError => rescued
+        RCAS.guard!(rescued)
         nil
       end
       x = BigDecimal(guess, FLOAT_DIGITS)

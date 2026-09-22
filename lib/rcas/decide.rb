@@ -61,7 +61,8 @@ module RCAS
       if complex?(e)
         re, im = begin
           ComplexParts.parts(e)
-        rescue StandardError
+        rescue StandardError => rescued
+          RCAS.guard!(rescued)
           [nil, nil]
         end
         if re && !parts_symbolic?(re) && !parts_symbolic?(im)
@@ -97,7 +98,8 @@ module RCAS
 
     def exact_value(e)
       Algebraic.exact(e)
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       nil
     end
 
@@ -116,7 +118,8 @@ module RCAS
           Precision.evalf(e, digits, certify: false)
         rescue ZeroDivisionError
           return nil
-        rescue StandardError, NotImplementedError
+        rescue StandardError, NotImplementedError => rescued
+          RCAS.guard!(rescued)
           return :unsupported
         end
         return :unsupported if value.digits < digits
@@ -157,7 +160,8 @@ module RCAS
       nodes.each do |node|
         v = begin
           node.evalf
-        rescue StandardError, Math::DomainError
+        rescue StandardError, Math::DomainError => rescued
+          RCAS.guard!(rescued)
           nil
         end
         v = v.value if v.is_a?(Num)

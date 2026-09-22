@@ -124,7 +124,7 @@ module RCAS
       holding << n
       begin
         Hold.source(source, bindings[n]) || source
-      rescue StandardError, ScriptError
+      rescue StandardError, ScriptError # user code: a NameError is an answer here
         source
       ensure
         holding.delete(n)

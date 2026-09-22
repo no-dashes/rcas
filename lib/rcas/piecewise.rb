@@ -112,7 +112,8 @@ module RCAS
       when Interval, RealSet then "#{LaTeX.print(var(pw))} \\in #{cond.to_latex}"
       else LaTeX.of(cond)
       end
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       "\\text{#{cond}}"
     end
 
@@ -299,7 +300,8 @@ module RCAS
       value = (before - after).subs(x => point).simplify
       return Num.new(0) if value.each_node.any? { |n| (n.is_a?(Num) && n.value.is_a?(Float) && !n.value.finite?) || n.is_a?(Integral) }
       value
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       Num.new(0)
     end
 
@@ -387,7 +389,8 @@ module RCAS
       return true if a == b
       return false if a.is_a?(Limit) || b.is_a?(Limit)
       Scalar.zero?(Expression.lift(a) - Expression.lift(b))
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       false
     end
 

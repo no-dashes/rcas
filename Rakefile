@@ -2,6 +2,10 @@
 
 require "rake/testtask"
 
+# Strict mode: a NoMethodError or NameError inside a broad rescue is a bug,
+# and the suite should see it rather than an unevaluated answer (RCAS.guard!).
+ENV["RCAS_STRICT"] ||= "1"
+
 Rake::TestTask.new(:test) do |t|
   t.libs << "lib" << "test"
   t.test_files = FileList["test/**/*_test.rb"]

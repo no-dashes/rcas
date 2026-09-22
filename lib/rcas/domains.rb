@@ -157,7 +157,8 @@ module RCAS
       reduced = obj.simplify
       return include?(reduced.value) if reduced.is_a?(Num)
       reduced != obj && (d2 = reduced.domain) ? d2.subset?(self) : false
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       false
     end
 

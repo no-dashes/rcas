@@ -72,7 +72,8 @@ module RCAS
       Analysis.denominators(f, k).any? do |d|
         roots = begin
           Solve.solve(d, k)
-        rescue StandardError, NotImplementedError
+        rescue StandardError, NotImplementedError => rescued
+          RCAS.guard!(rescued)
           next false
         end
         next false unless roots.is_a?(Array)
@@ -270,7 +271,8 @@ module RCAS
     def tidy(value)
       return value if value.is_a?(Num) || value.variables.empty?
       value.factor.simplify
-    rescue StandardError, NotImplementedError
+    rescue StandardError, NotImplementedError => rescued
+      RCAS.guard!(rescued)
       value
     end
 
@@ -381,7 +383,8 @@ module RCAS
         return false unless value.is_a?(Numeric) && value.abs < 1e-9 * [1, expr.variables.size].max
       end
       true
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       false
     end
 

@@ -277,7 +277,8 @@ module RCAS
     def cancelled(expr)
       value = expr.cancel
       value.is_a?(Expression) ? value : expr
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       expr
     end
 
@@ -470,7 +471,8 @@ module RCAS
       extra = merge_gammas(factors, k, m, binomials)
       extra *= clear_contents(factors)
       shorter(collect_powers((Simplify.rebuild_product(coeff, factors) * extra).simplify, k))
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       term
     end
 
@@ -479,7 +481,8 @@ module RCAS
     def shorter(term)
       cancelled = term.cancel
       cancelled.to_s.length < term.to_s.length ? cancelled : term
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       term
     end
 

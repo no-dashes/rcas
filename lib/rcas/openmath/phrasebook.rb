@@ -270,7 +270,8 @@ module RCAS
           return nil unless index.is_a?(Int)
           begin
             RootOf.new(decode(poly).to_poly, index.value)
-          rescue StandardError
+          rescue StandardError => rescued
+            RCAS.guard!(rescued)
             nil
           end
         },

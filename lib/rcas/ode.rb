@@ -159,7 +159,8 @@ module RCAS
       return nil if solution.nil?
       zeros = ws.to_h { |w| [w, Num.new(0)] }
       ws.map { |w| Expression.lift(solution[w] || Num.new(0)).subs(zeros).simplify }
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       nil
     end
 
@@ -296,7 +297,8 @@ module RCAS
     def evalf_or_nil(e)
       v = e.evalf
       v.is_a?(Numeric) && !v.is_a?(Complex) ? v : nil
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       nil
     end
 

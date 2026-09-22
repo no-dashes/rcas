@@ -329,6 +329,11 @@ MANUAL.md                   the user manual (usage); README.md (setup only); ass
 ## Workflow
 
 - Run everything: `ruby -S rake` (plain `rake` may hit a shell alias).
+  The task sets `RCAS_STRICT=1`, and every broad `rescue StandardError` in
+  the mathematical code calls `RCAS.guard!` first, which then re-raises
+  NoMethodError/NameError (and always a caller's Timeout::Error). A new
+  broad rescue must do the same; one that evaluates *user* code (hold,
+  results, irb) is the exception and says so.
   Seeds: `ruby -S rake TESTOPTS="--seed=1"`. Individual file:
   `ruby -Ilib -Itest test/solve_test.rb`.
 - **MANUAL.md is executable documentation.** `test/manual_test.rb` runs

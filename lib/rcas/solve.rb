@@ -132,7 +132,8 @@ module RCAS
       found = Expression.lift(value).evalf
       found = found.value if found.is_a?(Num)
       found.is_a?(Numeric) && found.real? ? found.to_f : nil
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       nil
     end
   end
@@ -215,7 +216,8 @@ module RCAS
     def rational_identity?(f, x)
       return false unless f.each_node.any? { |n| n.is_a?(Div) || (n.is_a?(Pow) && n.exponent.is_a?(Num) && Simplify.negative?(n.exponent.value)) }
       Scalar.zero?(f.cancel)
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       false
     end
 
@@ -277,7 +279,8 @@ module RCAS
       k = set.parameters.first
       step = begin
         Coefficients.coeff(set.expr, k, 1)
-      rescue StandardError
+      rescue StandardError => rescued
+        RCAS.guard!(rescued)
         return [set]
       end
       offset = (set.expr - step * k).simplify
@@ -324,7 +327,8 @@ module RCAS
       m = z.parameters.first
       zstep = begin
         Coefficients.coeff(z.expr, m, 1)
-      rescue StandardError
+      rescue StandardError => rescued
+        RCAS.guard!(rescued)
         return []
       end
       zoffset = (z.expr - zstep * m).simplify
@@ -364,7 +368,8 @@ module RCAS
       return nil unless f.each_node.any? { |n| n.is_a?(Fn) && Trigonometry::SQUARES.key?(n.name) }
       reduced = Trigonometry.trigsimp(f).simplify
       reduced.variables.empty? ? reduced : nil
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       nil
     end
 
@@ -394,7 +399,8 @@ module RCAS
       k = root.parameters.first
       step = begin
         Coefficients.coeff(root.expr, k, 1)
-      rescue StandardError
+      rescue StandardError => rescued
+        RCAS.guard!(rescued)
         nil
       end
       return nil if step.nil? || Scalar.zero?(step)
@@ -438,8 +444,9 @@ module RCAS
     def ordered(roots)
       keys = roots.each_with_index.to_h do |root, i|
         value = begin
-          root.evalf
-        rescue StandardError
+          root.is_a?(Expression) ? root.evalf : nil # a family or a set has no value
+        rescue StandardError => rescued
+          RCAS.guard!(rescued)
           nil
         end
         value = value.value if value.is_a?(Num)
@@ -479,7 +486,8 @@ module RCAS
       k = set.parameters.first
       slope = begin
         Coefficients.coeff(set.expr, k, 1)
-      rescue StandardError
+      rescue StandardError => rescued
+        RCAS.guard!(rescued)
         nil
       end
       return [set] if slope.nil?
@@ -1019,7 +1027,8 @@ module RCAS
         conditions.all? do |condition|
           sign = begin
             Decide.sign(Expression.lift(condition.lhs - condition.rhs).subs(x => root))
-          rescue StandardError
+          rescue StandardError => rescued
+            RCAS.guard!(rescued)
             nil
           end
           next true if sign.nil?
@@ -1096,7 +1105,8 @@ module RCAS
       return false unless value.is_a?(Num)
       number = Complex(value.value)
       number.real.zero? && number.imaginary.abs == 1
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       false
     end
 
@@ -1188,7 +1198,8 @@ module RCAS
           f.subs(x => r).simplify
         rescue ZeroDivisionError
           next false
-        rescue StandardError
+        rescue StandardError => rescued
+          RCAS.guard!(rescued)
           next true
         end
         Integrate.defined_value?(residual) && Decide.zero?(residual) != false

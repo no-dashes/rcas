@@ -170,7 +170,8 @@ module RCAS
       value = expr.evalf(var.name => m)
       value = value.value if value.is_a?(Num)
       value.is_a?(Numeric) && value.real? && value.finite? ? value.to_f : nil
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       nil
     end
 
@@ -194,7 +195,8 @@ module RCAS
       re, im = ComplexParts.parts(x)
       sign = Decide.sign((re**2 + im**2 - 1).simplify)
       sign == :negative || sign == :zero
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       false
     end
 

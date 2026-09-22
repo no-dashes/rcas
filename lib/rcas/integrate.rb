@@ -115,7 +115,8 @@ module RCAS
       kinks.each do |kink|
         roots = begin
           Solve.solve(kink.args.first, x)
-        rescue StandardError, NotImplementedError
+        rescue StandardError, NotImplementedError => rescued
+          RCAS.guard!(rescued)
           return nil
         end
         return nil unless roots.is_a?(Array)
@@ -190,7 +191,8 @@ module RCAS
       candidates.uniq.each do |d|
         roots = begin
           Solve.solve(d, x)
-        rescue StandardError, NotImplementedError
+        rescue StandardError, NotImplementedError => rescued
+          RCAS.guard!(rescued)
           nil
         end
         roots = nil unless roots.nil? || roots.is_a?(Array)
@@ -238,7 +240,8 @@ module RCAS
       above = RCAS.sign_of((Num.new(Rational(hi)) - m).simplify) if hi.finite?
       return false if %i[negative nonpositive].include?(below) || %i[negative nonpositive].include?(above)
       true
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       true
     end
 
@@ -275,7 +278,8 @@ module RCAS
       candidates.uniq.each do |d|
         roots = begin
           Solve.solve(d, x, all: true)
-        rescue StandardError, NotImplementedError
+        rescue StandardError, NotImplementedError => rescued
+          RCAS.guard!(rescued)
           nil
         end
         # Unsolvable: a break only matters if it is in there, and a cos
@@ -379,7 +383,8 @@ module RCAS
       sides = %i[left right].map { |dir| Limits.limit(f, x, point, dir) }
       return :pole if sides.any? { |v| Limits.infinite?(v) }
       sides.any? { |v| v.is_a?(Limit) } ? :unknown : :finite
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       :unknown
     end
 
@@ -388,7 +393,8 @@ module RCAS
       value = value.value if value.is_a?(Num)
       return nil unless value.is_a?(Numeric) && value.real?
       value.to_f
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       nil
     end
 
@@ -665,7 +671,8 @@ module RCAS
       root = (-b / a).simplify
       value = begin
         r.subs(x => root).simplify
-      rescue StandardError
+      rescue StandardError => rescued
+        RCAS.guard!(rescued)
         return nil
       end
       return nil if value.each_node.any? { |n| n.is_a?(Num) && !n.value.finite? } || depends?(value, x)
@@ -860,7 +867,8 @@ module RCAS
     def positive?(e)
       v = e.evalf
       v.is_a?(Numeric) && v.real? && v > 1e-12
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       false
     end
 

@@ -150,7 +150,8 @@ module RCAS
         next false unless rows.flatten.all? { |v| v.is_a?(Num) }
         Scalar.zero?(Elimination.det(rows)) == false
       end
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       true # nothing to evaluate: the count stands, as before
     end
 
