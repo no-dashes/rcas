@@ -45,10 +45,44 @@ module RCAS
       k = Expression.lift(k)
       from = Expression.lift(from)
       to = Expression.lift(to)
+      whole_bounds!(from, to)
+      return UNDEFINED if pole_in_range?(f, k, from, to)
       hypergeometric_form(summed(f, k, from, to), to)
     end
 
+    # A sum runs over integers: sum(k, k, 1.5, 3) was 5.625, which is
+    # Faulhaber at a bound that is not one (third review, S11).
+    def whole_bounds!(from, to)
+      [from, to].each do |b|
+        next unless b.is_a?(Num) && b.value.is_a?(Numeric) && b.value.real?
+        next if b.value == b.value.round
+        raise ArgumentError, "sum: the bounds must be integers, got #{b}"
+      end
+    end
+
+    # A term with no value inside the range leaves the sum without one:
+    # sum(1/(k*(k + 1)), k, -1, 3) telescoped straight across k = -1 and
+    # k = 0 to -5/4 (third review, S4, the discrete twin of the poles an
+    # integral is split at). Only integer poles count, and only against
+    # numeric bounds; a symbolic upper bound is left to the rest.
+    def pole_in_range?(f, k, from, to)
+      return false unless from.is_a?(Num) && from.value.is_a?(Integer)
+      upper = Limits.infinite?(to) ? Float::INFINITY : (to.is_a?(Num) && to.value.is_a?(Integer) ? to.value : nil)
+      return false if upper.nil?
+      Analysis.denominators(f, k).any? do |d|
+        roots = begin
+          Solve.solve(d, k)
+        rescue StandardError, NotImplementedError
+          next false
+        end
+        next false unless roots.is_a?(Array)
+        roots.any? { |r| r.is_a?(Num) && r.value.is_a?(Integer) && r.value >= from.value && r.value <= upper }
+      end
+    end
+
     def summed(f, k, from, to)
+      # 0 + 0 + ... is 0, however many terms: f*(oo - from + 1) said undefined
+      return Num.new(0) if f.is_a?(Num) && f.value.zero?
       return (f * (to - from + 1)).simplify unless f.variables.include?(k.name)
 
       coeffs = Solve.polynomial_coefficients(f, k)
@@ -353,11 +387,16 @@ module RCAS
 
     # lim_{k -> oo} g(k) for the antidifference: geometric factors with
     # |ratio| < 1 vanish, anything else goes to Limits.limit.
+    # The geometric factors of a term are taken together: 2**k/3**k is
+    # (2/3)**k and converges, while each factor alone said "2**k diverges"
+    # (third review, S3).
     def tail_limit(g, k)
       constant, table = Expand.table(g)
       kept = {}
       table.each do |factors, coeff|
         drop = false
+        ratio = 1r
+        numeric_ratio = true
         factors.each do |base, exp|
           if base.is_a?(Fn) && %i[factorial gamma].include?(base.name) && base.variables.include?(k.name) && exp.is_a?(Integer)
             raise ArgumentError, "the sum diverges" if exp.positive?
@@ -366,14 +405,22 @@ module RCAS
           end
           next unless exp.is_a?(Expression) && exp.variables.include?(k.name) && !base.variables.include?(k.name)
           slope = exp.diff(k)
-          next unless slope.is_a?(Num)
-          unless base.is_a?(Num)
-            drop = true # symbolic ratio: convergence (|ratio| < 1) is assumed
+          next unless slope.is_a?(Num) && (slope.value.is_a?(Integer) || slope.value.is_a?(Rational))
+          magnitude =
+            if base.is_a?(Num) && base.value.is_a?(Numeric) then base.value.abs
+            elsif base == Simplify.exp_base then Math::E
+            end
+          if magnitude.nil?
+            numeric_ratio = false # symbolic ratio: convergence (|ratio| < 1) is assumed
             next
           end
-          magnitude = base.value.abs**(slope.value.positive? ? 1 : -1)
-          raise ArgumentError, "the sum diverges" if magnitude > 1
-          drop = true if magnitude < 1
+          ratio *= magnitude.is_a?(Float) ? magnitude**slope.value : Rational(magnitude)**slope.value
+        end
+        if !drop && numeric_ratio && ratio != 1
+          raise ArgumentError, "the sum diverges" if ratio > 1
+          drop = true
+        elsif !numeric_ratio
+          drop = true
         end
         kept[factors] = coeff unless drop
       end

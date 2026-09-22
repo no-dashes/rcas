@@ -64,9 +64,14 @@ module RCAS
       bottom = integer(k)
       return Fn.new(:qbinomial, [n, k, q]) if top.nil? || bottom.nil? || top.negative? || top > MAX_FOLD
       return Num.new(0) if bottom.negative? || bottom > top
-      numerator = ((top - bottom + 1)..top).reduce(Num.new(1)) { |acc, i| acc * (1 - q**i) }
-      denominator = (1..bottom).reduce(Num.new(1)) { |acc, i| acc * (1 - q**i) }
-      (numerator / denominator).cancel.expand
+      # the quotient is a polynomial: cancel it in a variable of its own and
+      # put q in afterwards, so that q = 1 and q = -1 give its values rather
+      # than 0/0 (third review, S10)
+      t = q.is_a?(Var) ? q : Var.new(:_qb)
+      numerator = ((top - bottom + 1)..top).reduce(Num.new(1)) { |acc, i| acc * (1 - t**i) }
+      denominator = (1..bottom).reduce(Num.new(1)) { |acc, i| acc * (1 - t**i) }
+      polynomial = (numerator / denominator).cancel.expand
+      t.equal?(q) ? polynomial : polynomial.subs(t => q).expand
     end
 
     # Constant folding, called by Functions.fold when Simplify meets one of

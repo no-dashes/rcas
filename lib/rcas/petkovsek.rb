@@ -32,6 +32,10 @@ module RCAS
       coeffs = coeffs.map { |c| Expression.lift(c).expand }
       r = coeffs.size - 1
       return [] if r < 1 || Scalar.zero?(coeffs.first) || Scalar.zero?(coeffs.last)
+      # first order: u(n + 1)/u(n) = -p0/p1 is the ratio, hypergeometric by
+      # definition - no search, and no divisor list to run out of (the
+      # search answered [] for (n + 1)...(n + 7): third review, S7)
+      return [(Simplify.negate(coeffs[0]) / coeffs[1]).cancel] if r == 1
       ring = ring_for(coeffs, n) or return []
       last = ring.call(coeffs.last.subs(n => n + r - 1).expand)
       found = []
@@ -44,6 +48,8 @@ module RCAS
         end
       end
       found
+    rescue TooMany
+      raise
     rescue DomainError, NotImplementedError, ZeroDivisionError
       []
     end
@@ -127,12 +133,16 @@ module RCAS
       list = [poly.ring.one]
       factorization.factors.each do |factor, multiplicity|
         list = list.flat_map { |d| (0..multiplicity).map { |i| d * factor**i } }
-        return [poly.ring.one] if list.size > MAX_DIVISORS
+        # searching only the divisor 1 would be "no solution" for "too many
+        # to try": that is a refusal
+        raise TooMany, "hyper: #{poly} has more than #{MAX_DIVISORS} monic divisors to search" if list.size > MAX_DIVISORS
       end
       list.map(&:monic).uniq { |d| d.to_expr.to_s }
-    rescue NotImplementedError, DomainError
+    rescue DomainError
       [poly.ring.one]
     end
+
+    class TooMany < NotImplementedError; end
 
     # The first index from which the product of the ratio is finite and
     # non-zero: past every non-negative integer root of numerator and

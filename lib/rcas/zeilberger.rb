@@ -69,17 +69,30 @@ module RCAS
     # not. So sum_{k=0}^{n} F(n, k) is put into the recurrence for the first
     # few n, and only a residue that is demonstrably non-zero counts against
     # it: a check that cannot be carried out says nothing either way.
+    #
+    # The sum is taken over the term's natural range: 0..2*n for
+    # binomial(2*n, k), where 0..n cut it off and refused a true recurrence
+    # (third review, S9).
     def boundary_terms?(found, n, k)
       term = found.term
       order = found.coefficients.size - 1
+      upper = natural_upper(term, n, k)
       (0..(order + 2)).any? do |i|
-        values = (0..order).map { |j| value_at(term, n, k, Num.new(0), n, i + j) }
+        values = (0..order).map { |j| value_at(term, n, k, Num.new(0), upper, i + j) }
         next false if values.any?(&:nil?)
         total = values.each_with_index.reduce(Num.new(0)) do |acc, (value, j)|
           acc + found.coefficients[j].subs(n => i) * value
         end
         nonzero?(total)
       end
+    end
+
+    # The upper end past which the term vanishes: the top of its binomial
+    # coefficients binomial(top, k) when they agree on one, n otherwise.
+    def natural_upper(term, n, k)
+      tops = term.each_node.select { |e| e.is_a?(Fn) && e.name == :binomial && e.args.size == 2 && e.args.last == k }
+                 .map { |e| e.args.first }.uniq
+      tops.size == 1 && tops.first.variables.include?(n.name) ? tops.first : n
     end
 
     # Is this expression definitely not zero? Exactly where it can be

@@ -33,8 +33,19 @@ module RCAS
         else
           constant_coefficient_solution(coeffs, forcing, n, constants)
         end
-      general = initial_values(general, init, n, constants) unless init.empty?
+      unless init.empty?
+        early = init.keys.map { |i| Expression.lift(i) }.select { |i| i.is_a?(Num) && i.value < @start.to_i }
+        unless early.empty?
+          # the closed form holds from the first index past the singularities
+          # of the coefficients; before it, it says nothing (u(0) = 1 for
+          # u(n + 1) = (n - 3)*u(n) made the constant 1/(-4)!: S6)
+          raise NotImplementedError, "rsolve: the closed form holds from #{n} = #{@start} on, so it cannot take the initial value at #{early.map(&:to_s).join(', ')}"
+        end
+        general = initial_values(general, init, n, constants)
+      end
       Equation.new(Fn.new(name, [n]), general)
+    ensure
+      @start = nil
     end
 
     # Petkovsek's `Hyper`: the hypergeometric solutions of a homogeneous
@@ -110,16 +121,37 @@ module RCAS
         raise NotImplementedError, "rsolve: polynomial coefficients with the forcing term #{forcing} are not supported"
       end
       order = coeffs.size - 1
-      found = Petkovsek.solutions(coeffs, n)
+      ratios = Petkovsek.ratios(coeffs, n)
+      found = ratios.map { |ratio| Petkovsek.term(ratio, n) }
+      @start = ratios.map { |ratio| Petkovsek.start_index(ratio, n) }.max
       raise NotImplementedError, "rsolve: no hypergeometric solutions (see hyper)" if found.empty?
       if found.size < order
         raise NotImplementedError, "rsolve: only #{found.size} of #{order} solutions are hypergeometric: " \
                                    "#{found.map(&:to_s).join(', ')} (see hyper)"
       end
+      # as many solutions as the order is not yet a basis: they have to be
+      # independent, which their Casoratian says (third review, S5)
+      unless independent?(found, n, order, @start.to_i)
+        raise NotImplementedError, "rsolve: the hypergeometric solutions #{found.map(&:to_s).join(', ')} do not span the solutions (see hyper)"
+      end
       found.map do |t|
         constants << Var.new(:"C#{constants.size + 1}")
         constants.last * t
       end.reduce(:+).simplify
+    end
+
+    # det[t_j(m + i)] != 0 at some integer m past the start: then the terms
+    # are independent. Exact at every point, so a zero there is a zero.
+    def independent?(terms, n, order, start)
+      (start..start + 4).any? do |m|
+        rows = (0...order).map do |i|
+          terms.map { |t| t.subs(n => Num.new(m + i)).simplify }
+        end
+        next false unless rows.flatten.all? { |v| v.is_a?(Num) }
+        Scalar.zero?(Elimination.det(rows)) == false
+      end
+    rescue StandardError
+      true # nothing to evaluate: the count stands, as before
     end
 
     def sequence_name(u)
