@@ -50,4 +50,14 @@ class ThirdReviewAdversarialTest < Minitest::Test
     norm = RCAS::VectorCalculus.norm([v,0], [[@x,0,1],[@y,0,1]])
     assert_equal n(Rational(1,10)), norm.subs(x:0,y:0).simplify
   end
+
+  def test_symbolic_cdf_bound_respects_support_after_substitution
+    d=RCAS.Uniform(0,1)
+    symbolic=d.probability(@x<=@a)
+    assert_equal d.probability(@x<=2), symbolic.subs(a:2).simplify
+  end
+
+  def test_empty_range_has_zero_probability
+    assert_equal n(0), RCAS.Uniform(0,1).probability(Rational(3,4)..Rational(1,4))
+  end
 end

@@ -93,17 +93,20 @@ module RCAS
     end
 
     # P(|T| >= |t|), P(T <= t) or P(T >= t) for a symmetric or one-sided statistic.
+    # The upper tail is the distribution's survival function, not 1 - cdf:
+    # z = 10 has p = 1.5e-23, and 1 - cdf said 0 (third review, P-11).
     def tail(distribution, statistic, alternative, symmetric: true)
       t = float(statistic, "p value")
       case alternative
       when :less then float(distribution.cdf(t), "p value")
-      when :greater then 1.0 - float(distribution.cdf(t), "p value")
+      when :greater then float(distribution.survival(t), "p value")
       else
         if symmetric
-          2.0 * (1.0 - float(distribution.cdf(t.abs), "p value"))
+          [2.0 * float(distribution.survival(t.abs), "p value"), 1.0].min
         else
           lower = float(distribution.cdf(t), "p value")
-          [2.0 * [lower, 1.0 - lower].min, 1.0].min
+          upper = float(distribution.survival(t), "p value")
+          [2.0 * [lower, upper].min, 1.0].min
         end
       end
     end
@@ -184,6 +187,7 @@ module RCAS
     # probabilities, uniform by default); a list of rows is a test of
     # independence. +df:+ lowers the degrees of freedom for estimated parameters.
     def chisquare_test(observed, expected: nil, df: nil, alternative: :greater)
+      check_alternative(alternative)
       rows = observed.is_a?(Matrix) ? observed.to_a : observed
       return independence_test(rows) if rows.is_a?(Array) && rows.first.is_a?(Array)
       goodness_of_fit(rows, expected, df, alternative)
@@ -198,7 +202,17 @@ module RCAS
                    e = Statistics.data(expected, "chisquare_test")
                    raise ArgumentError, "chisquare_test: #{e.size} expected values for #{counts.size} observed ones" unless e.size == counts.size
                    sum = e.reduce(:+).simplify
-                   Scalar.zero?((sum - 1).simplify) ? e.map { |v| (v * total).simplify } : e
+                   # probabilities sum to 1 and counts to the number observed;
+                   # anything else is an input error, as R has it (P-16)
+                   if Scalar.zero?((sum - 1).simplify) || close?(sum, 1)
+                     e.map { |v| (v * total).simplify }
+                   elsif Scalar.zero?((sum - total).simplify) || close?(sum, total)
+                     e
+                   elsif e.all? { |v| float(v, "chisquare_test") <= 1 }
+                     raise ArgumentError, "chisquare_test: the expected probabilities sum to #{sum}, not 1"
+                   else
+                     raise ArgumentError, "chisquare_test: the expected counts sum to #{sum}, not to the #{total} observed"
+                   end
                  end
       expected.each { |v| raise ArgumentError, "chisquare_test: expected counts must be positive" if float(v, "chisquare_test") <= 0 }
       statistic = counts.zip(expected).map { |o, e| ((o - e)**2 / e).expand }.reduce(:+).simplify
@@ -207,6 +221,12 @@ module RCAS
       TestResult.new(name: "chi-square goodness of fit", statistic_name: "X^2", statistic: statistic,
                      distribution: distribution, pvalue: Num.new(tail(distribution, statistic, alternative, symmetric: false)),
                      alternative: alternative, parameters: { df: degrees })
+    end
+
+    def close?(a, b)
+      x = float(a, "chisquare_test")
+      y = float(b, "chisquare_test")
+      (x - y).abs <= 1e-9 * [1.0, y.abs].max
     end
 
     def independence_test(rows)
@@ -258,18 +278,40 @@ module RCAS
       n = trials.is_a?(Num) ? trials.value : trials
       raise ArgumentError, "binomial_test: 0 <= successes <= trials is needed" unless k.is_a?(Integer) && n.is_a?(Integer) && k >= 0 && k <= n
       distribution = Distributions::Binomial.new(n, p)
-      probabilities = (0..n).map { |j| distribution.pdf(j) }
+      probabilities = exact_binomial_pmf(n, p) || (0..n).map { |j| distribution.pdf(j) }
       pvalue =
         case alternative
         when :less then probabilities[0..k].reduce(:+)
         when :greater then probabilities[k..].reduce(:+)
         else
-          observed = float(probabilities[k], "binomial_test")
-          probabilities.select { |q| float(q, "binomial_test") <= observed * (1 + 1e-9) }.reduce(:+)
+          # "no more probable than the observed one", compared exactly when
+          # the probabilities are exact: as Floats, 2**-1100 underflowed and
+          # every outcome was as improbable as k = 0 (third review, P-12)
+          observed = probabilities[k]
+          exact = probabilities.all? { |q| q.is_a?(Rational) || q.is_a?(Integer) }
+          if exact
+            probabilities.select { |q| q <= observed }.sum
+          else
+            reference = float(observed, "binomial_test")
+            probabilities.select { |q| float(q, "binomial_test") <= reference * (1 + 1e-9) }.reduce(:+)
+          end
         end
       TestResult.new(name: "exact binomial test", statistic_name: "k", statistic: Num.new(k), distribution: distribution,
-                     pvalue: pvalue.simplify, alternative: alternative,
+                     pvalue: Expression.lift(pvalue).simplify, alternative: alternative,
                      estimate: Num.new(Simplify.normalize_number(Rational(k, n))), parameters: { n: n })
+    end
+
+    # The pmf of Binomial(n, p) for a rational p as Rationals, the
+    # binomial coefficients built up one from the next; nil otherwise.
+    def exact_binomial_pmf(n, p)
+      q = p.is_a?(Num) ? p.value : p
+      return nil unless q.is_a?(Rational) || q.is_a?(Integer)
+      q = Rational(q)
+      coefficient = 1
+      (0..n).map do |j|
+        coefficient = coefficient * (n - j + 1) / j unless j.zero?
+        coefficient * q**j * (1 - q)**(n - j)
+      end
     end
 
     # ---- confidence intervals -------------------------------------------------------------

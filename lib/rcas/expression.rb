@@ -91,7 +91,10 @@ module RCAS
     def hash = @hash || [self.class, *children].hash
 
     # Total order used for canonical sorting; see Simplify.sort_key.
+    # A plain number is lifted, so that -oo..0 is a Range (Range.new asks
+    # <=> and gave up on nil: third review, P-14).
     def <=>(other)
+      other = Expression.lift(other) if other.is_a?(Numeric)
       return nil unless other.is_a?(Expression)
       Simplify.sort_key(self) <=> Simplify.sort_key(other)
     end
@@ -269,7 +272,25 @@ module RCAS
       folded = value.is_a?(Expression) && value.constant? ? refloat(value) : nil
       value = folded if folded
       value = Numerics.resolve(value) if value.is_a?(Expression) && value.each_node.any? { |n| n.is_a?(Integral) }
-      value.is_a?(Num) ? value.value : value
+      value = value.value if value.is_a?(Num)
+      overflowed?(value) ? (wide(bindings) || value) : value
+    end
+
+    # Every leaf a Float first is fast and fails on large parts: 200**200
+    # and 200! are Infinity, so 200!/199! came out NaN and the Poisson(200)
+    # pmf at 200 Infinity (third review, P-4). When that happens the value
+    # is taken again in arbitrary precision, which carries the exponents.
+    def overflowed?(value)
+      value.is_a?(Float) ? !value.finite? : (value.is_a?(Complex) && !(value.real.to_f.finite? && value.imaginary.to_f.finite?))
+    end
+
+    def wide(bindings)
+      return nil unless (variables - bindings.keys.map(&:to_sym)).empty?
+      precise = Precision.evalf(self, Precision::FLOAT_DIGITS, bindings)
+      v = precise.to_f
+      v.finite? ? v : nil
+    rescue StandardError, NotImplementedError
+      nil
     end
 
     # Folding can put an exact constant back after the floats went in:

@@ -14,7 +14,8 @@ class DistributionsTest < Minitest::Test
     assert_in_delta 1.959963984540054, n.quantile(0.975).value, 1e-9
     assert_equal "0", n.quantile(Rational(1, 2)).to_s
     assert_in_delta 0.6826894921370861, n.probability(-1..1).evalf, 1e-12
-    assert_equal "1/2 - erf(2**(1/2)/2)/2", n.probability(X > 1).to_s
+    # the upper tail as erfc, whose digits survive far out (third review, P-11)
+    assert_equal "erfc(2**(1/2)/2)/2", n.probability(X > 1).to_s
     assert_equal ["0", "1", "0", "3"], [n.mean, n.variance, n.skewness, n.kurtosis].map(&:to_s)
     assert_equal ["1", "0", "3"], [n.moment(2), n.moment(3), n.moment(4)].map(&:to_s)
     assert_equal "1", n.expectation(X**2, X).to_s, "the Gaussian integral is done exactly"
@@ -29,10 +30,13 @@ class DistributionsTest < Minitest::Test
     u = RCAS.Uniform(0, 1)
     assert_equal ["1/2", "1/12", "1/3", "1/3", "3/4"], [u.mean, u.variance, u.expectation(X**2, X), u.moment(2), u.quantile(Rational(3, 4))].map(&:to_s)
     assert_equal ["0", "1/2", "1"], [u.pdf(2), u.cdf(Rational(1, 2)), u.cdf(3)].map(&:to_s)
-    assert_equal "1/(-a + b)", RCAS.Uniform(:a, :b).pdf(X).to_s
+    # a symbolic point carries the support with it, so that substituting
+    # later cannot leave it (third review, T6)
+    assert_equal "piecewise(x < a => 0, x <= b => 1/(-a + b), :else => 0)", RCAS.Uniform(:a, :b).pdf(X).to_s
     e = RCAS.Exponential(2)
-    assert_equal ["1/2", "1/4", "log(2)/2", "1 - exp(-2*x)"], [e.mean, e.variance, e.quantile(Rational(1, 2)), e.cdf(X)].map(&:to_s)
-    assert_equal "1 - exp(-(l*x))", RCAS.Exponential(:l).cdf(X).to_s
+    assert_equal ["1/2", "1/4", "log(2)/2", "piecewise(x < 0 => 0, :else => 1 - exp(-2*x))"], [e.mean, e.variance, e.quantile(Rational(1, 2)), e.cdf(X)].map(&:to_s)
+    assert_equal "piecewise(x < 0 => 0, :else => 1 - exp(-(l*x)))", RCAS.Exponential(:l).cdf(X).to_s
+    RCAS.assume(X > 0) { assert_equal "1 - exp(-2*x)", e.cdf(X).to_s, "on the support the formula is all there is" }
     assert_equal ["1/l", "2/l**2"], [RCAS.Exponential(:l).moment(1), RCAS.Exponential(:l).moment(2)].map(&:to_s)
     assert_in_delta Math.exp(-2), e.probability(X > 1).evalf, 1e-12
     assert_equal "0", e.pdf(-1).to_s

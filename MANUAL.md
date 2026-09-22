@@ -3414,8 +3414,17 @@ support, formal when rcas cannot do it), `moment(k)` and `sample(n)`. An
 inequality is solved for the random variable before its probability is
 taken, so `probability(-x <= 0)` is `probability(x >= 0)` and not
 `probability(x <= 0)`. The
-normal CDF is written with the error function `erf`; its quantile is
-numeric except at `1/2`.
+normal CDF is written with the error function `erf`, and a tail beyond
+the mean with its complement `erfc`, which keeps its digits where `erf` is
+1 to working precision; the quantile is numeric except at `1/2`.
+
+A density or CDF at a symbolic point keeps the support in it as a
+`piecewise`, because the formula alone is wrong off the support and a
+later substitution would not know: `Uniform(0, 1).probability(x <= a)` at
+`a = 2` is 1, not 2. Once the point is known to lie on the support (an
+assumption does it), the formula is all that is left. A moment that does
+not exist is not a number either: the Cauchy distribution `StudentT(1)` has
+no mean (`undefined`), and its variance is `oo`.
 
 A parameter that is a number is checked when the distribution is built -
 `Binomial(10, 1.5)` and `Normal(0, 0)` are refused rather than answering
@@ -3429,7 +3438,7 @@ rcas> X = Normal(0, 1)
 rcas> [X.pdf(x), X.cdf(x)]
 => [2**(1/2)*exp(-x**2/2)/(2*pi**(1/2)), 1/2 + erf(2**(1/2)*x/2)/2]
 rcas> [X.probability(x > 1), X.probability(-1..1).evalf, X.quantile(0.975)]
-=> [1/2 - erf(2**(1/2)/2)/2, 0.6826894921370861, 1.9599639845400536]
+=> [erfc(2**(1/2)/2)/2, 0.6826894921370861, 1.9599639845400532]
 rcas> Normal(mu, sigma).pdf(x)
 => 2**(1/2)*exp(-(-mu + x)**2/(2*sigma**2))/(2*pi**(1/2)*sigma)
 rcas> B = Binomial(10, 1/2r)
@@ -3445,7 +3454,7 @@ rcas> D = DiscreteUniform(1, 6)
 rcas> [D.mean, D.variance, D.probability(x >= 5), D.sample(5, random: Random.new(1))]
 => [7/2, 35/12, 1/3, [3, 5, 1, 2, 1]]
 rcas> [Uniform(0, 1).expectation(x**2, x), Exponential(2).quantile(1/2r), Exponential(rate).cdf(x)]
-=> [1/3, log(2)/2, 1 - exp(-(rate*x))]
+=> [1/3, log(2)/2, piecewise(x < 0 => 0, :else => 1 - exp(-(rate*x)))]
 rcas> [Normal(0, 1).expectation(x**2, x), Normal(mu, sigma).moment(2), Exponential(rate).moment(2)]
 => [1, mu**2 + sigma**2, 2/rate**2]
 ```
@@ -3458,9 +3467,9 @@ are numeric.
 
 ```
 rcas> [StudentT(1).cdf(1), ChiSquare(2).cdf(x), StudentT(10).quantile(0.975)]
-=> [3/4, 1 - exp(-x/2), 2.228138851986274]
+=> [3/4, 1 - exp(-x/2), 2.228138851986275]
 rcas> [ChiSquare(3).quantile(0.95), FRatio(3, 10).quantile(0.95), Normal(0, 1).quantile(0.975)]
-=> [7.814727903251181, 3.708264819046842, 1.9599639845400536]
+=> [7.8147279032511765, 3.7082648190468426, 1.9599639845400532]
 rcas> ChiSquare(k).pdf(x)
 => 2**(-k/2)*x**(-1 + k/2)*exp(-x/2)/gamma(k/2)
 rcas> StudentT(nu).pdf(t)
@@ -3532,9 +3541,9 @@ rcas> confidence_interval([5.1, 4.9, 5.6, 5.2, 5.0])
 rcas> confidence_interval([5.1, 4.9, 5.6, 5.2, 5.0], sigma: 0.3)
 => [4.897043237827026, 5.422956762172975]
 rcas> confidence_interval([5.1, 4.9, 5.6, 5.2, 5.0], parameter: :stdev)
-=> [0.1618768601247171, 0.7763919787687242]
+=> [0.16187686012471716, 0.7763919787687236]
 rcas> proportion_interval(41, 100)
-=> [0.3186731302113651, 0.5079856994658921]
+=> [0.3186731302113652, 0.507985699465892]
 ```
 
 Not implemented: analysis of variance, non-parametric tests (Wilcoxon,
