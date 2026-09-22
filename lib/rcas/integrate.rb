@@ -453,7 +453,7 @@ module RCAS
       end
 
       result = begin
-        table(f, x) || IntegralFunctions.antiderivative(f, x) || piecewise(f, x, depth) || rational(f, x) || substitution(f, x, depth) ||
+        table(f, x) || trig_product(f, x, depth) || IntegralFunctions.antiderivative(f, x) || piecewise(f, x, depth) || rational(f, x) || substitution(f, x, depth) ||
           by_parts(f, x, depth) || Substitutions.radical(f, x, depth) || Substitutions.gaussian(f, x) || heurisch(f, x) ||
           Substitutions.root_of_linear(f, x, depth) || Substitutions.root_of_ratio(f, x, depth) ||
           Substitutions.exponential(f, x, depth) ||
@@ -463,6 +463,34 @@ module RCAS
         nil
       end
       result&.simplify
+    end
+
+    # sin(u)*cos(v), cos(u)*cos(v), sin(u)*sin(v) with u, v linear in x:
+    # the product-to-sum formulas [AS64, 4.3.31-33] turn them into a sum the
+    # table integrates term by term. With a parameter in the arguments
+    # (sin(a*x)*cos(x)) the heuristic below needed a linear system in a and
+    # twelve seconds; this is the rule a course teaches (third review,
+    # section 5). nil for anything else.
+    def trig_product(f, x, depth)
+      _, factors = Simplify.factorize(f)
+      trig = factors.select { |base, _| base.is_a?(Fn) && %i[sin cos].include?(base.name) && depends?(base, x) }
+      return nil unless trig.size == 2 && trig.values.all?(1) && factors.size == 2
+      (first, _), (second, _) = trig.to_a
+      u = first.args.first
+      v = second.args.first
+      return nil unless linear(u, x) && linear(v, x)
+      coeff, = Simplify.factorize(f)
+      plus = (u + v).simplify
+      minus = (u - v).simplify
+      sum =
+        case [first.name, second.name]
+        when %i[sin cos] then Fn.new(:sin, [plus]) + Fn.new(:sin, [minus])
+        when %i[cos sin] then Fn.new(:sin, [plus]) - Fn.new(:sin, [minus])
+        when %i[cos cos] then Fn.new(:cos, [minus]) + Fn.new(:cos, [plus])
+        when %i[sin sin] then Fn.new(:cos, [minus]) - Fn.new(:cos, [plus])
+        end
+      r = attempt((Num.new(coeff) * sum / 2).simplify, x, depth + 1)
+      r && complete?(r) ? r : nil
     end
 
     # Cancel with each radical held as an atom, so that for example
@@ -1085,12 +1113,13 @@ module RCAS
         keys = (unknown_tables.flat_map(&:keys) + ftab.keys).uniq
         rows = keys.map { |k| unknown_tables.map { |t| t[k] || Num.new(0) } }
         rhs = keys.map { |k| ftab[k] || Num.new(0) }
-        matrix = MatrixSpace.new(QQ, rows.size, unknown_tables.size).unchecked(rows)
-        solution = begin
+        solution = parametric_solve(rows, rhs) || begin
+          matrix = MatrixSpace.new(QQ, rows.size, unknown_tables.size).unchecked(rows)
           matrix.solve(rhs)
         rescue DomainError
           return nil
         end
+        return nil if solution == :inconsistent
 
         result = Num.new(0)
         monomials.each_with_index do |m, i|
@@ -1107,6 +1136,23 @@ module RCAS
       end
 
       private
+
+      # With a parameter in the entries (sin(a*x)*cos(x)) the elimination
+      # has to cancel as it goes, or the entries swell: Elimination.rref
+      # ran for minutes on this one (third review, section 5). The
+      # cancelling solver of the q-side does it; nil hands a numeric system
+      # back to the matrix.
+      def parametric_solve(rows, rhs)
+        return nil if (rows.flatten + rhs).all? { |e| Expression.lift(e).variables.empty? }
+        unknowns = rows.first.each_index.map { |i| Var.new(:"_heurisch#{i}") }
+        conditions = rows.zip(rhs).map do |row, b|
+          row.each_with_index.reduce(Simplify.negate(Expression.lift(b))) { |acc, (c, i)| acc + Expression.lift(c) * unknowns[i] }.simplify
+        end
+        found = QSummation.linear_solve(conditions, unknowns)
+        return :inconsistent if found.nil?
+        free = unknowns.to_h { |u| [u, Num.new(0)] }
+        unknowns.map { |u| Expression.lift(found[u] || Num.new(0)).subs(free).simplify }
+      end
 
       def x = @x
       def depends?(e) = Integrate.depends?(e, x)

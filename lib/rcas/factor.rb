@@ -102,7 +102,15 @@ module RCAS
     end
 
     # Yun's squarefree decomposition with respect to x. f primitive in x.
+    #
+    # Most polynomials are squarefree, and saying so does not need the
+    # multivariate gcd, whose primitive remainder sequence swells: a quartic
+    # in four variables ran for minutes (third review, section 5). With the
+    # other variables set to integers where the leading coefficient does not
+    # vanish, a common factor of f and f' would survive into the images; a
+    # constant gcd of the images proves there is none.
     def squarefree(f, x)
+      return [[f, 1]] if evidently_squarefree?(f, x)
       out = []
       fp = f.derivative(x)
       g = PolyGCD.gcd_zz(f, fp)
@@ -117,6 +125,24 @@ module RCAS
         i += 1
       end
       out
+    end
+
+    def evidently_squarefree?(f, x)
+      others = f.ring.vars - [x]
+      degree = f.degree(x)
+      lead = f.leading_coefficient_in(x).to_expr
+      expr = f.to_expr
+      random = Random.new(20260923)
+      3.times do
+        point = others.to_h { |v| [Var.new(v), Num.new(random.rand(2..97))] }
+        next if Scalar.zero?(lead.subs(point).simplify)
+        image = Solve.polynomial_coefficients(expr.subs(point).expand, Var.new(x)) or return false
+        values = image.map { |c| c.is_a?(Num) && c.value.is_a?(Integer) ? c.value : (return false) }
+        dense = Dense.trim(values)
+        return false unless Dense.deg(dense) == degree
+        return Dense.deg(Dense.gcd(dense, Dense.derivative(dense))).zero?
+      end
+      false
     end
 
     def factor_univariate(f)

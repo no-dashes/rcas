@@ -289,7 +289,11 @@ module RCAS
         n.times { |i| rows << Array.new(size) { |j| (j - i).between?(0, m) ? ac[m - (j - i)] : Num.new(0) } }
         m.times { |i| rows << Array.new(size) { |j| (j - i).between?(0, n) ? bc[n - (j - i)] : Num.new(0) } }
         numeric = rows.flatten.all? { |e| Scalar.numeric?(e) }
-        det = numeric ? Elimination.det(rows) : Elimination.cofactor_det(rows).expand
+        # polynomial entries by evaluation and interpolation (PolyMatrix):
+        # the cofactor expansion is factorial in the size, and the dispersion
+        # of a degree-five term (a 10 x 10 Sylvester matrix) took two minutes
+        # (third review, section 5)
+        det = numeric ? Elimination.det(rows) : (PolyMatrix.det(rows) || Elimination.cofactor_det(rows).expand)
         Polynomial.from_expr(a.ring, det)
       end
     end

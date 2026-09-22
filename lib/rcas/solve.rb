@@ -691,6 +691,7 @@ module RCAS
       expr = coeffs.each_with_index.reduce(Num.new(0)) { |acc, (c, k)| acc + c * x**k }
       vars = expr.variables
       return nil unless vars.include?(:_x)
+      return nil if coeffs.size > 3 && irreducible_image?(coeffs)
       poly = Polynomial.from_expr(QQ[*vars], expr)
       factors = poly.factor.factors.map(&:first).reject { |g| g.degree(:_x).zero? }
       return nil if factors.size <= 1 && factors.first&.degree(:_x).to_i >= 2
@@ -704,6 +705,30 @@ module RCAS
       end
     rescue DomainError
       nil
+    end
+
+    # A factor of f in x, of any degree, survives setting the parameters to
+    # integers where the leading coefficient does not vanish, so an
+    # irreducible image of the full degree proves f has no factor to find:
+    # a quartic with three parameters sat in Kronecker's substitution for
+    # half a minute before the same refusal (third review, section 5).
+    def irreducible_image?(coeffs)
+      params = coeffs.flat_map(&:variables).uniq
+      return false if params.empty?
+      random = Random.new(20260923)
+      2.times do
+        point = params.to_h { |v| [Var.new(v), Num.new(random.rand(2..97))] }
+        values = coeffs.map { |c| c.subs(point).simplify }
+        next unless values.all? { |v| v.is_a?(Num) && (v.value.is_a?(Integer) || v.value.is_a?(Rational)) }
+        next if values.last.value.zero?
+        image = Polynomial.new(QQ[:_x], values.each_with_index.reject { |v, _| v.value.zero? }.to_h { |v, k| [[k], v] })
+        found = image.factor.factors
+        return true if found.size == 1 && found.first.last == 1 && found.first.first.degree == coeffs.size - 1
+      end
+      false
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
+      false
     end
 
     def quadratic(a, b, c)

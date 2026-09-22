@@ -85,6 +85,17 @@ class PerformanceTest < Minitest::Test
     timed(3, "a direct sum of 3000 symbolic terms") { RCAS.sum(RCAS.sin(k), k, 1, 3000) }
     v = timed(3, "nintegrate(sin(1000*x), x: 0..1)") { RCAS.nintegrate(RCAS.sin(1000 * x), x: 0..1) }
     assert_in_delta (1 - Math.cos(1000)) / 1000, v, 1e-12
+    a = RCAS::Var.new(:a)
+    timed(3, "integrate(sin(a*x)*cos(x), x)") { RCAS.integrate(RCAS.sin(a * x) * RCAS.cos(x), x) }
+    timed(3, "a sum whose dispersion needs a 10 x 10 resultant") { RCAS.sum((k**5 + 3 * k) / RCAS.factorial(k + 7), k, 0, RCAS::Var.new(:n)) }
+    b = RCAS::Var.new(:b)
+    c = RCAS::Var.new(:c)
+    RCAS.assume(a: RCAS::RR, b: RCAS::RR, c: RCAS::RR) do
+      m = RCAS.matrix([[a, 1, 0, b], [1, b, c, 0], [0, c, a, 1], [b, 0, 1, c]])
+      timed(3, "refusing the eigenvalues of a 4 x 4 matrix with three parameters") do
+        assert_raises(NotImplementedError) { m.eigenvalues }
+      end
+    end
   end
 
   def test_long_alternating_sums_keep_their_signs
