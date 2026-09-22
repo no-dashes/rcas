@@ -470,55 +470,93 @@ module RCAS
 
     # The sign of u on the interval, or nil. A continuous u keeps one sign
     # on an interval in which it has no zero, so the zeros are what decides
-    # it: Solve names them, a zero strictly inside means there is no single
-    # sign, and a zero Solve cannot name means rcas does not know. Only then
-    # is the interior sampled, and the samples are a veto rather than the
-    # proof - they can catch a root Solve did not report, never establish
-    # that there is none.
+    # it - *all* of them: Solve names them completely (a family is counted
+    # out member by member; cos(16*pi*x) has sixteen zeros in 1..2, of which
+    # the principal ones showed none), a zero strictly inside means there is
+    # no single sign, and a zero rcas cannot place means it does not know.
+    # "No zero" is only half the argument: u has to be continuous there, so
+    # a pole, a place where u stops being real, or a function with jumps
+    # inside the interval also leaves the question open (1/((x - 1/100)*
+    # (x - 1/50)) has no zero on 0..1 and is negative between its poles;
+    # third review, T1). The interior samples are decided exactly and are a
+    # veto, never the proof.
     def sign_on_interval(u, var, from, to)
       u = Expression.lift(u)
       var = Expression.lift(var)
       return constant_sign(u) unless u.variables.include?(var.name)
       return nil unless u.variables == [var.name]
-      a = numeric(from)
-      b = numeric(to)
-      return nil if a.nil? || b.nil?
-      lo, hi = [a, b].minmax
-      return nil unless lo < hi
-      roots = begin
-        Solve.solve(u, var, principal: true)
-      rescue StandardError, NotImplementedError
-        nil
-      end
-      return nil if roots.nil? || roots.any? { |r| splits?(r, lo, hi) }
+      lo, hi = [Expression.lift(from), Expression.lift(to)].sort { |p, q| Inequalities.compare(p, q) || 0 }
+      return nil unless Inequalities.compare(lo, hi) == -1 && numeric(lo) && numeric(hi)
+      return nil if u.each_node.any? { |n| n.is_a?(Piecewise) || (n.is_a?(Fn) && JUMPS.include?(n.name)) }
+      breaks = [u] + denominators(u, var) + domain_conditions(u, var).map { |c| (c.lhs - c.rhs).simplify }
+      return nil if breaks.any? { |g| zero_inside?(g, var, lo, hi) != false }
       signs_on(u, var, lo, hi)
     end
 
-    # Does this root cut the interval open? A real one strictly inside does;
-    # a root off the real line cannot; a root rcas cannot place might, and
-    # "might" is enough to leave the abs alone.
-    def splits?(root, lo, hi)
-      v = numeric(root)
-      return v > lo && v < hi if v
-      value = Expression.lift(root).evalf
-      !(value.is_a?(Numeric) && value.is_a?(Complex) && !Scalar.zero?(Num.new(value.imaginary)))
+    # Functions that jump: no zero does not mean one sign across them.
+    JUMPS = %i[floor ceil round sign].freeze
+
+    # true when g has a zero strictly between lo and hi, false when it is
+    # shown to have none, nil when that cannot be told.
+    def zero_inside?(g, var, lo, hi)
+      return false unless g.variables.include?(var.name)
+      roots = begin
+        Solve.solve(g, var)
+      rescue StandardError, NotImplementedError
+        return nil
+      end
+      return nil unless roots.is_a?(Array) # an identity or a set: no single sign to read
+      found = false
+      roots.each do |r|
+        members =
+          if r.is_a?(ImageSet)
+            r.between(numeric(lo) - 1, numeric(hi) + 1) or return nil
+          else
+            [r]
+          end
+        members.each do |m|
+          inside = strictly_between?(m, lo, hi)
+          return nil if inside.nil?
+          found ||= inside
+        end
+      end
+      found
     end
+
+    # Is the real point m strictly inside (lo, hi)? false for a point off
+    # the real line, nil when that or its position cannot be decided.
+    def strictly_between?(m, lo, hi)
+      real = begin
+        Inequalities.real?(m)
+      rescue NotImplementedError
+        return nil
+      end
+      return false unless real
+      m = Inequalities.real_part(m)
+      below = Inequalities.compare(lo, m)
+      above = Inequalities.compare(m, hi)
+      return nil if below.nil? || above.nil?
+      below.negative? && above.negative?
+    end
+
+    # Kept for callers that ask about one root.
+    def splits?(root, lo, hi) = strictly_between?(root, Expression.lift(lo), Expression.lift(hi)) != false
 
     def constant_sign(u)
-      v = numeric(u)
-      return nil if v.nil? || v.abs < 1e-12
-      v.positive? ? :positive : :negative
+      sign = Decide.sign(u.simplify)
+      %i[positive negative].include?(sign) ? sign : nil
     end
 
-    # The interior read at several points; they must agree, and the middle
-    # one carries the answer.
+    # The interior read at several points, each sign decided; they must
+    # agree, and the middle one carries the answer.
     INTERIOR = [1, 2, 3, 4, 5, 6, 7].map { |i| Rational(i, 8) }.freeze
 
     def signs_on(u, var, lo, hi)
       signs = INTERIOR.map do |t|
-        v = numeric(u.subs(var => Num.new(lo + (hi - lo) * t)))
-        return nil if v.nil? || v.abs < 1e-12
-        v.positive? ? :positive : :negative
+        point = (lo + (hi - lo) * Num.new(t)).simplify
+        sign = Decide.sign(u.subs(var => point).simplify)
+        return nil unless %i[positive negative].include?(sign)
+        sign
       end
       signs.uniq.size == 1 ? signs.first : nil
     end

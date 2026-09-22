@@ -729,9 +729,11 @@ module is small and the decisions are all about honesty:
   bug, and the manual says so.
 - **`norm` pulls perfect squares out of the length element**, because
   `sqrt(a**4*sin(v)**2)` would otherwise leave the sphere unintegrable.
-  The sign of each factor is decided by sampling it on the parameter box
-  (`sign_on`, 5 points per variable); where it changes, or where a bound is
-  not a number, the answer keeps `abs(...)`. A radicand with trig functions
+  The sign of each factor is *proved* (`proven_sign`): in one range by
+  `Analysis.sign_on_interval` (all zeros, families counted out, and no
+  pole, jump or edge of the real domain inside), on a box only for a
+  product of factors in one range each; anything else keeps `abs(...)`.
+  (The sampling `sign_on` it replaced was T2 of the third review.) A radicand with trig functions
   is `trigsimp`ed first - which is what uncovered the `reduce_table` bug.
 - **The coordinates of a field default to x, y, z**, which is what a
   student writes; the field's own variables are used instead when there are

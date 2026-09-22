@@ -32,4 +32,22 @@ class ThirdReviewAdversarialTest < Minitest::Test
     end
     assert result.include?(-1), 'The correct real locus is (-infinity,0].'
   end
+
+  def test_periodic_radius_has_positive_volume
+    f = RCAS.cos(16*RCAS::PI*@x)
+    # Integral_1^2 x*|cos(16*pi*x)| dx = 3/pi, hence V = 6.
+    assert_equal n(6), RCAS.revolution_volume(f, x: 1..2, axis: :y)
+  end
+
+  def test_poles_prevent_a_global_sign_certificate
+    f = 1 / ((@x-Rational(1,100))*(@x-Rational(1,50)))
+    distance = RCAS::Analysis.distance(f,@x,0,1)
+    assert_equal n(40_000), distance.subs(x: Rational(3,200)).simplify
+  end
+
+  def test_multivariate_norm_cannot_be_negative
+    v = @x+@y-Rational(1,10)
+    norm = RCAS::VectorCalculus.norm([v,0], [[@x,0,1],[@y,0,1]])
+    assert_equal n(Rational(1,10)), norm.subs(x:0,y:0).simplify
+  end
 end

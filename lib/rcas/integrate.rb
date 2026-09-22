@@ -73,6 +73,8 @@ module RCAS
       to = Expression.lift(to)
       f = Piecewises.hoist(f.simplify)
       return Piecewises.definite(f, x, from, to) if f.is_a?(Piecewise)
+      split = split_at_kinks(f, x, from, to)
+      return split if split
       antiderivative = integrate(f, x)
       return Integral.new(f, x, from, to) unless complete?(antiderivative)
       points = singular_points(f, x, from, to, antiderivative)
@@ -88,6 +90,58 @@ module RCAS
       end
       return Integral.new(f, x, from, to) if value.nil? || (real_integrand?(f) && !real_valued?(value))
       value
+    end
+
+    # abs(u) and sign(u) with a u that is not linear (the piecewise rule
+    # takes the linear ones): the range is cut at every zero of u inside
+    # it - all of them, a family counted out member by member - and on
+    # each piece abs(u) is u or -u, decided at an interior point. This is
+    # what gives the solid of revolution of cos(16*pi*x) its volume 6
+    # (third review, T1a); without it the abs was either dropped, which
+    # made the volume 0, or left to the indefinite rules, which cannot.
+    # nil when there is nothing to split or the zeros cannot be counted.
+    def split_at_kinks(f, x, from, to)
+      kinks = f.each_node.select do |n|
+        n.is_a?(Fn) && %i[abs sign].include?(n.name) && n.args.size == 1 &&
+          n.args.first.variables.include?(x.name) && !linear(n.args.first, x)
+      end.uniq
+      return nil if kinks.empty?
+      a, b = real_number(from), real_number(to)
+      return nil if a.nil? || b.nil? || a == b
+      lo, hi = [a, b].minmax
+      points = []
+      budget = MAX_BREAKS
+      kinks.each do |kink|
+        roots = begin
+          Solve.solve(kink.args.first, x)
+        rescue StandardError, NotImplementedError
+          return nil
+        end
+        return nil unless roots.is_a?(Array)
+        roots.each do |root|
+          members = root.is_a?(ImageSet) ? root.between(lo, hi, limit: budget) : [root]
+          return nil if members.nil?
+          budget -= members.size
+          return nil if budget.negative?
+          points.concat(members.select { |m| (v = real_number(m)) && v > lo && v < hi })
+        end
+      end
+      points = points.uniq.sort_by { |p| real_number(p) }
+      ends = [from, *points, to]
+      ends = [from, *points.reverse, to] if a > b
+      pieces = ends.each_cons(2).map do |p, q|
+        middle = ((p + q) / 2).simplify
+        replaced = kinks.to_h do |kink|
+          u = kink.args.first
+          sign = Decide.sign(u.subs(x => middle).simplify)
+          return nil unless %i[positive negative].include?(sign)
+          [kink, kink.name == :abs ? (sign == :positive ? u : -u) : Num.new(sign == :positive ? 1 : -1)]
+        end
+        value = definite(f.subs(replaced).simplify, x, p, q)
+        return nil if value.each_node.any? { |n| n.is_a?(Integral) }
+        value
+      end
+      pieces.reduce(:+).simplify
     end
 
     # F(b) - F(a) over each piece, added up: a one-sided limit at every

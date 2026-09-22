@@ -96,11 +96,8 @@ module RCAS
 
     def shorter(a, b) = [a, b].min_by { |e| [e.each_node.count, e.to_s.size] }
 
-    # sqrt(u**2) is u, -u or abs(u), by the sign of u on the parameter ranges.
-    # In one variable the sign is proved from the zeros of u
-    # (Analysis.sign_on_interval); with more of them the box is still only
-    # sampled, which can miss a sign change and is why `sign_on` says so in
-    # its own comment.
+    # sqrt(u**2) is u, -u or abs(u), by the sign of u on the parameter
+    # ranges - a sign that is proved, never sampled.
     def root_factor(base, ranges)
       case proven_sign(base, ranges)
       when :positive then base
@@ -109,44 +106,39 @@ module RCAS
       end
     end
 
-    # In one variable the zeros decide, and a zero inside the range means
-    # there is no single sign - the abs stays. With more variables the box
-    # is still only sampled, which can miss a sign change; that limit is the
-    # one `sign_on` states in its own comment and the manual lists.
+    # In one variable the zeros decide (Analysis.sign_on_interval). On a box
+    # of several ranges the sign is proved factor by factor: a product whose
+    # every factor moves with one range at most has the sign of the product
+    # of theirs. Anything else keeps its abs - sampling five points of the
+    # box said x + y - 1/10 was positive on the unit square, and it is not
+    # in the corner (third review, T2).
     def proven_sign(base, ranges)
+      base = Expression.lift(base)
       one = single_range(base, ranges)
       return Analysis.sign_on_interval(base, one[0], one[1], one[2]) if one
-      sign_on(base, ranges)
+      coeff, factors = Simplify.factorize(base)
+      return nil unless coeff.is_a?(Numeric) && coeff.real? && !coeff.zero?
+      negative = coeff.negative?
+      factors.each do |factor, exponent|
+        sign = proven_sign_of_factor(factor, ranges)
+        return nil if sign.nil?
+        next if exponent.is_a?(Integer) && exponent.even?
+        return nil unless exponent.is_a?(Integer) || sign == :positive
+        negative = !negative if sign == :negative
+      end
+      negative ? :negative : :positive
+    end
+
+    def proven_sign_of_factor(factor, ranges)
+      return Analysis.constant_sign(factor) if factor.variables.empty?
+      one = single_range(factor, ranges)
+      one ? Analysis.sign_on_interval(factor, one[0], one[1], one[2]) : nil
     end
 
     # The one range the expression actually moves with, when there is one.
     def single_range(base, ranges)
       wanted = ranges.select { |var, _, _| Expression.lift(base).variables.include?(Expression.lift(var).name) }
       wanted.size == 1 && Expression.lift(base).variables.size == 1 ? wanted.first : nil
-    end
-
-    SAMPLES = [1, 2, 3, 4, 5].map { |i| Rational(i, 6) }.freeze
-
-    # The sign of an expression on a box of parameter ranges, by sampling.
-    # Anything undecided (a bound that is not a number, a value that is not
-    # real, a change of sign) comes back nil.
-    def sign_on(expr, ranges)
-      expr = Expression.lift(expr)
-      wanted = ranges.select { |var, _, _| expr.variables.include?(Expression.lift(var).name) }
-      return nil unless wanted.size == expr.variables.size
-      grids = wanted.map do |var, from, to|
-        a = Analysis.numeric(from)
-        b = Analysis.numeric(to)
-        return nil if a.nil? || b.nil?
-        SAMPLES.map { |s| [Expression.lift(var), Num.new(a + (b - a) * s)] }
-      end
-      # A constant has no grid to walk; one empty point evaluates it once.
-      signs = (grids.empty? ? [[]] : grids[0].product(*grids.drop(1))).map do |point|
-        value = Analysis.numeric(expr.subs(point.to_h))
-        return nil if value.nil? || value.abs < 1e-9
-        value.positive? ? :positive : :negative
-      end
-      signs.uniq.size == 1 ? signs.first : nil
     end
 
     # ---- line integrals -------------------------------------------------------

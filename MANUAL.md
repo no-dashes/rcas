@@ -4272,9 +4272,9 @@ Almkvist-Zeilberger algorithm for hyperexponential integrals,
 multivariate (holonomic) summation, formal power series whose
 coefficients are not hypergeometric (`tan`, `exp(x)/(1 - x)`), iterated
 integrals (a definite integral inside another one stays formal), the sign
-of an expression on a box of *several* parameter ranges, which the length
-element in `vector_calculus.rb` still decides by sampling (in one variable
-it is proved from the zeros), and of
+of an expression on a box of *several* parameter ranges that is not a
+product of factors in one range each (the length element in
+`vector_calculus.rb` keeps its `abs` there rather than guess), and of
 OpenMath the binary encoding and content MathML (Appendix D).
 
 ## 3. Files
