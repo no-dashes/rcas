@@ -18,12 +18,19 @@ module RCAS
       ring = QQ[*vars]
       constant, table = Expand.table(expr)
       return nil unless rational?(constant)
-      num = ring.call(constant)
-      den = ring.one
+      # Terms with the same denominator are added over it first, and the
+      # groups are then brought together over the lcm of their
+      # denominators: multiplying every term's denominator into the running
+      # one turned (x + y + 1)**12 expanded over x + y + 1 into a
+      # denominator of degree 91 and took nine seconds (third review,
+      # section 5).
+      groups = {}
+      groups[[]] = [ring.call(constant), ring.one]
       table.each do |factors, coeff|
         return nil unless rational?(coeff)
         n = ring.call(coeff)
         d = ring.one
+        key = []
         factors.each do |base, exp|
           return nil unless exp.is_a?(Integer)
           bn, bd = begin
@@ -36,13 +43,27 @@ module RCAS
           if exp.positive?
             n *= bn**exp
             d *= bd**exp
+            key << [base, :up, exp] unless bd.constant?
           else
             n *= bd**(-exp)
             d *= bn**(-exp)
+            key << [base, exp]
           end
         end
-        num = num * d + n * den
-        den *= d
+        key = key.sort_by(&:to_s)
+        if (group = groups[key])
+          group[0] = group[0] + n
+        else
+          groups[key] = [n, d]
+        end
+      end
+      num = ring.zero
+      den = ring.one
+      groups.each_value do |n, d|
+        next if n.zero?
+        common = den.lcm(d)
+        num = num * common.exact_div(den) + n * common.exact_div(d)
+        den = common
       end
       g = num.gcd(den)
       [num.exact_div(g), den.exact_div(g)]

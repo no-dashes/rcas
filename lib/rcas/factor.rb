@@ -17,7 +17,8 @@ module RCAS
   # Sources (keys: MANUAL.md, Sources): Yun [Yun76], [vzGG13, §14.6];
   # Zassenhaus [Zas69], [GCL92, ch. 8], [vzGG13, ch. 15]; Cantor-Zassenhaus
   # [CZ81]; Hensel lifting [GCL92, ch. 6]; Mignotte bound [Mig74]; Kronecker
-  # substitution [Knu98, §4.6.2], [vzGG13, §8.4].
+  # substitution [Knu98, §4.6.2], [vzGG13, §8.4]; x**n -+ 1 by cyclotomic
+  # polynomials [Lan02, VI §3].
   module Factor
     module_function
 
@@ -47,11 +48,34 @@ module RCAS
       Factorization.new(ring, Num.new(Simplify.normalize_number(unit)), factors)
     end
 
+    # x**n - 1 is the product of the cyclotomic polynomials Phi_d for the
+    # divisors d of n, and x**n + 1 of those for the d dividing 2n but not
+    # n - each irreducible over QQ [Lan02, VI §3]. Zassenhaus took nine
+    # seconds over x**210 - 1, which is 48 factors read off a list (third
+    # review, section 5). nil for anything else.
+    def cyclotomic_split(f)
+      ring = f.ring
+      return nil unless ring.vars.size == 1 && f.terms.size == 2
+      exponents = f.terms.keys.map(&:first).sort
+      return nil unless exponents.first.zero? && exponents.last >= 2
+      n = exponents.last
+      lead = f.terms[[n]]
+      tail = f.terms[[0]]
+      return nil unless lead.is_a?(Num) && lead.value == 1 && tail.is_a?(Num) && [1, -1].include?(tail.value)
+      divisors = tail.value == -1 ? (1..n).select { |d| (n % d).zero? } : (1..2 * n).select { |d| ((2 * n) % d).zero? && (n % d).nonzero? }
+      divisors.map do |d|
+        coefficients = Poly.send(:cyclotomic_coeffs, d) # Integers, lowest degree first
+        [Polynomial.new(ring, coefficients.each_with_index.reject { |c, _| c.zero? }.to_h { |c, i| [[i], Num.new(c)] }), 1]
+      end
+    end
+
     # ---- multivariate driver (f primitive over ZZ, positive lc) -----------
 
     def factor_primitive(f)
       ring = f.ring
       return [] if f.constant?
+      binomial = cyclotomic_split(f)
+      return binomial if binomial
 
       out = []
       # monomial factors

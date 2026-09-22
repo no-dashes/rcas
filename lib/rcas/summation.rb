@@ -196,9 +196,25 @@ module RCAS
     def direct_sum(f, k, from, to)
       return nil unless [from, to].all? { |b| b.is_a?(Num) && b.value.is_a?(Integer) }
       return nil if to.value - from.value > MAX_DIRECT_TERMS
-      total = Num.new(0)
-      (from.value..to.value).each { |i| total = Scalar.add(total, Expression.lift(f.call(k.name => i))) }
-      total.is_a?(Num) ? total : total.simplify
+      # numbers are added as numbers, everything else collected into one
+      # term table and rebuilt once: adding to the growing sum and
+      # expanding it again each time was quadratic, and sum(sin(k), k, 1,
+      # 3000) ran for minutes (third review, section 5)
+      number = 0
+      constant = 0
+      terms = {}
+      (from.value..to.value).each do |i|
+        term = Expression.lift(f.call(k.name => i))
+        if term.is_a?(Num)
+          number += term.value
+        else
+          c, table = Simplify.termize(term.simplify)
+          constant += c
+          table.each { |factors, coeff| terms[factors] = (terms[factors] || 0) + coeff }
+        end
+      end
+      return Num.new(number) if terms.empty? && constant.zero?
+      Simplify.rebuild_sum(Simplify.normalize_number(number + constant), terms.reject { |_, c| c.zero? })
     end
 
     # ---- c / k**s from k = m to infinity: c * (zeta(s) - partial sum) -----------

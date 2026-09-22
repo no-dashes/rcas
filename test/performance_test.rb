@@ -70,6 +70,23 @@ class PerformanceTest < Minitest::Test
     assert big.to_s.size > 100_000, "printing an unsimplified deep chain works too"
   end
 
+  # The performance cliffs of the third review (22 Sept 2026), each tens
+  # of seconds to minutes before and well under one now; the bounds are
+  # generous, so only a return of the cliff fails.
+  def test_the_third_reviews_cliffs_stay_flat
+    x = RCAS::Var.new(:x)
+    y = RCAS::Var.new(:y)
+    k = RCAS::Var.new(:k)
+    timed(3, "expand_trig(sin(16*x))") { RCAS.expand_trig(RCAS.sin(16 * x)) }
+    q = timed(3, "cancel of (x + y + 1)**12 over x + y + 1") { RCAS.cancel(RCAS.expand((x + y + 1)**12) / (x + y + 1)) }
+    assert_equal RCAS::Num.new(0), RCAS.expand(q - (x + y + 1)**11)
+    f = timed(3, "factor(x**210 - 1)") { RCAS.factor(x**210 - 1) }
+    assert_equal RCAS::Num.new(0), RCAS.expand(f - (x**210 - 1))
+    timed(3, "a direct sum of 3000 symbolic terms") { RCAS.sum(RCAS.sin(k), k, 1, 3000) }
+    v = timed(3, "nintegrate(sin(1000*x), x: 0..1)") { RCAS.nintegrate(RCAS.sin(1000 * x), x: 0..1) }
+    assert_in_delta (1 - Math.cos(1000)) / 1000, v, 1e-12
+  end
+
   def test_long_alternating_sums_keep_their_signs
     alt = (1..100).map { |i| (i.even? ? -1 : 1) * :x**i }.sum
     s = alt.simplify

@@ -36,7 +36,13 @@ module RCAS
     # ---- evaluation ------------------------------------------------------------
 
     # A float from an expression with at most the one free variable bound.
+    # Compiled to a lambda over Floats when every node is one the compiler
+    # knows, which is a hundred times faster than substituting into the
+    # tree: adaptive Simpson over sin(1000*x) wants 300000 values and took
+    # ten seconds (third review, section 5). Anything else takes the tree.
     def caller_for(expr, var)
+      compiled = compile(Expression.lift(expr), Expression.lift(var).name)
+      return compiled if compiled
       tree = Expression.floatify_tree(Expression.lift(expr))
       name = Expression.lift(var).name
       lambda do |value|
@@ -55,6 +61,85 @@ module RCAS
       rescue StandardError => rescued
         RCAS.guard!(rescued)
         nil
+      end
+    end
+
+    COMPILED = { sin: Math.method(:sin), cos: Math.method(:cos), tan: Math.method(:tan), exp: Math.method(:exp),
+                 atan: Math.method(:atan), sinh: Math.method(:sinh), cosh: Math.method(:cosh), erf: Math.method(:erf),
+                 erfc: Math.method(:erfc) }.freeze
+    # real only inside their domain: nil outside, as the tree gives
+    GUARDED = { log: ->(v) { v.positive? ? Math.log(v) : nil },
+                asin: ->(v) { v.abs <= 1 ? Math.asin(v) : nil },
+                acos: ->(v) { v.abs <= 1 ? Math.acos(v) : nil },
+                abs: ->(v) { v.abs }, sign: ->(v) { (v <=> 0).to_f },
+                floor: ->(v) { v.floor.to_f }, ceil: ->(v) { v.ceil.to_f } }.freeze
+
+    # A lambda x -> Float (nil where the value is not a finite real), or nil
+    # when some node is not one of the kinds above.
+    def compile(expr, name)
+      body = compiled_node(expr, name) or return nil
+      lambda do |value|
+        v = body.call(value.to_f)
+        v.is_a?(Float) && v.finite? ? v : nil
+      rescue ZeroDivisionError, Math::DomainError, FloatDomainError
+        nil
+      end
+    end
+
+    def compiled_node(e, name)
+      case e
+      when Num
+        v = e.value
+        return nil unless v.is_a?(Numeric) && v.real?
+        f = v.to_f
+        ->(_) { f }
+      when Const
+        return nil unless e.value.is_a?(Numeric) && e.value.real? && e.value.to_f.finite?
+        f = e.value.to_f
+        ->(_) { f }
+      when Var then e.name == name ? ->(x) { x } : nil
+      when Neg then (a = compiled_node(e.arg, name)) && ->(x) { (v = a.call(x)) && -v }
+      when Add, Sub, Mul, Div
+        a = compiled_node(e.left, name) or return nil
+        b = compiled_node(e.right, name) or return nil
+        op = { Add => :+, Sub => :-, Mul => :*, Div => :/ }[e.class]
+        lambda do |x|
+          l = a.call(x) or return nil
+          r = b.call(x) or return nil
+          return nil if op == :/ && r.zero?
+          l.public_send(op, r)
+        end
+      when Pow then compiled_power(e, name)
+      when Fn
+        return nil unless e.args.size == 1
+        a = compiled_node(e.args.first, name) or return nil
+        if (f = COMPILED[e.name]) then ->(x) { (v = a.call(x)) && f.call(v) }
+        elsif (g = GUARDED[e.name]) then ->(x) { (v = a.call(x)) && g.call(v) }
+        end
+      end
+    end
+
+    # A negative base has a real power only for an integer exponent here -
+    # the principal value of (-8)**(1/3) is not real, which is what the tree
+    # says too.
+    def compiled_power(e, name)
+      a = compiled_node(e.base, name) or return nil
+      exponent = e.exponent
+      if exponent.is_a?(Num) && exponent.value.is_a?(Integer)
+        n = exponent.value
+        return lambda do |x|
+          v = a.call(x) or return nil
+          return nil if v.zero? && n.negative?
+          v**n
+        end
+      end
+      b = compiled_node(exponent, name) or return nil
+      lambda do |x|
+        v = a.call(x) or return nil
+        w = b.call(x) or return nil
+        return nil if v.negative? && w != w.round
+        return nil if v.zero? && w.negative?
+        v**w
       end
     end
 

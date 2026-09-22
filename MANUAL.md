@@ -1119,7 +1119,7 @@ last digit a Float carries, not where the value first looks small:
 
 ```
 rcas> nsolve(1/x - 2, x: 0.1..2)
-=> 0.49999999999999994
+=> 0.5
 rcas> nsolve(tan(x), x: 3..4)
 => 3.141592653589793
 ```
@@ -4401,6 +4401,7 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | squarefree decomposition (Yun) | factor.rb | [Yun76]; [vzGG13, §14.6] |
 | factoring over ZZ: Cantor-Zassenhaus mod p, Hensel lifting, Mignotte bound, recombination | factor.rb | [Zas69]; [CZ81]; [Mig74]; [GCL92, ch. 8]; [vzGG13, ch. 15] |
 | multivariate factoring by Kronecker substitution | factor.rb | [Knu98, §4.6.2]; [vzGG13, §8.4] |
+| x**n - 1 and x**n + 1 as products of cyclotomic polynomials | factor.rb | [Lan02, VI §3] |
 | polynomial gcd: Euclid, primitive pseudo-remainder sequences | gcd.rb | [Knu98, §4.6.1, Algorithm E]; [GCL92, ch. 7] |
 | resultant, discriminant (Sylvester matrix) | polynomial.rb | [GCL92, ch. 7]; [CLO15, §3.6] |
 | partial fractions (coprime splitting by extended Euclid, p-adic expansion) | rational_function.rb | [Bro05, §2.1] |
@@ -4533,6 +4534,8 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   Nullstellen von Polynomen, *Numer. Math.* 8 (1966), 290-294.
 - [Knu98] D. E. Knuth, *The Art of Computer Programming, vol. 2:
   Seminumerical Algorithms*, 3rd ed., Addison-Wesley 1998.
+- [Lan02] S. Lang, *Algebra*, revised 3rd ed., Graduate Texts in
+  Mathematics 211, Springer, 2002.
 - [Len76] W. J. Lentz, Generating Bessel functions in Mie scattering
   calculations using continued fractions, *Applied Optics* 15 (1976),
   668-671.
