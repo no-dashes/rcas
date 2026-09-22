@@ -94,7 +94,9 @@ module RCAS
             polynomial_exponent!(expr, base, exp)
             exponents[base] = exp
           else
-            offending = base.variables & names
+            # exp(x) is e**x: the exponent counts, or exp(x) was the constant
+            # coefficient of itself (third review, A3)
+            offending = (base.variables | (exp.is_a?(Expression) ? exp.variables : [])) & names
             raise DomainError, "#{expr} is not a polynomial in #{offending.first}" unless offending.empty?
             rest[base] = exp
           end

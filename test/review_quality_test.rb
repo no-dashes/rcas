@@ -120,4 +120,14 @@ class ReviewQualityTest < Minitest::Test
     # not real, so the discussion of the real function has no zeros.
     assert_empty RCAS.discuss((@x - 1)**2 + Rational(1, 10**26), @x).zeros
   end
+
+  def test_the_argument_of_a_nearly_real_number_is_decided_with_enough_digits
+    # r = exp(pi*sqrt(163)) - 640320**3 - 744 = -7.4993e-13, so r + i lies just
+    # left of the imaginary axis and arg(r + i) = pi/2 + 7.5e-13. A value that
+    # stays unevaluated is honest; a number must be close to pi/2.
+    r = RCAS.exp(RCAS::PI * RCAS.sqrt(163)) - 640320**3 - 744
+    result = RCAS.arg(r + RCAS::I)
+    value = result.is_a?(Numeric) ? result : (result.is_a?(RCAS::Num) ? result.value : nil)
+    assert_in_delta Math::PI / 2, value, 1e-9 if value
+  end
 end

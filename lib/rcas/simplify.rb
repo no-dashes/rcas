@@ -311,6 +311,9 @@ module RCAS
         end
       end
       return Num.new(0) if coeff.zero?
+      # every factor folded into the number: (2**(1/2)/2)**2 is the number
+      # 1/2, not Div(1, 2)
+      return Num.new(coeff) if numerator.empty? && denominator.empty?
 
       if numerator.size == 1 && denominator.empty? && coeff != 1 &&
          (numerator.first.is_a?(Add) || numerator.first.is_a?(Sub))

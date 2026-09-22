@@ -27,13 +27,28 @@ module RCAS
       e = Expression.lift(e)
       real, imaginary = parts(e)
       if constant?(real) && constant?(imaginary)
+        # arg(0) has no value (A7)
+        return UNDEFINED if Decide.zero?(real) && Decide.zero?(imaginary)
         exact = exact_angle(real, imaginary)
         return exact if exact
-        x = real.evalf
-        y = imaginary.evalf
-        return Num.new(Math.atan2(y, x)) if x.is_a?(Numeric) && y.is_a?(Numeric) && !x.is_a?(Complex) && !y.is_a?(Complex)
+        # an exact number keeps its angle as a node rather than turning into
+        # a Float; a Float in, a Float out - from parts taken to enough
+        # digits: exp(pi*sqrt(163)) - 640320**3 - 744 + i is a hair left of
+        # the imaginary axis, and the Float real part said -480 (Q1)
+        return Fn.new(:arg, [e]) unless e.each_node.any? { |n| n.is_a?(Num) && (n.value.is_a?(Float) || (n.value.is_a?(Complex) && n.value.real.is_a?(Float))) }
+        x = precise_float(real)
+        y = precise_float(imaginary)
+        return Num.new(Math.atan2(y, x)) if x && y
       end
       Fn.new(:arg, [e])
+    end
+
+    def precise_float(e)
+      v = Precision.evalf(e, 20).to_f
+      v.finite? ? v : nil
+    rescue StandardError, NotImplementedError
+      v = e.evalf
+      v.is_a?(Numeric) && !v.is_a?(Complex) ? v.to_f : nil
     end
 
     # => [re, im]
@@ -101,19 +116,24 @@ module RCAS
       if Scalar.zero?(real)
         return positive?(imaginary) ? (PI / 2).simplify : (-PI / 2).simplify
       end
-      t = Functions.exact_value(:atan, (imaginary / real).simplify) or return nil
+      ratio = (imaginary / real).simplify
+      t = Functions.exact_value(:atan, ratio)
+      # atan is odd: atan(-sqrt(3)) = -atan(sqrt(3)), which the table knows
+      if t.nil? && negative?(ratio)
+        u = Functions.exact_value(:atan, Simplify.negate(ratio).simplify)
+        t = Simplify.negate(u).simplify if u
+      end
+      # no table value: atan of the ratio is still the exact angle, moved to
+      # the right half-plane's other side when the real part is negative
+      t ||= Fn.new(:atan, [ratio]) if positive?(real) || negative?(real)
+      return nil unless t
       return t if positive?(real)
       (positive?(imaginary) ? t + PI : t - PI).simplify
     end
 
-    def positive?(e)
-      v = e.evalf
-      v.is_a?(Numeric) && !v.is_a?(Complex) && v.positive?
-    end
-
-    def negative?(e)
-      v = e.evalf
-      v.is_a?(Numeric) && !v.is_a?(Complex) && v.negative?
-    end
+    # The signs are decided (Decide), not read off a Float: a real part of
+    # -7.5e-13 computed from terms of size 10**17 has no Float sign (Q1).
+    def positive?(e) = Decide.sign(e) == :positive
+    def negative?(e) = Decide.sign(e) == :negative
   end
 end

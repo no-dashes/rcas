@@ -79,4 +79,96 @@ class ReviewAlgebraTest < Minitest::Test
       assert_principal 0, RCAS.expand_log(RCAS.log(@x**2)).subs(x: -1)
     end
   end
+
+  # Declaring x an integer says what values x takes; x is still an indeterminate,
+  # so x**2 - 1 = (x - 1)(x + 1) and gcd(a*x, a) = a as without the declaration.
+  def test_declared_domain_keeps_the_indeterminate_in_the_polynomial_ring
+    RCAS.assume(x: RCAS::ZZ) do
+      f = RCAS.factor(@x**2 - 1)
+      assert_equal n(0), RCAS.expand(f - (@x**2 - 1))
+      assert_equal 2, RCAS::QQ[:x].call(@x**2 - 1).factor.size
+      assert_equal n(0), RCAS.expand(RCAS.gcd(@x**2 - 1, @x + 1) - (@x + 1))
+    end
+    RCAS.assume(a: RCAS::ZZ) do
+      f = RCAS.factor(@x**2 - @a**2)
+      assert_equal n(0), RCAS.expand(f - (@x**2 - @a**2))
+      assert_equal n(0), RCAS.expand(RCAS.gcd(@a * @x, @a) - @a)
+    end
+  end
+
+  # x*exp(x) is not a polynomial in x, so it has no degree in x; exp(x) is not the
+  # constant coefficient of exp(x). A refusal is fine, the value 1 is not.
+  def test_an_indeterminate_in_an_exponent_is_not_a_coefficient
+    { -> { RCAS.degree(@x * RCAS.exp(@x), @x) } => n(1).value,
+      -> { RCAS.coeff(RCAS.exp(@x), @x, 0) } => RCAS.exp(@x),
+      -> { RCAS.coeff(@x * n(2)**@x, @x, 1) } => n(2)**@x,
+      -> { RCAS.lcoeff(RCAS.exp(@x) * @x**3 + @x, @x) } => RCAS.exp(@x) }.each do |call, wrong|
+      begin
+        result = call.call
+      rescue RCAS::DomainError, NotImplementedError
+        next
+      end
+      refute_equal wrong, result
+    end
+  end
+
+  # sqrt(m**2 + 1) = [m; 2m, 2m, 2m, ...], and pi = [3; 7, 15, 1, 292, 1, 1, 1, 2,
+  # 1, 3, 1, 14, 2, 1, 1, 2, 2, 2, 2, ...] (OEIS A001203): exact numbers, exact terms.
+  def test_continued_fraction_of_an_irrational_is_exact
+    assert_equal [1000] + [2000] * 29, RCAS.continued_fraction(RCAS.sqrt(1_000_001), 30)
+    assert_equal [3, 7, 15, 1, 292, 1, 1, 1, 2, 1, 3, 1, 14, 2, 1, 1, 2, 2, 2, 2],
+                 RCAS.continued_fraction(RCAS::PI, 20)
+  end
+
+  # |1 + i| = sqrt(2) and |3 + 4i| = 5: exact input, exact output.
+  def test_modulus_of_an_exact_complex_number_is_exact
+    [[1 + RCAS::I, 2], [3 + 4 * RCAS::I, 25], [Rational(1, 2) + RCAS::I / 2, Rational(1, 2)]].each do |z, square|
+      m = RCAS.abs(z)
+      refute_kind_of Float, (m.is_a?(RCAS::Num) ? m.value : m), "abs(#{z}) is a Float"
+      assert_equal n(square), (m**2).simplify
+    end
+  end
+
+  # arg(1 - sqrt(3)*i) = -pi/3 and arg(-sqrt(3) + i) = 5*pi/6 (tan = -sqrt(3), -1/sqrt(3));
+  # arg(0) has no value. None of them is a silent Float.
+  def test_argument_of_an_exact_complex_number_is_exact
+    s3 = RCAS.sqrt(3)
+    { 1 - s3 * RCAS::I => -Math::PI / 3, -s3 + RCAS::I => 5 * Math::PI / 6 }.each do |z, angle|
+      a = RCAS.arg(z)
+      refute_kind_of Float, (a.is_a?(RCAS::Num) ? a.value : a), "arg(#{z}) is a Float"
+      assert_value angle, a
+    end
+    begin
+      zero = RCAS.arg(0)
+    rescue RCAS::DomainError, ArgumentError, ZeroDivisionError
+      return
+    end
+    refute_kind_of Float, (zero.is_a?(RCAS::Num) ? zero.value : zero), 'arg(0) is a Float'
+  end
+
+  # The unit group mod 2 is {1}, cyclic of order 1 = totient(2): its generator is 1.
+  def test_two_has_a_primitive_root
+    assert_equal 1, RCAS.primitive_root(2)
+  end
+
+  # A rational q is algebraic of degree 1: its minimal polynomial is x - q.
+  def test_a_rational_number_has_a_minimal_polynomial
+    m = RCAS.minpoly(n(Rational(1, 2)))
+    assert_equal 1, RCAS.degree(m, @x)
+    assert_equal n(0), m.subs(x: Rational(1, 2)).simplify
+  end
+
+  # sqrt(1 + sqrt(2)) is a root of x**4 - 2*x**2 - 1, so it *is* algebraic. rcas may
+  # decline the nested radical, but it may not say the number is not algebraic.
+  def test_nested_radical_is_not_called_transcendental
+    m = RCAS.minpoly(RCAS.sqrt(1 + RCAS.sqrt(2)))
+    assert_equal n(0), RCAS.expand(m - (@x**4 - 2 * @x**2 - 1))
+  rescue NotImplementedError
+    assert true
+  end
+
+  # A constant is a rational function; its partial fraction decomposition is itself.
+  def test_partial_fractions_of_a_constant
+    assert_equal n(7), RCAS.apart(n(7))
+  end
 end

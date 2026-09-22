@@ -306,15 +306,22 @@ module RCAS
     def primitive_root(m)
       m = integer_or_rational(m, "primitive_root").to_i
       phi = totient(m)
-      candidate = (2...m).find { |a| a.gcd(m) == 1 && order(a, m) == phi }
+      # from 1: the unit group mod 2 is {1}, and 1 generates it (A8)
+      candidate = (1...m).find { |a| a.gcd(m) == 1 && order(a, m) == phi }
       raise ArgumentError, "primitive_root: there is none modulo #{m}" if candidate.nil? && m > 1
       m == 1 ? 0 : candidate
     end
 
     # The continued fraction [a0; a1, a2, ...] of a rational or a real number.
     def continued_fraction(value, terms = 10)
-      x = value.is_a?(Expression) ? value.evalf : value
-      x = Rational(x) if x.is_a?(Integer)
+      value = value.simplify if value.is_a?(Expression)
+      value = value.value if value.is_a?(Num)
+      return fraction_terms(Rational(value), terms) if value.is_a?(Integer) || value.is_a?(Rational)
+      return fraction_terms(value, terms) if value.is_a?(Float)
+      certified_terms(Expression.lift(value), terms)
+    end
+
+    def fraction_terms(x, terms)
       out = []
       terms.times do
         whole = x.floor
@@ -324,6 +331,21 @@ module RCAS
         x = 1 / rest
       end
       out
+    end
+
+    # An irrational constant's terms from its digits, and only the terms
+    # two precisions agree on: a Float gave sqrt(1000001) wrong from the
+    # third term and pi from the fourteenth (third review, A6).
+    def certified_terms(expr, terms)
+      digits = 20 + 8 * terms
+      4.times do
+        coarse = fraction_terms(Precision.evalf(expr, digits, certify: false).value.to_r, terms + 2)
+        fine = fraction_terms(Precision.evalf(expr, 2 * digits, certify: false).value.to_r, terms + 2)
+        common = coarse.zip(fine).take_while { |a, b| a == b }.map(&:first)
+        return common.first(terms) if common.size > terms || (common.size == terms && coarse.size == fine.size)
+        digits *= 2
+      end
+      raise ArgumentError, "continued_fraction: #{expr} could not be expanded to #{terms} terms"
     end
 
     # The fractions [a0], [a0; a1], ... of a continued fraction, the best

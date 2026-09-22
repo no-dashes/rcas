@@ -286,7 +286,18 @@ module RCAS
 
     # Minimal polynomial of an AlgebraicNumber (or exact constant expression).
     def minpoly_of(number, var = :x)
-      number = exact(number) if number.is_a?(Expression) || number.is_a?(Numeric)
+      if number.is_a?(Expression) || number.is_a?(Numeric)
+        expr = Expression.lift(number)
+        # a rational is algebraic of degree 1 (A10); a nested radical is
+        # algebraic too, and is taken apart by resultants rather than called
+        # "not an algebraic number"
+        folded = expr.simplify
+        if folded.is_a?(Num) && (folded.value.is_a?(Integer) || folded.value.is_a?(Rational))
+          return QQ[var].call(Var.new(var) - folded)
+        end
+        number = exact(expr)
+        return resultant_minpoly(expr, var) if number.nil?
+      end
       raise ArgumentError, "not an algebraic number" if number.nil?
       x = Var.new(var)
       ring2 = QQ[AlgebraicField::A, var]
@@ -295,6 +306,80 @@ module RCAS
       res = QQ[var].call(m.resultant(g, AlgebraicField::A).to_expr)
       value = number.evalf
       res.factor.factors.map(&:first).min_by { |f| f.to_expr.evalf(var => value).abs }.monic
+    end
+
+    # The minimal polynomial of a constant built from rationals, i, the
+    # four operations and rational powers, by resultants [CLO15, §3.6]: a
+    # polynomial for each part, combined - P(x) for u + v is
+    # res_y(P_u(y), P_v(x - y)) - and the factor that vanishes at the value
+    # kept. pi and e are transcendental and say so; anything else it cannot
+    # take apart is NotImplementedError, never "not algebraic".
+    def resultant_minpoly(expr, var)
+      x = Var.new(var)
+      poly = annihilator(expr, x)
+      ring = QQ[var]
+      value = expr.evalf
+      raise NotImplementedError, "minpoly: #{expr} has no numeric value to choose a factor by" unless value.is_a?(Numeric)
+      ring.call(poly).factor.factors.map(&:first).min_by { |f| (f.to_expr.evalf(var => value)).abs }.monic
+    end
+
+    def annihilator(e, x)
+      y = Var.new(:"_y#{x.name}")
+      case e
+      when Num
+        v = e.value
+        return (x - Num.new(v)).expand if v.is_a?(Integer) || v.is_a?(Rational)
+        if v.is_a?(Complex) && [v.real, v.imaginary].all? { |c| c.is_a?(Integer) || c.is_a?(Rational) }
+          return ((x - Num.new(v.real))**2 + Num.new(v.imaginary)**2).expand
+        end
+        raise NotImplementedError, "minpoly: #{e} is not exact"
+      when Const
+        raise ArgumentError, "not an algebraic number: #{e} is transcendental" if %i[pi e].include?(e.name) || e == E
+        raise NotImplementedError, "minpoly: #{e}"
+      when Neg then annihilator(e.arg, x).subs(x => Neg.new(x)).expand
+      when Add, Sub, Mul, Div then combine(e, x, y)
+      when Pow then power_annihilator(e, x, y)
+      else
+        raise ArgumentError, "not an algebraic number: #{e} is transcendental" if e == E || (e.is_a?(Fn) && e.name == :exp && e.args.first == Num.new(1))
+        raise NotImplementedError, "minpoly: #{e} is beyond the radicals rcas takes apart"
+      end
+    end
+
+    def combine(e, x, y)
+      pl = annihilator(e.left, x).subs(x => y)
+      pr = annihilator(e.right, x)
+      other =
+        case e
+        when Add then pr.subs(x => x - y)
+        when Sub then pr.subs(x => y - x)
+        when Mul then scaled(pr, x, x / y, y)
+        when Div then annihilator(e.left, x).subs(x => x * y)
+        end
+      pl = annihilator(e.right, x).subs(x => y) if e.is_a?(Div)
+      eliminate(pl, other.expand, y, x)
+    end
+
+    # y**deg * P(x/y), a polynomial again.
+    def scaled(p, x, replacement, y)
+      degree = Solve.polynomial_coefficients(p, x).size - 1
+      (p.subs(x => replacement) * y**degree).expand
+    end
+
+    def power_annihilator(e, x, y)
+      exponent = e.exponent
+      raise NotImplementedError, "minpoly: #{e} has a non-rational exponent" unless exponent.is_a?(Num) && (exponent.value.is_a?(Integer) || exponent.value.is_a?(Rational))
+      r = Rational(exponent.value)
+      base = annihilator(e.base, x)
+      base = scaled(base, x, 1 / x, x) if r.negative? # the reciprocal
+      r = r.abs
+      rooted = base.subs(x => x**r.denominator).expand # b**(1/q): P(x**q)
+      return rooted if r.numerator == 1
+      eliminate(rooted.subs(x => y), (x - y**r.numerator).expand, y, x)
+    end
+
+    def eliminate(p, q, y, x)
+      ring = QQ[y.name, x.name]
+      ring.call(p).resultant(ring.call(q), y.name).to_expr.expand
     end
 
     # ---- factorization over QQ(alpha): Trager -------------------------------

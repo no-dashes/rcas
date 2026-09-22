@@ -58,7 +58,10 @@ class ComplexPartsAndRoundingTest < Minitest::Test
     assert_equal "-2**(1/2)", RCAS.im(RCAS.sqrt(2) * (1 - I)).to_s
     assert_equal ["pi", "pi/2", "pi/4", "-3*pi/4", "0", "-pi/2", "pi/6"],
                  [-1, I, 1 + I, -1 - I, 5, -2 * I, RCAS.sqrt(3) + I].map { |z| RCAS.arg(z).to_s }
-    assert_in_delta Math.atan2(4, 3), RCAS.arg(3 + 4 * I).value, 1e-15
+    # exact in, exact out: atan(4/3) rather than its Float (third review, A7)
+    assert_equal "atan(4/3)", RCAS.arg(3 + 4 * I).to_s
+    assert_in_delta Math.atan2(4, 3), RCAS.arg(3 + 4 * I).evalf, 1e-15
+    assert_in_delta Math.atan2(4, -3), RCAS.arg(-3 + 4 * I).evalf, 1e-15
   end
 
   def test_symbolic_parts

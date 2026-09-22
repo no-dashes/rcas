@@ -43,7 +43,9 @@ module RCAS
               raise DomainError, "#{expr} is not a polynomial in #{base}: exponent #{exp}"
             end
             exps[i] += exp
-          elsif (base.variables & ring.vars).empty?
+          elsif (Simplify.power_node(base, exp).variables & ring.vars).empty?
+            # the exponent counts too: exp(x) is e**x, no coefficient of a
+            # polynomial in x (third review, A3)
             c *= Simplify.power_node(base, exp)
           else
             raise DomainError, "#{expr} is not a polynomial in #{ring.vars.join(', ')}"

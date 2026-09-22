@@ -61,6 +61,8 @@ module RCAS
     def apart(expr, var = nil)
       expr = expr.to_expr if expr.is_a?(Polynomial)
       expr = Expression.lift(expr)
+      # a constant is its own decomposition (A11)
+      return expr.simplify if expr.constant? && var.nil? && (expr.simplify.is_a?(Num))
       pair = Fraction.as_fraction(expr)
       raise DomainError, "apart: #{expr} is not a rational function with rational coefficients" unless pair
       num, den = pair

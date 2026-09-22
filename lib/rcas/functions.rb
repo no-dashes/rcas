@@ -849,7 +849,15 @@ module RCAS
         v = Trig.asin_exact(arg) or return nil
         (PI / 2 - v).simplify
       when :abs
+        if arg.is_a?(Num) && arg.value.is_a?(Complex) && [arg.value.real, arg.value.imaginary].none? { |c| c.is_a?(Float) }
+          # |1 + i| is sqrt(2), not 1.414...: exact in, exact out (A7)
+          return RCAS.sqrt(Num.new(arg.value.real**2 + arg.value.imaginary**2)).simplify
+        end
         return Num.new(arg.value.abs) if arg.is_a?(Num)
+        if arg.variables.empty? && arg.each_node.any? { |n| n.is_a?(Num) && n.value.is_a?(Complex) }
+          re, im = ComplexParts.parts(arg)
+          return RCAS.sqrt((re**2 + im**2).expand).simplify unless [re, im].any? { |part| part.each_node.any? { |n| n.is_a?(Fn) && %i[re im].include?(n.name) } }
+        end
         return arg if RCAS.nonnegative?(arg)
         return Simplify.negate(arg).simplify if %i[negative nonpositive].include?(RCAS.sign_of(arg))
         d = arg.domain

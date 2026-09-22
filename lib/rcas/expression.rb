@@ -178,7 +178,11 @@ module RCAS
     # variables become ring variables and the coefficient domain is inferred.
     def to_poly(ring = nil)
       ring ||= begin
-        free = variables.reject { |v| RCAS.assumption(v) }
+        # A declaration says which values x takes; x is still an
+        # indeterminate. With x in ZZ, factor(x**2 - 1) found "no free
+        # variables", and with a in ZZ, x**2 - a**2 had a**2 for a
+        # coefficient the factorizer could not take (third review, A2).
+        free = variables
         raise DomainError, "#{self} has no free variables to build a ring from" if free.empty?
         constant, table = Expand.table(self)
         base = NumberSet.of(constant)
