@@ -89,4 +89,54 @@ class ReviewCalculusTest < Minitest::Test
     special = r.subs(a: Rational(1, 2)).simplify
     assert(formal?(r) || r.is_a?(RCAS::Piecewise) || special == RCAS::OO, "got #{r}, #{special} at a = 1/2")
   end
+
+  def test_non_analytic_functions_have_no_taylor_series_at_their_kink
+    # For x < 0, (|x| - x)/x = -2 identically, so the left limit is -2.
+    r = RCAS.limit((RCAS.abs(@x) - @x) / @x, x: 0, dir: :left)
+    assert(r.is_a?(RCAS::Limit) || r == n(-2), "got #{r}")
+    r = RCAS.limit(RCAS.sign(@x), @x, 0)
+    refute_equal n(0), r, 'sign(x) is 1 on the right and -1 on the left'
+  end
+
+  def test_erfc_tail_is_not_zero_against_exponential_growth
+    # erfc(x) ~ exp(-x^2)/(x*sqrt(pi)), so x*exp(x^2)*erfc(x) -> 1/sqrt(pi) = 0.5641...
+    r = RCAS.limit(RCAS.erfc(@x) * RCAS.exp(@x**2) * @x, @x, RCAS::OO)
+    assert(r.is_a?(RCAS::Limit) || (value(r).is_a?(Numeric) && (value(r) - 0.5641895835477563).abs < 1e-12), "got #{r}")
+  end
+
+  def test_fps_keeps_the_index_where_the_recurrence_degenerates
+    # x/(1 - x) = x + x^2 + ...; the recurrence (k - 1)*(a(k) - a(k - 1)) = 0 says
+    # nothing at k = 1, and cancelling it away left the series 0.
+    begin
+      r = RCAS.fps(@x / (1 - @x), @x)
+    rescue RCAS::SeriesError
+      return assert true
+    end
+    refute_equal n(0), r
+  end
+
+  def test_series_order_term_claims_only_what_is_known
+    # sqrt(x^2 + x) = x + 1/2 - 1/(8x) + O(1/x^2); at x = 40 the O(1/x^3) claim
+    # leaves an error below 1e-4, while dropping the 1/2 leaves 0.497.
+    f = RCAS.sqrt(@x**2 + @x)
+    t = RCAS.taylor(f, @x, RCAS::OO, 3)
+    assert_in_delta value(f, x: 40.0), value(t, x: 40.0), 1e-4, "taylor = #{t}"
+  end
+
+  def test_cosine_integral_is_not_real_on_the_negative_axis
+    # Ci(-x) = Ci(x) +- i*pi for x > 0: a real float is wrong on either side of the cut.
+    v = begin
+      value(RCAS.Ci(-1.0))
+    rescue ArgumentError
+      return assert true
+    end
+    refute(v.is_a?(Float), "Ci(-1.0) = #{v}")
+  end
+
+  def test_binomial_node_evaluates_numerically
+    # binomial(5, 2) = 10; evalf turns the arguments into floats and must still fold.
+    v = value(RCAS::Fn.new(:binomial, [n(5), n(2)]))
+    assert_kind_of Numeric, v
+    assert_in_delta 10.0, v, 1e-12
+  end
 end

@@ -73,7 +73,13 @@ module RCAS
     end
 
     def si(x) = cisi(x).last
-    def ci(x) = cisi(x).first
+    # On the negative axis Ci is on its cut: the principal value is
+    # Ci(|x|) + i*pi, from the log(x) in its definition. A real Float there
+    # was a wrong answer on either side of the cut (third review, D12).
+    def ci(x)
+      value = cisi(x).first
+      x.to_f.negative? ? Complex(value, Math::PI) : value
+    end
 
     # [Ci(x), Si(x)] for a real x; Ci is real only for x > 0.
     def cisi(x)

@@ -771,6 +771,8 @@ module RCAS
       in [:erfc, Const => c] if c.name == :oo then Num.new(0)
       in [:erfc, Neg => e] if e.arg.is_a?(Const) && e.arg.name == :oo then Num.new(2)
       in [:exp, Fn => inner] if inner.name == :log then inner.args.first
+      # exp(r*log(u)) is u**r: that is the definition of the principal power
+      in [:exp, Mul | Div | Neg => product] if (power = log_power(product)) then power
       in [:log, Fn => inner] if inner.name == :exp && Functions.principal_log?(inner.args.first) then inner.args.first
       else fn
       end
@@ -809,6 +811,15 @@ module RCAS
 
   # Exact special values: sin(pi/6), exp(i*pi), atan(1), asin(1/2), log(8)...
   module Functions
+    # r*log(u) with a rational r, as u**r; nil for anything else.
+    def self.log_power(e)
+      coeff, factors = Simplify.factorize(e)
+      return nil unless factors.size == 1 && (coeff.is_a?(Integer) || coeff.is_a?(Rational))
+      base, exp = factors.first
+      return nil unless exp == 1 && base.is_a?(Fn) && base.name == :log && base.args.size == 1
+      Simplify.simplify(Pow.new(base.args.first, Num.new(coeff)))
+    end
+
     def self.exact_value(name, arg)
       case name
       when :sin, :cos, :tan

@@ -48,6 +48,12 @@ module RCAS
     end
 
     def binomial_value(n, k)
+      # a Float that is a whole number is one (evalf floats both arguments)
+      k = Num.new(k.value.to_i) if k.is_a?(Num) && k.value.is_a?(Float) && k.value.finite? && k.value == k.value.round
+      if k.is_a?(Num) && k.value.is_a?(Float) && n.is_a?(Num) && n.value.is_a?(Float) &&
+         [n.value + 1, k.value + 1, n.value - k.value + 1].all?(&:positive?)
+        return Num.new(Math.exp(Math.lgamma(n.value + 1).first - Math.lgamma(k.value + 1).first - Math.lgamma(n.value - k.value + 1).first))
+      end
       return nil unless k.is_a?(Num) && k.value.is_a?(Integer)
       kk = k.value
       return Num.new(0) if kk.negative?

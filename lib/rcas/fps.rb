@@ -316,7 +316,11 @@ module RCAS
       valid = [low, 0].max # the shifted recurrence holds from here on
 
       ratios = (0...m).to_h { |residue| [residue, ratio.subs(k => Num.new(m) * k + Num.new(residue)).cancel] }
-      starts = ratios.to_h { |residue, step| [residue, start_index(step, k, valid, m, residue)] }
+      # the roots of r before cancelling: (k - 1)*(a(k) - a(k - 1)) = 0
+      # says nothing about a(1), and the cancelled ratio 1 forgot that, so
+      # x/(1 - x) came out as 0 (third review, D5)
+      leads = (0...m).to_h { |residue| [residue, r.subs(k => Num.new(m) * k + Num.new(residue)).expand] }
+      starts = ratios.to_h { |residue, step| [residue, start_index(step, k, valid, m, residue, leads[residue])] }
       known = starts.map { |residue, start| m * (start + LOOKAHEAD) + residue }.max
       return nil if known > MAX_START
       taylor = begin
@@ -419,12 +423,21 @@ module RCAS
     # ratio, where it says nothing about the next coefficient. A denominator
     # with a parameter in it has no roots to speak of, and the generic answer
     # is the one given (the sampled check still has to pass).
-    def start_index(step, k, valid, m, residue)
+    def start_index(step, k, valid, m, residue, lead = nil)
       start = [((valid - residue) / m.to_r).ceil, 0].max
       pair = Fraction.as_fraction(step, [k.name])
-      return start unless pair
-      roots = integer_roots(pair.last, k) || []
+      roots = pair ? (integer_roots(pair.last, k) || []) : []
+      if lead && (poly = lead_polynomial(lead, k))
+        roots += integer_roots(poly, k) || []
+      end
       roots.empty? ? start : [start, roots.max + 1].max
+    end
+
+    def lead_polynomial(expr, k)
+      return nil unless expr.variables.include?(k.name)
+      Polynomial.from_expr(QQ[k.name, *(expr.variables - [k.name])], expr)
+    rescue DomainError, NotImplementedError, ArgumentError
+      nil
     end
 
     # The non-negative integer roots of a polynomial, or nil when its

@@ -94,6 +94,9 @@ module RCAS
     # sum_{k>=0} coeff(k) * u**k, u with positive minimal exponent.
     def self.compose(u, order)
       c0 = Expression.lift(yield(0))
+      # u is known only to its own order, and so is anything built from it:
+      # sqrt(x**2 + x) at oo claimed O(1/x**3) with the 1/2 missing (D6)
+      order = [order, u.order].min
       return Series.constant(c0, order) if u.zero?
       mu = u.min_exponent
       raise SeriesError, "composition needs a series without constant term" unless mu.positive?
@@ -418,9 +421,25 @@ module RCAS
       coeff, factors = Simplify.factorize(g)
       raise SeriesError, "sign of #{g}" unless coeff.is_a?(Numeric) && coeff.real? && coeff.positive?
       factors.reduce(Fn.new(:log, [Num.new(coeff)])) do |acc, (base, exp)|
-        piece = base == Simplify.exp_base ? Expression.lift(exp) : Expression.lift(exp) * Fn.new(:log, [base])
+        piece =
+          if base == Simplify.exp_base then Expression.lift(exp)
+          elsif (tail = erfc_tail_log(base)) then Expression.lift(exp) * tail
+          else Expression.lift(exp) * Fn.new(:log, [base])
+          end
         acc + piece
       end
+    end
+
+    # log(erfc(u)) for u -> +oo is -u**2 - log(u) - log(pi)/2 + o(1)
+    # [AS64, 7.1.23]. erfc(u) itself expands to the zero series there - it
+    # is smaller than every power - and the logarithm of that zero was how
+    # erfc(x)*exp(x**2)*x came out as oo instead of 1/sqrt(pi) (third
+    # review, D4). nil when the factor is not such an erfc.
+    def erfc_tail_log(base)
+      return nil unless base.is_a?(Fn) && base.name == :erfc && base.args.size == 1
+      u = base.args.first
+      return nil unless value_of(u) == OO
+      (Neg.new(u**2) - Fn.new(:log, [u]) - Fn.new(:log, [PI]) / 2).simplify
     end
 
     def signed_infinity(c)
@@ -493,6 +512,30 @@ module RCAS
       Series.compose(u, order - m, &binomial).scale(lead.simplify).shift(r.is_a?(Numeric) ? m * r : 0)
     end
 
+    # Functions that have no Taylor series at some points: abs and sign at 0
+    # (and abs anywhere off the real line), floor, ceil and round where they
+    # jump. Differentiating them there gave abs(x) the series 0 and
+    # sign(x) the limit 0 at 0 (third review, D3).
+    KINKED = %i[abs sign floor ceil round].freeze
+
+    def non_analytic!(f, c)
+      return unless KINKED.include?(f.name)
+      value = begin
+        Expression.lift(c).evalf
+      rescue StandardError
+        nil
+      end
+      value = value.value if value.is_a?(Num)
+      real = value.is_a?(Numeric) && value.real?
+      at_kink =
+        case f.name
+        when :abs, :sign then !real || Decide.zero?(c) != false
+        when :floor, :ceil then !real || (Decide.zero?((c - Fn.new(:round, [c])).simplify) != false)
+        when :round then !real || Decide.zero?((c - Fn.new(:floor, [c]) - Num.new(Rational(1, 2))).simplify) != false
+        end
+      raise SeriesError, "#{f} has no series where its argument is #{c}" if at_kink
+    end
+
     def function(f, order)
       raise SeriesError, "#{f.name} takes one argument" unless f.args.size == 1
       name = f.name
@@ -527,6 +570,7 @@ module RCAS
       end
       raise SeriesError, "#{f} has an essential singularity" if s.min_exponent.negative?
       c = s.constant_term
+      non_analytic!(f, c)
       s0 = s - Series.constant(c, order)
       w = Var.new(:_w)
       derivative = Fn.new(name, [w])
