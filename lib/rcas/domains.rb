@@ -340,8 +340,14 @@ module RCAS
     def expression_sign(expr)
       case expr
       when Pow
-        return :nonnegative if expr.exponent.is_a?(Num) && expr.exponent.value.is_a?(Integer) && expr.exponent.value.even?
-        sign_of(expr.base) == :positive ? :positive : nil
+        base_sign = sign_of(expr.base)
+        return :positive if base_sign == :positive
+        # An even power is not negative - of a real number. y**2 at y = 2i
+        # is -4, and an undeclared y is not real (the branch-cut policy),
+        # so abs(y**2 + 1) keeps its abs until y is declared.
+        even = expr.exponent.is_a?(Num) && expr.exponent.value.is_a?(Integer) && expr.exponent.value.even?
+        return :nonnegative if even && (base_sign || real?(expr.base))
+        nil
       when Mul
         combine_signs(sign_of(expr.left), sign_of(expr.right))
       when Add
@@ -361,6 +367,11 @@ module RCAS
     end
 
     def nonnegative?(expr) = %i[positive nonnegative].include?(sign_of(expr))
+
+    def real?(expr)
+      d = Infer.domain(expr)
+      !d.nil? && d <= RR
+    end
   end
 
   # Infers the smallest number set an expression's value must lie in, given

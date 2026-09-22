@@ -163,28 +163,171 @@ module RCAS
       return Inequalities.solve(target, vars) if target.is_a?(Inequality) || (target.is_a?(Array) && target.any? { |t| t.is_a?(Inequality) })
       return system(target, vars, domain: domain) if target.is_a?(Array)
       return piecewise(target, vars) if piecewise?(target)
-      f = to_zero(target).simplify
+      original = to_zero(target)
+      f = original.simplify
       x = variable(f, vars)
+      # The poles are read off the equation as it was written: simplify
+      # cancels (x - 1)/(x - 1) to 1, and x = 1 is still no solution of
+      # (x - 1)/(x - 1) = 1, where the left side has no value.
+      poles = Analysis.denominators(original, x)
       # 0 = 0 holds for every value of x. That is an answer, and a set is
       # what says it; raising made a true statement look like a failure.
       # Every value *of x*: with x declared an integer, sin(pi*x) vanishes
       # on ZZ and nowhere else, so the reals would be an overstatement.
-      return everywhere(x, domain) if Scalar.zero?(f)
+      return everywhere(x, domain, poles) if Scalar.zero?(f) || rational_identity?(f, x)
       found =
         begin
           univariate(f, x, 0, all: !principal)
         rescue NotImplementedError
           constant = trig_constant(f)
           raise if constant.nil?
-          return Scalar.zero?(constant) ? everywhere(x, domain) : []
+          return Scalar.zero?(constant) ? everywhere(x, domain, poles) : []
         end
       roots = dedupe(found).map { |root| family(root, x, f) }
-      ordered(restrict(merge_families(roots), x, domain))
+      ordered(restrict(off_poles(merge_families(roots), poles, x), x, domain))
+    end
+
+    # x/(x + 1) + 1/(x + 1) - 1 is zero as a rational function, which the
+    # normal form of simplify does not show: its cleared numerator is the
+    # zero polynomial, and the root finder answered that with [].
+    def rational_identity?(f, x)
+      return false unless f.each_node.any? { |n| n.is_a?(Div) || (n.is_a?(Pow) && n.exponent.is_a?(Num) && Simplify.negative?(n.exponent.value)) }
+      Scalar.zero?(f.cancel)
+    rescue StandardError
+      false
     end
 
     # Every value of x is a solution: the declared domain when there is one,
-    # the reals otherwise.
-    def everywhere(x, domain) = domain || RCAS.assumption(x.name) || RealSet.reals
+    # the reals otherwise - less the poles of the equation as written, so
+    # (x**2 - 1)/(x - 1) = x + 1 holds everywhere but at 1. Poles that come
+    # in a family cannot be taken out of a finite union of intervals, and
+    # the reals would claim them: that is refused.
+    def everywhere(x, domain, poles = [])
+      declared = domain || RCAS.assumption(x.name)
+      return declared if declared
+      points = poles.flat_map do |d|
+        found = Solve.solve(d, x)
+        raise NotImplementedError, "every #{x} where #{d} != 0 is a solution; that set is not a finite union of intervals" unless found.is_a?(Array)
+        found
+      end
+      if points.any? { |p| p.is_a?(ImageSet) }
+        raise NotImplementedError, "every #{x} off the zeros of #{poles.join(', ')} is a solution; that set is not a finite union of intervals"
+      end
+      real = points.select { |p| Analysis.numeric(p) }
+      return RealSet.reals if real.empty?
+      RealSet.reals - RealSet.new(real.map { |p| Interval.point(p) })
+    end
+
+    # Roots and families of the simplified equation that are poles of the
+    # equation as written. A point is dropped when a denominator is shown
+    # to vanish there. A family is checked member by member through its
+    # index: the members where a denominator vanishes form a sub-progression
+    # (or a single index, or nothing), and what is left is written as
+    # families again - sin(2*x)/sin(x) keeps {pi/2 + pi*k} and loses
+    # {pi*k}, sin(x)/x keeps {pi*k} for k >= 1 and k <= -1.
+    def off_poles(roots, poles, x)
+      return roots if poles.empty?
+      roots.flat_map do |root|
+        if root.is_a?(ImageSet)
+          family_off_poles(root, poles, x)
+        elsif root.is_a?(Expression) && root.variables.empty?
+          pole_at?(poles, x, root) ? [] : [root]
+        else
+          [root]
+        end
+      end
+    end
+
+    def pole_at?(poles, x, point)
+      poles.any? do |d|
+        value = begin
+          d.subs(x => point).simplify
+        rescue ZeroDivisionError
+          next true
+        end
+        Decide.zero?(value) == true
+      end
+    end
+
+    # [a + b*k | k in ZZ] minus its poles, as a list of families.
+    def family_off_poles(set, poles, x)
+      return [set] unless set.parameters.size == 1 && set.domain == ZZ
+      k = set.parameters.first
+      step = begin
+        Coefficients.coeff(set.expr, k, 1)
+      rescue StandardError
+        return [set]
+      end
+      offset = (set.expr - step * k).simplify
+      return [set] if offset.variables.include?(k.name) || Scalar.zero?(step)
+      # indices to drop: residues r mod n (from a family of poles) and
+      # single indices (from isolated poles)
+      progressions = []
+      singles = []
+      poles.each do |d|
+        zeros = begin
+          Solve.solve(d, x)
+        rescue NotImplementedError, ArgumentError
+          next
+        end
+        next unless zeros.is_a?(Array)
+        zeros.each do |z|
+          if z.is_a?(ImageSet)
+            progressions.concat(progression_hit(z, offset, step))
+          elsif z.is_a?(Expression) && z.variables.empty?
+            index = ((z - offset) / step).simplify
+            singles << index.value if index.is_a?(Num) && index.value.is_a?(Integer)
+          end
+        end
+      end
+      return [set] if progressions.empty? && singles.empty?
+      modulus = progressions.map(&:last).reduce(1, :lcm)
+      kept = (0...modulus).reject { |r| progressions.any? { |res, n| r % n == res } }
+      return [] if kept.empty?
+      j = Var.new(k.name)
+      families = kept.map do |r|
+        ImageSet.new((offset + step * (r + modulus * j)).simplify, [j], ZZ)
+      end
+      singles = singles.uniq.select { |i| kept.include?(i % modulus) }
+      singles.reduce(families) { |list, i| split_at(list, i, offset, step, modulus, j) }
+    end
+
+    # The residues r mod n of the indices k at which a + b*k is a member of
+    # the family z, as [[r, n], ...], when that is decidable: the steps and
+    # the offsets have a rational ratio. k gives the member of z with index
+    # m = (a - c + b*k)/e, which is an integer or not with period q in k,
+    # q the denominator of b/e - so trying k = 0...q finds every residue.
+    def progression_hit(z, offset, step)
+      return [] unless z.parameters.size == 1 && z.domain == ZZ
+      m = z.parameters.first
+      zstep = begin
+        Coefficients.coeff(z.expr, m, 1)
+      rescue StandardError
+        return []
+      end
+      zoffset = (z.expr - zstep * m).simplify
+      return [] if zoffset.variables.include?(m.name)
+      ratio = (step / zstep).simplify
+      shift = ((offset - zoffset) / zstep).simplify
+      rational = ->(v) { v.is_a?(Num) && (v.value.is_a?(Integer) || v.value.is_a?(Rational)) }
+      return [] unless rational.call(ratio) && rational.call(shift)
+      ratio = Rational(ratio.value)
+      shift = Rational(shift.value)
+      q = ratio.denominator
+      (0...q).select { |k| (shift + ratio * k).denominator == 1 }.map { |r| [r, q] }
+    end
+
+    # A family minus one member at index i (of the original a + b*k): the
+    # family containing it becomes two half-families running away from it.
+    def split_at(families, i, offset, step, modulus, j)
+      r = i % modulus
+      families.flat_map do |fam|
+        next [fam] unless fam.expr == (offset + step * (r + modulus * j)).simplify
+        up = (offset + step * (i + modulus + modulus * j)).simplify
+        down = (offset + step * (i - modulus - modulus * j)).simplify
+        [ImageSet.new(down, [j], NN), ImageSet.new(up, [j], NN)]
+      end
+    end
 
     # An identity is an identity however it is written, and no rule in the
     # chain sees the Pythagorean one: sin(x)**2 + cos(x)**2 - 1 is zero, and
@@ -393,6 +536,8 @@ module RCAS
 
       num, den = numerator_denominator(f, x)
       coeffs = polynomial_coefficients(num, x)
+      # a zero numerator is an identity off the poles, not "no roots"
+      raise ArgumentError, "every value of #{x} is a solution" if coeffs&.all? { |c| Scalar.zero?(c) }
       roots = coeffs ? polynomial_roots(coeffs) : transcendental(num, x, depth, all: all)
       roots = roots.map(&:simplify).reject { |r| Scalar.zero?(den.subs(x => r).simplify) }
       verify(f, x, roots)
@@ -624,18 +769,20 @@ module RCAS
       atoms.each do |u|
         g = replace_atom(f, u, x, t)
         next if g.nil? || depends?(g, x)
-        values = begin
-          univariate(g, t, depth + 1)
+        inverted = begin
+          univariate(g, t, depth + 1).flat_map { |v| invert(u, v, x, depth, all: all) }
         rescue NotImplementedError, ArgumentError
-          next
+          next # another atom, or one of the rules below, may do better
         end
-        return values.flat_map { |v| invert(u, v, x, depth, all: all) }
+        return inverted
       end
 
       # x**(p/q): substitute t = x**(1/q)
       q = root_denominator(f, x)
-      if q > 1
-        g = replace_root(f, x, q, t)
+      if q > 1 && !depends?(g = replace_root(f, x, q, t), x)
+        # only when t = x**(1/q) replaces every x: sqrt(x)*log(x) keeps an
+        # x inside the log, and "solving for t" there treated it as a
+        # constant (and sqrt(x) = sqrt(2 - x) answered 2 - x)
         values = univariate(g, t, depth + 1)
         return values.map { |v| (v**q).simplify }
       end
@@ -756,17 +903,26 @@ module RCAS
     # sqrt(u) = v: the radical on one side, both sides to the q-th power,
     # and the answers kept only where the original equation is defined.
     # Raising to a power invents roots, and `verify` drops those.
+    #
+    # Two radicals go one to each side, sqrt(x) = sqrt(2 - x), and the
+    # squared equation has one radical fewer; what is left is squared again
+    # one level down.
     def radical_equation(f, x, depth)
       constant, terms = Simplify.termize(f)
       with, without = terms.partition { |factors, _| root_index(factors, x) }
-      return nil unless with.size == 1
-      q = root_index(with.first.first, x)
+      return nil unless [1, 2].include?(with.size)
+      q = with.map { |factors, _| root_index(factors, x) }.max
       return nil if q.nil? || q > 3
-      side = Simplify.rebuild_sum(0, with.to_h)
-      rest = Simplify.rebuild_sum(-constant, without.to_h.transform_values { |c| -c })
+      side = Simplify.rebuild_sum(0, with.first(1).to_h)
+      others = with.drop(1) + without
+      rest = Simplify.rebuild_sum(-constant, others.to_h.transform_values { |c| -c })
       g = (Expand.expand(Simplify.power_node(side, q)) - Expand.expand(Simplify.power_node(rest, q))).simplify
-      return nil if root_denominator(g, x) > 1 || g.each_node.any? { |n| root_index_of(n, x) }
-      defined_roots(f, x, univariate(g, x, depth + 1))
+      if root_denominator(g, x) > 1 || g.each_node.any? { |n| root_index_of(n, x) }
+        # still a radical: fine if there are fewer radical terms than before
+        remaining = Simplify.termize(g).last.count { |factors, _| root_index(factors, x) }
+        return nil unless remaining < with.size
+      end
+      defined_roots(f, x, verify(f, x, univariate(g, x, depth + 1)))
     rescue NotImplementedError
       nil
     end
@@ -912,21 +1068,30 @@ module RCAS
           when :acos then [Fn.new(:cos, [v])]
           when :sinh then [Fn.new(:log, [v + RCAS.sqrt(v**2 + 1)])]
           when :cosh then [Fn.new(:log, [v + RCAS.sqrt(v**2 - 1)]), -Fn.new(:log, [v + RCAS.sqrt(v**2 - 1)])]
-          else return []
+          else cannot_invert!(u, v)
           end
-        targets.flat_map { |w| univariate((arg - w).simplify, x, depth + 1) }
+        # all: goes down with the equation: exp(sin(x)) = 1 is sin(x) = 0,
+        # and that has a family, not two points
+        targets.flat_map { |w| univariate((arg - w).simplify, x, depth + 1, all: all) }
       when Pow
         if depends?(u.base, x) && !depends?(u.exponent, x)
-          univariate((u.base - v**(1 / u.exponent)).simplify, x, depth + 1)
+          univariate((u.base - v**(1 / u.exponent)).simplify, x, depth + 1, all: all)
         elsif !depends?(u.base, x)
           roots_of_unity(u, v, x, depth, all: all) ||
-            univariate((u.exponent - Fn.new(:log, [v]) / Fn.new(:log, [u.base])).simplify, x, depth + 1)
+            univariate((u.exponent - Fn.new(:log, [v]) / Fn.new(:log, [u.base])).simplify, x, depth + 1, all: all)
         else
-          []
+          cannot_invert!(u, v)
         end
       else
-        []
+        cannot_invert!(u, v)
       end
+    end
+
+    # No inverse is known for u (x**x, erf, gamma, floor, an unknown
+    # function): that is "can't", never "no solution" - x**x = 4 has the
+    # root 2.
+    def cannot_invert!(u, v)
+      raise NotImplementedError, "can't solve #{u} = #{v}: rcas knows no inverse of #{u.is_a?(Fn) ? u.name : u}"
     end
 
     # Largest order of a root of unity we look for: (-1)**x is the one that

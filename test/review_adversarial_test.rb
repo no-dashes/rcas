@@ -22,4 +22,14 @@ class ThirdReviewAdversarialTest < Minitest::Test
     inner = RCAS::Integral.new(@t+inner_var,inner_var,n(0),n(1))
     RCAS::Integral.new(inner,@t,n(0),@x)
   end
+
+  def test_real_locus_can_contain_negative_root_arguments
+    # Principal sqrt(-1)=i; i*sqrt(-1)=-1 is a real value.
+    begin
+      result = RCAS.real_domain(RCAS::I*RCAS.sqrt(@x),@x)
+    rescue NotImplementedError
+      return assert true
+    end
+    assert result.include?(-1), 'The correct real locus is (-infinity,0].'
+  end
 end

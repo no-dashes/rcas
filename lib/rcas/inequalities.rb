@@ -22,14 +22,22 @@ module RCAS
     def low_value = Limits.infinite?(low) ? (low == OO ? Float::INFINITY : -Float::INFINITY) : low.evalf
     def high_value = Limits.infinite?(high) ? (high == OO ? Float::INFINITY : -Float::INFINITY) : high.evalf
 
+    # Exact where the ends are close to v: 1 + 10**-15/2 lies in
+    # (1, 1 + 10**-15), which Floats cannot see (Inequalities.compare).
     def include?(v)
-      v = Expression.lift(v).evalf
-      return false unless v.is_a?(Numeric) && v.real?
-      lo, hi = low_value, high_value
-      (left_open ? v > lo : v >= lo) && (right_open ? v < hi : v <= hi)
+      v = Expression.lift(v)
+      value = v.evalf
+      return false unless value.is_a?(Numeric) && value.real?
+      below = Inequalities.compare(low, v)
+      above = Inequalities.compare(v, high)
+      return false if below.nil? || above.nil?
+      (left_open ? below.negative? : below <= 0) && (right_open ? above.negative? : above <= 0)
     end
 
-    def empty? = low_value > high_value || (low_value == high_value && (left_open || right_open))
+    def empty?
+      order = Inequalities.compare(low, high) || (low_value <=> high_value)
+      order.positive? || (order.zero? && (left_open || right_open))
+    end
 
     def ==(other) = other.is_a?(Interval) && other.low == low && other.high == high && other.left_open == left_open && other.right_open == right_open
     alias eql? ==
@@ -67,14 +75,22 @@ module RCAS
       set.freeze
     end
 
-    # Sort, drop empty pieces, merge touching ones.
+    # Sort, drop empty pieces, merge touching ones. The ends are compared
+    # exactly (Inequalities.compare), so two roots 10**-15 apart bound an
+    # interval instead of merging into a point.
     def self.normalize(list)
-      sorted = list.reject(&:empty?).sort_by { |i| [i.low_value, i.left_open ? 1 : 0] }
+      order = ->(a, b) { Inequalities.compare(a, b) || (a.evalf.to_f <=> b.evalf.to_f) }
+      sorted = list.reject(&:empty?).sort do |a, b|
+        c = order.call(a.low, b.low)
+        c.zero? ? (a.left_open ? 1 : 0) <=> (b.left_open ? 1 : 0) : c
+      end
       merged = []
       sorted.each do |i|
         last = merged.last
-        if last && (i.low_value < last.high_value || (i.low_value == last.high_value && !(i.left_open && last.right_open)))
-          if i.high_value > last.high_value || (i.high_value == last.high_value && !i.right_open)
+        touch = last && order.call(i.low, last.high)
+        if last && (touch.negative? || (touch.zero? && !(i.left_open && last.right_open)))
+          reach = order.call(i.high, last.high)
+          if reach.positive? || (reach.zero? && !i.right_open)
             merged[-1] = Interval.new(last.low, i.high, left_open: last.left_open, right_open: i.right_open)
           end
         else
@@ -249,7 +265,11 @@ module RCAS
       list.map { |ineq| single(ineq, x) }.reduce { |a, b| a & b }
     end
 
+    # The inequality is solved in its simplified form, and then the poles
+    # of the inequality *as written* are taken out: x/x > 0 is 1 > 0 after
+    # simplify, and still says nothing at x = 0.
     def single(ineq, x)
+      raw = Expression.lift(ineq.lhs - ineq.rhs)
       f, op = ineq.normalized
       params = f.variables - [x.name]
       if params.size == 1
@@ -257,11 +277,28 @@ module RCAS
       elsif params.size > 1
         raise NotImplementedError, "inequalities with several parameters (#{params.join(', ')}) are not supported"
       end
+      f = Num.new(0) if f.variables.include?(x.name) && Solve.rational_identity?(f, x)
+      without_poles(solved(f, op, x), raw, x)
+    end
+
+    def solved(f, op, x)
       return not_equal(f, x) if op == :!=
       return (Scalar.zero?(f) ? (op == :<= ? RealSet.reals : RealSet.empty) : constant_case(f, op)) unless f.variables.include?(x.name)
       absolutes = f.each_node.select { |n| n.is_a?(Fn) && n.name == :abs && n.args.first.variables.include?(x.name) }.uniq
       return sign_chart(f, op, x) if absolutes.empty?
       piecewise(f, op, x, absolutes)
+    end
+
+    # The set less the real zeros of the denominators of raw.
+    def without_poles(set, raw, x)
+      return set unless set.is_a?(RealSet) && !set.empty?
+      points = Analysis.denominators(raw, x).flat_map do |d|
+        zeros = Solve.solve(d, x)
+        raise NotImplementedError, "the poles of #{raw} (the zeros of #{d}) are not a finite set of points" unless zeros.is_a?(Array) && zeros.none? { |z| z.is_a?(ImageSet) }
+        zeros.select { |z| real?(z) }.map { |z| real_part(z) }
+      end
+      return set if points.empty?
+      set - RealSet.new(points.map { |p| Interval.point(p) })
     end
 
     # f != 0: everything except the zeros of f (and the points where f is undefined).
@@ -275,27 +312,39 @@ module RCAS
     end
 
     def constant_case(f, op)
-      v = f.evalf
-      raise NotImplementedError, "cannot decide the sign of #{f}" unless v.is_a?(Numeric) && v.real?
-      v.public_send(op, 0) ? RealSet.reals : RealSet.empty
+      sign = sign_of(f)
+      raise NotImplementedError, "cannot decide the sign of #{f}" if sign.nil?
+      holds = case op
+              when :< then sign == :negative
+              when :<= then sign != :positive
+              end
+      holds ? RealSet.reals : RealSet.empty
     end
 
     # Split the real line at the zeros of the abs arguments; on each piece
     # abs(u) is u or -u.
     def piecewise(f, op, x, absolutes)
-      points = absolutes.flat_map { |a| real_roots(a.args.first, x) }
+      points = distinct(absolutes.flat_map { |a| real_roots(a.args.first, x) })
       pieces = regions(points).map do |region|
-        t = test_point(region)
+        t = sample(region)
         replaced = absolutes.reduce(f) do |acc, a|
           u = a.args.first
-          acc.subs(a => (u.evalf(x.name => t).negative? ? -u : u))
+          sign = sign_of(u.subs(x => t)) or raise NotImplementedError, "cannot decide the sign of #{u} at #{t}"
+          acc.subs(a => (sign == :negative ? -u : u))
         end
         RealSet.new([region]) & single(Inequality.new(replaced, op, 0), x)
       end
-      # the split points themselves
+      # the split points themselves - where f has a value there at all
       points.each do |p|
-        value = f.evalf(x.name => p.evalf)
-        pieces << RealSet.new([Interval.point(p)]) if value.is_a?(Numeric) && value.real? && value.public_send(op, 0)
+        value = begin
+          f.subs(x => p).simplify
+        rescue ZeroDivisionError
+          next
+        end
+        next unless Integrate.defined_value?(value)
+        sign = sign_of(value)
+        next if sign.nil?
+        pieces << RealSet.new([Interval.point(p)]) if op == :< ? sign == :negative : sign != :positive
       end
       pieces.reduce(RealSet.empty) { |acc, s| acc | s }
     end
@@ -307,42 +356,123 @@ module RCAS
       end
       zeros = real_roots(num, x)
       poles = real_roots(den, x)
-      points = (zeros + poles).uniq { |p| p.evalf.round(12) }
+      points = distinct(zeros + poles)
       pieces = []
       regions(points).each do |region|
-        value = f.evalf(x.name => test_point(region))
-        pieces << region if value.public_send(op, 0)
+        t = sample(region)
+        sign = sign_of(f.subs(x => t)) or raise NotImplementedError, "cannot decide the sign of #{f} at #{t}"
+        pieces << region if sign == :negative || (sign == :zero && op == :<=)
       end
       unless op == :<
-        zeros.each { |z| pieces << Interval.point(z) unless poles.any? { |p| (p.evalf - z.evalf).abs < 1e-12 } }
+        zeros.each { |z| pieces << Interval.point(z) unless poles.any? { |p| compare(p, z)&.zero? } }
       end
       RealSet.new(pieces)
     end
 
-    # Real roots as exact expressions, ordered.
+    # Real roots as exact expressions, ordered. A root is real when that is
+    # decided - (x - 1)**2 + 10**-26 has the roots 1 +- 10**-13*i, which a
+    # tolerance of 1e-12 on the imaginary part took for the real 1.
     def real_roots(f, x)
       return [] unless f.variables.include?(x.name)
-      Solve.univariate(f, x, 0).select do |r|
-        v = r.evalf
-        v.is_a?(Numeric) && (v.real? || v.imaginary.abs < 1e-12)
-      end.map { |r| r.evalf.is_a?(Complex) ? Num.new(r.evalf.real) : r }.sort_by(&:evalf)
-    rescue NotImplementedError, ArgumentError
+      roots = Solve.univariate(f, x, 0)
+      sort(distinct(roots.select { |r| real?(r) }.map { |r| real_part(r) }))
+    rescue ArgumentError
       raise NotImplementedError, "cannot find the real roots of #{f}"
+    rescue NotImplementedError => e
+      raise NotImplementedError, "cannot find the real roots of #{f}: #{e.message}"
+    end
+
+    # true when r is shown to be real, false when shown not to be; a root
+    # that cannot be told is refused rather than guessed.
+    def real?(r)
+      r = Expression.lift(r)
+      return true if (d = Infer.domain(r)) && d <= RR
+      return r.value.is_a?(Numeric) && r.value.real? if r.is_a?(Num)
+      imaginary = ComplexParts.im(r)
+      decided = Decide.zero?(imaginary)
+      raise NotImplementedError, "cannot decide whether #{r} is real" if decided.nil?
+      decided
+    end
+
+    def real_part(r)
+      r = Expression.lift(r)
+      return r if (d = Infer.domain(r)) && d <= RR
+      return Num.new(r.value.real) if r.is_a?(Num) && r.value.is_a?(Complex)
+      ComplexParts.re(r)
     end
 
     # Open intervals between consecutive points, from -oo to oo.
     def regions(points)
-      sorted = points.uniq { |p| p.evalf.round(12) }.sort_by(&:evalf)
+      sorted = sort(distinct(points))
       bounds = [Neg.new(OO).simplify] + sorted + [OO]
       bounds.each_cons(2).map { |a, b| Interval.open(a, b) }
     end
 
-    def test_point(region)
-      lo, hi = region.low_value, region.high_value
-      return 0.0 if lo == -Float::INFINITY && hi == Float::INFINITY
-      return hi - 1.0 if lo == -Float::INFINITY
-      return lo + 1.0 if hi == Float::INFINITY
-      (lo + hi) / 2.0
+    # A point strictly inside an open region, exact: a short rational where
+    # the Floats can see the gap, the midpoint otherwise.
+    def sample(region)
+      lo, hi = region.low, region.high
+      return Num.new(0) if Limits.infinite?(lo) && Limits.infinite?(hi)
+      return (hi - 1).simplify if Limits.infinite?(lo)
+      return (lo + 1).simplify if Limits.infinite?(hi)
+      a, b = region.low_value.to_f, region.high_value.to_f
+      if a.finite? && b.finite? && b - a > 1e-9 * [1.0, a.abs, b.abs].max
+        r = Num.new(((a + b) / 2).rationalize(Rational((b - a) / 4)))
+        return r if compare(lo, r) == -1 && compare(r, hi) == -1
+      end
+      ((lo + hi) / 2).simplify
+    end
+
+    # The old Float test point, for callers that want a number.
+    def test_point(region) = sample(region).evalf.to_f
+
+    def sign_of(value)
+      value = Expression.lift(value).simplify
+      rank = infinity_rank(value)
+      return rank.positive? ? :positive : :negative unless rank.zero?
+      Decide.sign(value)
+    end
+
+    # -1, 0 or 1 for two real constants (the infinities included), or nil
+    # when it cannot be told. The Floats answer when they are well apart;
+    # close values are decided exactly.
+    def compare(a, b)
+      a = Expression.lift(a)
+      b = Expression.lift(b)
+      ra = infinity_rank(a)
+      rb = infinity_rank(b)
+      return ra <=> rb if ra != 0 || rb != 0
+      fa = real_float(a)
+      fb = real_float(b)
+      if fa && fb && (fa - fb).abs > 1e-9 * [1.0, fa.abs, fb.abs].max
+        return fa <=> fb
+      end
+      return 0 if a == b
+      sign = sign_of(a - b)
+      return { positive: 1, negative: -1, zero: 0 }[sign] if sign
+      fa && fb ? fa <=> fb : nil
+    end
+
+    def infinity_rank(e)
+      return 1 if e == OO
+      return -1 if Limits.infinite?(e)
+      0
+    end
+
+    def real_float(e)
+      v = e.evalf
+      v = v.value if v.is_a?(Num)
+      v.is_a?(Numeric) && v.real? && v.to_f.finite? ? v.to_f : nil
+    rescue StandardError, Math::DomainError
+      nil
+    end
+
+    def distinct(points)
+      points.each_with_object([]) { |p, out| out << p unless out.any? { |q| compare(p, q)&.zero? } }
+    end
+
+    def sort(points)
+      points.sort { |p, q| compare(p, q) || (p.evalf.to_f <=> q.evalf.to_f) }
     end
   end
 
@@ -371,7 +501,13 @@ module RCAS
         pieces << [region, symbolize(set, roots, sample)]
       end
       points.each do |c|
-        pieces << [Interval.point(c), Inequalities.single(Inequality.new(@f.subs(@a => c), @op, 0), @x)]
+        # x/a > 1 at a = 0 is no inequality at all: it holds for no x
+        at_point = begin
+          Inequalities.single(Inequality.new(@f.subs(@a => c), @op, 0), @x)
+        rescue ZeroDivisionError
+          RealSet.empty
+        end
+        pieces << [Interval.point(c), at_point]
       end
       pieces.sort_by! { |region, _| [region.low_value, region.point? ? 0 : 1] }
       merged = merge(pieces)
@@ -400,7 +536,10 @@ module RCAS
       roots.combination(2) { |r1, r2| values.concat(parameter_roots((r1 - r2).simplify)) }
       [num, den].each do |poly|
         coeffs = Solve.polynomial_coefficients(poly, @x)
-        values.concat(parameter_roots(coeffs.last)) if coeffs && coeffs.last.variables.include?(@a.name)
+        next unless coeffs
+        values.concat(parameter_roots(coeffs.last)) if coeffs.last.variables.include?(@a.name)
+        # a coefficient that has no value there: x/a at a = 0
+        coeffs.each { |c| Analysis.denominators(c, @a).each { |d| values.concat(parameter_roots(d)) } }
       end
       values.uniq { |v| v.evalf.round(10) }.sort_by(&:evalf)
     end

@@ -74,4 +74,11 @@ class ReviewQualityTest < Minitest::Test
       assert_equal n(240), symbolic.subs(n: 5).simplify
     end
   end
+
+  def test_a_radicand_negative_everywhere_has_an_empty_real_domain
+    # -(x - 1)**2 - 10**-26 <= -10**-26 < 0 for every real x, so
+    # sqrt of it is real nowhere.
+    domain = RCAS.real_domain(RCAS.sqrt(-(@x - 1)**2 - Rational(1, 10**26)), @x)
+    assert_equal RCAS::RealSet.empty, domain
+  end
 end

@@ -51,4 +51,13 @@ class ReviewCoreTest < Minitest::Test
     got = RCAS::Integral.new(@y * f, @x, n(0), n(1)).subs(y: @x)
     refute_equal RCAS::Integral.new(@x * f, @x, n(0), n(1)), got
   end
+
+  def test_abs_of_an_even_power_needs_a_real_base
+    # y is not declared real. At y = 2i: y**2 + 1 = -3, so |y**2 + 1| = 3 and
+    # sqrt((y**2 + 1)**2) = sqrt(9) = 3; at y = i: |y**2| = |-1| = 1.
+    two_i = n(Complex(0, 2))
+    assert_value 3, RCAS.abs(@y**2 + 1).simplify.subs(y: two_i).simplify
+    assert_value 3, RCAS.sqrt((@y**2 + 1)**2).simplify.subs(y: two_i).simplify
+    assert_value 1, RCAS.abs(@y**2).simplify.subs(y: RCAS::I).simplify
+  end
 end

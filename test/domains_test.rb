@@ -262,8 +262,10 @@ class DomainsTest < Minitest::Test
     assert_equal "-z", RCAS.abs(RCAS::Var.new(:z)).simplify.to_s
     RCAS.assume(RCAS::Var.new(:w) >= 0)
     assert_equal "w", RCAS.sqrt(RCAS::Var.new(:w)**2).simplify.to_s
-    # products and even powers follow
-    assert_equal :nonnegative, RCAS.sign_of(RCAS::Var.new(:q)**2)
+    # products and even powers follow - an even power of a real number:
+    # q**2 is -1 at q = i, so an undeclared q decides nothing
+    assert_nil RCAS.sign_of(RCAS::Var.new(:q)**2)
+    RCAS.assume(q: RCAS::RR) { assert_equal :nonnegative, RCAS.sign_of(RCAS::Var.new(:q)**2) }
     assert_equal :positive, RCAS.sign_of(RCAS::Var.new(:x) * RCAS::Var.new(:x))
     RCAS.forget(:x)
     assert_equal "(x**2)**(1/2)", RCAS.sqrt(RCAS::Var.new(:x)**2).simplify.to_s, "and it is unsafe again once forgotten"
