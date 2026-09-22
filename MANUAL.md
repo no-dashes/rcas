@@ -993,6 +993,22 @@ rcas> integrate(1/(2 + cos(x)), x, 0, PI)
 => 3**(1/2)*pi/3
 ```
 
+The same goes for an `atan(p/q)` in the antiderivative, which jumps where
+`q` vanishes: the one for `(x**2 + 1)/(x**4 + 1)` breaks at `x = 0`. And a
+pole whose place depends on a parameter may lie between the bounds or not,
+so the integral stays formal until an assumption settles it - for `a = 1/2`
+the integrand below is positive and the integral diverges, while the
+formula a CAS would write down says `-4`.
+
+```
+rcas> integrate((x**2 + 1)/(x**4 + 1), x, -3, 3).evalf
+=> 3.753289434477252
+rcas> integrate(1/(x - a)**2, x, 0, 1)
+=> integral(1/(-a + x)**2, x, 0, 1)
+rcas> assume(a < 0) { integrate(1/(x - a)**2, x, 0, 1) }
+=> -1/(1 - a) - 1/a
+```
+
 #### Integrals that have names
 
 Some integrands have no elementary antiderivative but have a named one,

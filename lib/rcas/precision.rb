@@ -158,6 +158,11 @@ module RCAS
     # that a caller knows retrying in Floats would not help either.
     class NoConvergence < Unsupported; end
 
+    # A magnitude beyond arbitrary precision (exp of more than EXP_LIMIT):
+    # far out in the tail of an infinite range this is where the weights
+    # have already died, and the quadrature skips the point.
+    class Overflow < Unsupported; end
+
     GUARD = 10
     FLOAT_DIGITS = Float::DIG + 1
     MAX_TERMS = 100_000
@@ -328,7 +333,7 @@ module RCAS
     EXP_LIMIT = 1_000_000
 
     def exponential(x, prec)
-      raise Unsupported, "evalf: exp(#{x.to_f}) is beyond arbitrary precision" if x.abs > EXP_LIMIT
+      raise Overflow, "evalf: exp(#{x.to_f}) is beyond arbitrary precision" if x.abs > EXP_LIMIT
       BigMath.exp(x, prec)
     end
 
@@ -568,8 +573,15 @@ module RCAS
           next if weight.zero?
           value = begin
             f.call(point)
-          rescue ZeroDivisionError, Unsupported
+          rescue Overflow
             next
+          rescue ZeroDivisionError, Unsupported
+            # at the very ends the point can round onto a singular end, and
+            # the weight there is below any precision; inside the range an
+            # undefined sample is a hole or a pole, and skipping it made
+            # the integral of 1/x over -1..1 come out as 0
+            next if weight.abs < tolerance(work)
+            hole(f, point, work)
           end
           contribution += weight.mult(value, work)
         end
@@ -579,6 +591,20 @@ module RCAS
         break if k * step > 8 # the weights are below any precision by here
       end
       total.mult(step, work)
+    end
+
+    # The value at a point where the integrand has none, when the point is a
+    # removable hole (sin(x)/x at 0): the samples just either side agree.
+    # Anything else - a pole, a jump - is no integrand this rule can take.
+    def hole(f, point, work)
+      eps = BigDecimal("1e-#{work / 2}") * [point.abs, BigDecimal(1)].max
+      left = f.call(point - eps)
+      right = f.call(point + eps)
+      scale = [left.abs, right.abs, BigDecimal(1)].max
+      return (left + right).div(2, work) if (left - right).abs <= scale * BigDecimal("1e-#{work / 4}")
+      raise NoConvergence, "evalf: the integrand has no value at #{point.round(12).to_s('F')} inside the range"
+    rescue ZeroDivisionError, Unsupported
+      raise NoConvergence, "evalf: the integrand has no value near #{point.round(12).to_s('F')} inside the range"
     end
 
     # [point, weight] as a function of t, for the three shapes of range.

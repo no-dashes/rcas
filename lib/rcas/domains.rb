@@ -384,7 +384,7 @@ module RCAS
       when Num then expr.finite_field? ? expr.value.field : NumberSet.of(expr.value)
       when Const then %i[oo undefined].include?(expr.name) ? nil : RR
       when RootOf then expr.real? ? RR : CC
-      when Var then RCAS.assumption(expr.name)
+      when Var then RCAS.assumption(expr.name) || (RCAS.signs[expr.name] ? RR : nil) # a sign says real
       when Neg then no_naturals(domain(expr.arg))
       when Add, Mul then join(domain(expr.left), domain(expr.right))
       when Sub then no_naturals(join(domain(expr.left), domain(expr.right)))

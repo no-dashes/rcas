@@ -334,10 +334,15 @@ module RCAS
         r && Integrate.complete?(r) ? r : nil
       end
 
-      # atan(tan(u)) => u: the same formal antiderivative, without the jumps.
-      def unwind(e)
-        e = e.map_children { |c| unwind(c) }
-        return e.args.first.args.first if e.is_a?(Fn) && e.name == :atan && e.args.first.is_a?(Fn) && e.args.first.name == :tan
+      # atan(tan(u)) => u: the same formal antiderivative, without the jumps
+      # - for the atan(tan(u)) the substitution t = tan(u/2) put there. One
+      # the integrand already had (`keep`) is a sawtooth, not u:
+      # integrate(atan(tan(x)), x) is not x**2/2 (third review, D7).
+      def unwind(e, keep = [])
+        e = e.map_children { |c| unwind(c, keep) }
+        if e.is_a?(Fn) && e.name == :atan && e.args.first.is_a?(Fn) && e.args.first.name == :tan && !keep.include?(e)
+          return e.args.first.args.first
+        end
         e
       end
 

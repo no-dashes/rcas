@@ -61,7 +61,8 @@ module RCAS
         term = Simplify.rebuild_product(coeff, factors)
         parts << (attempt(term, x, 0) || Integral.new(term, x))
       end
-      Substitutions.unwind(parts.reduce(Num.new(0)) { |a, b| a + b }).simplify
+      written = f.each_node.select { |n| n.is_a?(Fn) && n.name == :atan && n.args.first.is_a?(Fn) && n.args.first.name == :tan }
+      Substitutions.unwind(parts.reduce(Num.new(0)) { |a, b| a + b }, written).simplify
     end
 
     # Definite integral from a to b: F(b) - F(a), with limits at infinite or
@@ -185,13 +186,30 @@ module RCAS
 
       points = []
       unsolved = []
+      budget = MAX_BREAKS
       candidates.uniq.each do |d|
         roots = begin
-          Solve.solve(d, x, principal: true)
+          Solve.solve(d, x)
         rescue StandardError, NotImplementedError
           nil
         end
-        roots.nil? ? unsolved << d : points.concat(roots)
+        roots = nil unless roots.nil? || roots.is_a?(Array)
+        if roots.nil?
+          unsolved << d
+          next
+        end
+        roots.each do |root|
+          # every member of a family of poles, not one period of it: 1/sin(x)
+          # over 0..10 has poles at pi, 2*pi and 3*pi
+          members = root.is_a?(ImageSet) ? root.between(lo, hi, limit: budget) : [root]
+          return nil if members.nil?
+          budget -= members.size
+          # a pole whose place depends on a parameter may be inside or not;
+          # 1/(x - a)**2 over 0..1 diverges for a = 1/2, and the generic
+          # antiderivative said -4 there. Undecided is not "outside".
+          return nil if members.any? { |m| !m.variables.empty? && possibly_inside?(m, lo, hi) }
+          points.concat(members)
+        end
       end
       known = points.filter_map { |p| real_number(p) }
       # A denominator whose zeros rcas cannot name may still have one here,
@@ -202,6 +220,26 @@ module RCAS
       kinds = inside.to_h { |p| [p, singularity(f, x, p)] }
       return nil if kinds.value?(:unknown)
       order_points(inside.select { |p| kinds[p] == :pole } + jumps, a, b)
+    end
+
+    # A symbolic pole is outside (lo, hi) only when the assumptions say so;
+    # a pole that is not real for any value of the parameters (a sum of
+    # squares' zeros, +-i*a with a declared real) is not inside either.
+    def possibly_inside?(m, lo, hi)
+      real = begin
+        Inequalities.real?(m)
+      rescue NotImplementedError
+        nil
+      end
+      return false if real == false
+      imaginary = ComplexParts.im(m)
+      return false if (sign = RCAS.sign_of(imaginary)) && %i[positive negative].include?(sign)
+      below = RCAS.sign_of((m - Num.new(Rational(lo))).simplify) if lo.finite?
+      above = RCAS.sign_of((Num.new(Rational(hi)) - m).simplify) if hi.finite?
+      return false if %i[negative nonpositive].include?(below) || %i[negative nonpositive].include?(above)
+      true
+    rescue StandardError
+      true
     end
 
     def order_points(points, a, b)
@@ -216,10 +254,19 @@ module RCAS
     # of 1/(2 + cos(x)) over 0..2*pi came out as 0 - and splitting there,
     # with the one-sided limits `between` already takes, is the answer.
     # => the points, or nil when the breaks cannot be enumerated.
+    #
+    # atan(p/q) breaks the same way where q vanishes: Lazard-Rioboo-Trager
+    # gives (x**2 + 1)/(x**4 + 1) the antiderivative
+    # atan((x**2 - 1)/(sqrt(2)*x))/sqrt(2), which jumps by pi/sqrt(2) at
+    # x = 0 where the integrand is smooth (third review, D2).
     def jump_points(antiderivative, x, lo, hi)
-      candidates = antiderivative.each_node.filter_map do |node|
-        next nil unless node.is_a?(Fn) && node.name == :tan && node.args.first.variables.include?(x.name)
-        Fn.new(:cos, [node.args.first])
+      candidates = antiderivative.each_node.flat_map do |node|
+        next [] unless node.is_a?(Fn) && node.args.first&.variables&.include?(x.name)
+        case node.name
+        when :tan then [Fn.new(:cos, [node.args.first])]
+        when :atan then Analysis.denominators(node.args.first, x)
+        else []
+        end
       end
       return [] if candidates.empty?
 

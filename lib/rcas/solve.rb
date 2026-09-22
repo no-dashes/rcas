@@ -64,9 +64,22 @@ module RCAS
       expr.subs(bindings).simplify
     end
 
-    # The members between two numbers, when they can be counted out.
+    # No member on the real line: the step is real and a member is not, so
+    # every member has the same non-zero imaginary part ({pi - acos(2) +
+    # 2*pi*k}, the zeros of 2 + cos(x)).
+    def nonreal?
+      return false unless parameters.size == 1
+      step = (at(1) - at(0)).simplify
+      Inequalities.real?(step) && !Inequalities.real?(at(0))
+    rescue NotImplementedError, StandardError
+      false
+    end
+
+    # The members between two numbers, when they can be counted out; [] for
+    # a family that never meets the real line.
     def between(lo, hi, limit: 1024)
       return nil unless parameters.size == 1
+      return [] if nonreal?
       base = numeric(at(0))
       step = base && numeric(at(1))
       return nil if base.nil? || step.nil? || (step - base).abs < 1e-12

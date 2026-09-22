@@ -390,6 +390,8 @@ module RCAS
       return r.value.is_a?(Numeric) && r.value.real? if r.is_a?(Num)
       imaginary = ComplexParts.im(r)
       decided = Decide.zero?(imaginary)
+      # a parameter with a declared sign: i*a is not real for a > 0
+      decided = false if decided.nil? && %i[positive negative].include?(RCAS.sign_of(imaginary))
       raise NotImplementedError, "cannot decide whether #{r} is real" if decided.nil?
       decided
     end

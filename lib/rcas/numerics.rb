@@ -178,37 +178,145 @@ module RCAS
     # ---- quadrature ---------------------------------------------------------------
 
     # nintegrate(f, x: a..b), with infinite ends mapped to a finite range.
+    #
+    # Three promises, each broken once (third review, 22 Sept 2026): an
+    # integrand that is not a number (an unknown function, a free
+    # parameter) is refused rather than integrated as 0; the range is cut
+    # at the kinks, jumps and poles rcas can name, so abs(x - 1) is no
+    # harder than x and 1/x over -1..1 is two divergent pieces rather than
+    # a principal value of 0; and a sample with no value inside the range
+    # is a removable hole or a refusal, never a zero.
     def nintegrate(f, var = nil, from = nil, to = nil, **range)
       digits = range.delete(:digits)
       var, from, to = Functions.range_arguments(var, from, to, range, "nintegrate", discrete: false) if var.nil? || from
       var = Expression.lift(var)
+      f = Expression.lift(f)
+      from = Expression.lift(from)
+      to = Expression.lift(to)
+      lo = bound(from)
+      hi = bound(to)
+      return(digits ? Decimal.new(BigDecimal(0), digits) : 0.0) if lo == hi
+      numeric_integrand!(f, var, lo, hi)
+      ends = [from, *breakpoints(f, var, lo, hi), to]
+      ends = [from, *breakpoints(f, var, lo, hi).reverse, to] if lo > hi
+      pieces = ends.each_cons(2).map { |a, b| piece(f, var, a, b, digits) }
+      return pieces.sum if digits.nil?
+      Decimal.new(pieces.map { |d| d.is_a?(Decimal) ? d.value : BigDecimal(d.to_s) }.sum, digits)
+    end
+
+    # One piece: no kink, jump or pole inside, whatever the ends do.
+    def piece(f, var, from, to, digits)
       if digits
-        value = Precision.quadrature(Expression.lift(f), var, Expression.lift(from), Expression.lift(to), digits)
-        return Decimal.new(value, digits)
+        return Decimal.new(Precision.quadrature(f, var, from, to, digits), digits)
       end
       lo = bound(from)
       hi = bound(to)
-      return -nintegrate(f, var, to, from) if lo > hi
+      return -piece(f, var, to, from, nil) if lo > hi
       return 0.0 if lo == hi
       # Adaptive Simpson first: on a smooth integrand it settles in a
       # millisecond, and to the digit the slower quadrature would give (see
       # SIMPSON_TOLERANCE for how nearly), where the doubly exponential one
       # pays 100 ms for its guard digits. Its budget is bounded, so a
       # singular integrand fails fast and goes there instead of subdividing
-      # for ever (MAX_DEPTH = 50 was 2**50 subintervals and never came
-      # back). The price of the fast path is paid on the slow road: a
-      # divergent integrand takes a second or two longer to be refused.
+      # for ever.
       unless lo.infinite? || hi.infinite?
         quick = bounded_simpson(caller_for(f, var), lo, hi)
         return quick if quick
       end
       exact = tanh_sinh(f, var, from, to)
       return exact if exact
-      if lo.infinite? || hi.infinite?
-        transformed(f, var, lo, hi)
-      else
-        simpson(caller_for(f, var), lo, hi)
+      # no arbitrary-precision route (a function Precision lacks): Simpson
+      # again, on a larger budget, and a refusal when it does not settle
+      value = lo.infinite? || hi.infinite? ? transformed(f, var, lo, hi) : checked_simpson(caller_for(f, var), lo, hi)
+      value or raise ArgumentError, "nintegrate: the quadrature of #{f} over #{from}..#{to} did not settle; it may diverge"
+    end
+
+    # A number at some point of the range, or a refusal naming why not.
+    def numeric_integrand!(f, var, lo, hi)
+      free = f.variables - [var.name]
+      raise ArgumentError, "nintegrate: #{f} has the free variables #{free.join(', ')}; give them values first" unless free.empty?
+      g = caller_for(f, var)
+      probes = [0.2113, 0.5, 0.7887, 0.3719, 0.6281].map do |s|
+        if lo.infinite? && hi.infinite? then (s - 0.5) * 10
+        elsif hi.infinite? then lo + s * 10
+        elsif lo.infinite? then hi - s * 10
+        else lo + (hi - lo) * s
+        end
       end
+      return if probes.any? { |t| g.call(t) }
+      raise ArgumentError, "nintegrate: #{f} has no numeric value on the range (an unknown function, or a value that is not real)"
+    end
+
+    # The points strictly inside the range where the integrand has a kink,
+    # a jump or a pole that rcas can name: the zeros of the argument of an
+    # abs or sign, the integers a linear argument of floor, ceil or round
+    # crosses, the edges of a piecewise branch, and the poles
+    # Integrate.singular_points finds. Sorted ascending; [] on an infinite
+    # range, where they cannot be counted out.
+    MAX_BREAKPOINTS = 256
+
+    def breakpoints(f, var, lo, hi)
+      a, b = [lo, hi].minmax
+      return [] if a.infinite? || b.infinite?
+      found = []
+      f.each_node do |node|
+        if node.is_a?(Fn) && %i[abs sign].include?(node.name) && node.args.first.variables.include?(var.name)
+          found.concat(zeros_between(node.args.first, var, a, b))
+        elsif node.is_a?(Fn) && %i[floor ceil round].include?(node.name) && node.args.first.variables.include?(var.name)
+          found.concat(integer_crossings(node, var, a, b))
+        elsif node.is_a?(Piecewise)
+          node.conditions.each do |c|
+            case c
+            when Inequality, Equation then found.concat(zeros_between((c.lhs - c.rhs).simplify, var, a, b))
+            when Interval then found.push(c.low, c.high)
+            when RealSet then c.intervals.each { |i| found.push(i.low, i.high) }
+            end
+          end
+        end
+      end
+      poles = begin
+        Integrate.singular_points(f, var, Num.new(Rational(a)), Num.new(Rational(b)))
+      rescue StandardError, NotImplementedError
+        nil
+      end
+      found.concat(poles) if poles
+      values = found.filter_map do |p|
+        v = Analysis.numeric(p)
+        v && v > a && v < b ? [v, p] : nil
+      end
+      values.uniq { |v, _| v }.sort_by(&:first).first(MAX_BREAKPOINTS).map(&:last)
+    rescue StandardError
+      []
+    end
+
+    def zeros_between(u, var, a, b)
+      return [] unless u.variables.include?(var.name)
+      roots = Solve.solve(u, var)
+      return [] unless roots.is_a?(Array)
+      roots.flat_map { |r| r.is_a?(ImageSet) ? (r.between(a, b, limit: MAX_BREAKPOINTS) || []) : [r] }
+    rescue StandardError, NotImplementedError
+      []
+    end
+
+    def integer_crossings(node, var, a, b)
+      ab = Integrate.linear(node.args.first, var) or return []
+      slope, offset = ab.map { |v| Analysis.numeric(v) }
+      return [] if slope.nil? || offset.nil? || slope.zero?
+      ends = [slope * a + offset, slope * b + offset].minmax
+      shift = node.name == :round ? 0.5 : 0
+      first = (ends[0] - shift).floor + 1
+      last = (ends[1] - shift).ceil - 1
+      return [] if last - first > MAX_BREAKPOINTS
+      (first..last).map { |n| ((Num.new(n) + Num.new(Rational(shift)) - ab[1]) / ab[0]).simplify }
+    end
+
+    # Adaptive Simpson with a convergence test and no free zeros: nil when
+    # a sample has no value or the refinement does not settle.
+    def checked_simpson(g, lo, hi)
+      g = patch_ends(g, lo, hi)
+      whole = simpson_rule(g, lo, hi)
+      return nil unless whole&.finite?
+      refine(g, lo, hi, whole, 1e-11 * [1.0, whole.abs].max, 30)
     end
 
     # nil when the budget runs out before the estimate settles: the caller
@@ -218,7 +326,7 @@ module RCAS
     def bounded_simpson(g, lo, hi)
       g = patch_ends(g, lo, hi)
       whole = simpson_rule(g, lo, hi)
-      return nil unless whole.finite?
+      return nil unless whole&.finite?
       value = refine(g, lo, hi, whole, SIMPSON_TOLERANCE * [1.0, whole.abs].max, SIMPSON_DEPTH)
       value.nil? || resonant?(g, lo, hi, value) ? nil : value
     end
@@ -298,7 +406,7 @@ module RCAS
       middle = (lo + hi) / 2.0
       left = simpson_rule(g, lo, middle)
       right = simpson_rule(g, middle, hi)
-      return nil unless (left + right).finite?
+      return nil if left.nil? || right.nil? || !(left + right).finite?
       return left + right + (left + right - whole) / 15.0 if (left + right - whole).abs <= 15 * tolerance
       return nil if depth.zero?
       a = refine(g, lo, middle, left, tolerance / 2, depth - 1) or return nil
@@ -329,7 +437,8 @@ module RCAS
     end
 
     # x = t/(1 - t**2) on (-1, 1) for a doubly infinite range, x = a + t/(1 - t)
-    # for one that is infinite on one side only.
+    # for one that is infinite on one side only; checked Simpson on the
+    # open interval (the ends are skipped), nil when it does not settle.
     def transformed(f, var, lo, hi)
       g = caller_for(f, var)
       if lo.infinite? && hi.infinite?
@@ -340,33 +449,21 @@ module RCAS
         quadrature(integrand, 0.0, 1.0)
       else
         integrand = ->(t) { value = g.call(hi - t / (1 - t)); value && value / (1 - t)**2 }
-        -quadrature(integrand, 0.0, 1.0)
+        (v = quadrature(integrand, 0.0, 1.0)) && -v
       end
     end
 
-    # Simpson on an open interval: the ends may be singular, so they are skipped.
     def quadrature(g, lo, hi)
       inset = (hi - lo) * 1e-10
-      simpson(g, lo + inset, hi - inset)
+      checked_simpson(g, lo + inset, hi - inset)
     end
 
-    def simpson(g, lo, hi)
-      whole = simpson_rule(g, lo, hi)
-      adaptive(g, lo, hi, whole, 1e-11, MAX_DEPTH)
-    end
-
+    # nil when a sample has no value: an undefined point is not a zero.
     def simpson_rule(g, lo, hi)
       middle = (lo + hi) / 2.0
-      values = [g.call(lo), g.call(middle), g.call(hi)].map { |v| v || 0.0 }
+      values = [g.call(lo), g.call(middle), g.call(hi)]
+      return nil if values.any?(&:nil?)
       (hi - lo) / 6.0 * (values[0] + 4 * values[1] + values[2])
-    end
-
-    def adaptive(g, lo, hi, whole, tolerance, depth)
-      middle = (lo + hi) / 2.0
-      left = simpson_rule(g, lo, middle)
-      right = simpson_rule(g, middle, hi)
-      return left + right + (left + right - whole) / 15.0 if depth.zero? || (left + right - whole).abs <= 15 * tolerance
-      adaptive(g, lo, middle, left, tolerance / 2, depth - 1) + adaptive(g, middle, hi, right, tolerance / 2, depth - 1)
     end
 
     # ---- evalf on unevaluated nodes --------------------------------------------------
@@ -380,10 +477,17 @@ module RCAS
       return expr unless expr.is_a?(Integral) && expr.definite?
       free = expr.integrand.variables - [expr.var.name]
       return expr unless free.empty?
-      value = nintegrate(expr.integrand, expr.var, expr.from, expr.to)
+      # evalf floated the bounds, and oo became Float::INFINITY on the way:
+      # give nintegrate the infinity back, or it takes the finite route
+      value = nintegrate(expr.integrand, expr.var, infinite_bound(expr.from), infinite_bound(expr.to))
       value.is_a?(Numeric) && value.finite? ? Num.new(value) : expr
     rescue StandardError
       expr
+    end
+
+    def infinite_bound(b)
+      return b unless b.is_a?(Num) && b.value.is_a?(Float) && b.value.infinite?
+      b.value.positive? ? OO : Neg.new(OO).simplify
     end
   end
 end
