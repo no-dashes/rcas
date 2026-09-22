@@ -97,7 +97,13 @@ module RCAS
       end
     end
 
-    def condition_variables(cond) = cond.respond_to?(:variables) ? cond.variables : []
+    # The otherwise-branch is the Symbol :else, and after the README's
+    # `include RCAS::Functions` a Symbol responds to simplify and subs as
+    # well - so the conditions are told apart by what they are, not by what
+    # they respond to (the Math.respond_to? trap once more: third review, S9).
+    def statement?(cond) = !cond.is_a?(Symbol) && (cond.is_a?(Expression) || cond.is_a?(Inequality) || cond.is_a?(Equation) || cond.is_a?(Membership) || cond.is_a?(Interval) || cond.is_a?(RealSet))
+
+    def condition_variables(cond) = statement?(cond) && cond.respond_to?(:variables) ? cond.variables : []
 
     # The condition of a branch, typeset (latex.rb asks for this).
     def condition_latex(cond, pw)
@@ -110,8 +116,8 @@ module RCAS
       "\\text{#{cond}}"
     end
 
-    def substitute(cond, table) = cond.respond_to?(:subs) ? cond.subs(table) : cond
-    def simplify_condition(cond) = cond.respond_to?(:simplify) ? cond.simplify : cond
+    def substitute(cond, table) = statement?(cond) && cond.respond_to?(:subs) ? cond.subs(table) : cond
+    def simplify_condition(cond) = statement?(cond) && cond.respond_to?(:simplify) ? cond.simplify : cond
 
     # ---- deciding ----------------------------------------------------------
 
@@ -390,29 +396,83 @@ module RCAS
     # Solve branch by branch and keep the roots that lie in their own piece.
     # A branch that is equal to the right-hand side everywhere contributes
     # its whole set, and then the answer is a RealSet rather than a list.
+    # Every branch solved on its piece, completely: a periodic branch keeps
+    # all its periods inside the piece (sin(x) = 0 on x > 0 is
+    # {pi + pi*k | k in NN}, not pi alone), and a branch that is the
+    # right-hand side everywhere contributes its whole piece - solve answers
+    # that with a set now, and the old rescue waited for an error that no
+    # longer comes (third review, S8).
     def solve(pw, rhs, given = nil)
       x = var(pw, given)
       rhs = Expression.lift(rhs)
       roots = []
+      families = []
       everywhere = []
       located(pw, x).each do |_, set, value|
         found = begin
-          Solve.solve(Equation.new(value, rhs), x.name, principal: true)
+          Solve.solve(Equation.new(value, rhs), x.name)
         rescue ArgumentError => e
           raise unless e.message.include?("every value")
           everywhere << set
           next
         end
-        roots.concat(found.select { |r| inside?(set, r) })
+        unless found.is_a?(Array)
+          everywhere << (found.is_a?(RealSet) ? set & found : set)
+          next
+        end
+        found.each do |r|
+          if r.is_a?(ImageSet)
+            within(set, r).each { |m| m.is_a?(ImageSet) ? families << m : roots << m }
+          elsif inside?(set, r)
+            roots << r
+          end
+        end
       end
       roots = roots.uniq.sort_by { |r| Expression.lift(r).evalf }
-      return roots if everywhere.empty?
+      return roots + families if everywhere.empty?
+      raise NotImplementedError, "piecewise: a whole piece and infinitely many points do not make one set" unless families.empty?
       everywhere.reduce(RealSet.new(roots.map { |r| Interval.point(Expression.lift(r)) })) { |a, b| a | b }
     end
 
     def inside?(set, root)
       value = Expression.lift(root).evalf
       value.is_a?(Numeric) && value.real? && set.include?(value)
+    end
+
+    MAX_POINTS = 1000
+
+    # The members of the family a + b*k that lie in the set: the points of a
+    # bounded piece, and a family over NN running away from the end of an
+    # unbounded one.
+    def within(set, family)
+      return [] if family.nonreal?
+      return [family] unless family.parameters.size == 1 && family.domain == ZZ
+      k = family.parameters.first
+      a = family.at(0)
+      b = (family.at(1) - a).simplify
+      av = Analysis.numeric(a)
+      bv = Analysis.numeric(b)
+      raise NotImplementedError, "piecewise: can't place #{family} in #{set}" if av.nil? || bv.nil? || bv.zero?
+      set.intervals.flat_map do |interval|
+        lo, hi = interval.low_value, interval.high_value
+        first = lo.infinite? ? nil : ((lo - av) / bv)
+        last = hi.infinite? ? nil : ((hi - av) / bv)
+        first, last = last, first if bv.negative?
+        low_k = first && (first.ceil - 1)
+        high_k = last && (last.floor + 1)
+        if low_k && high_k
+          raise NotImplementedError, "piecewise: too many solutions in #{interval}" if high_k - low_k > MAX_POINTS
+          (low_k..high_k).map { |i| family.at(i) }.select { |m| interval.include?(m) }
+        elsif low_k
+          start = (low_k..low_k + 3).find { |i| interval.include?(family.at(i)) }
+          start ? [ImageSet.new((a + b * (Num.new(start) + k)).simplify, [k], NN)] : []
+        elsif high_k
+          start = (high_k - 3..high_k).to_a.reverse.find { |i| interval.include?(family.at(i)) }
+          start ? [ImageSet.new((a + b * (Num.new(start) - k)).simplify, [k], NN)] : []
+        else
+          [family]
+        end
+      end
     end
   end
 end

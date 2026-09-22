@@ -223,4 +223,63 @@ class ReviewSolveTest < Minitest::Test
     zeros = RCAS.discuss(RCAS.sin(@x) / @x, @x).zeros
     assert zeros.nil? || (covers?(zeros, -Math::PI) && covers?(zeros, 2 * Math::PI)), zeros.inspect
   end
+
+  # A branch equal to the right-hand side everywhere contributes its piece;
+  # solve now answers 0 = 0 with a RealSet, and Piecewises.solve still waits
+  # for the old ArgumentError (piecewise.rb:401). Here x >= 0 is the answer.
+  def test_a_constant_branch_contributes_its_whole_piece
+    step = RCAS.piecewise(@x < 0 => 0, :else => 1)
+    set = RCAS.solve(eq(step, 1), @x)
+    assert set.include?(0) && set.include?(5) && !set.include?(-1)
+  end
+
+  # Piecewises.solve asks for principal solutions (piecewise.rb:400), so a
+  # periodic branch keeps one period: sin(2*pi) = 0 with 2*pi > 0, and
+  # cos(5*pi/3) = 1/2 with 5*pi/3 > 0.
+  def test_a_periodic_branch_keeps_every_period
+    pw = RCAS.piecewise(@x > 0 => RCAS.sin(@x), :else => @x + 1)
+    assert covers?(RCAS.solve(pw, @x), 2 * Math::PI)
+    pw = RCAS.piecewise(@x > 0 => RCAS.cos(@x), :else => n(5))
+    assert covers?(RCAS.solve(eq(pw, 1/2r), @x), 5 * Math::PI / 3)
+  end
+
+  # README tells a library user to `include RCAS::Functions`; then :else
+  # responds to simplify/subs (piecewise.rb:113-114) and every piecewise
+  # with an :else raises. d/dx of a step is 0 away from the jump.
+  def test_piecewise_survives_the_library_include
+    lib = $LOAD_PATH.find { |dir| File.exist?(File.join(dir, 'rcas.rb')) }
+    script = 'include RCAS::Functions; x = :x; ' \
+             'puts diff(piecewise(x < 0 => 0, :else => 1), x).call(x: 1)'
+    out, err, status = Open3.capture3(RbConfig.ruby, '-I', lib, '-rrcas', '-e', script)
+    assert status.success?, err.lines.first
+    assert_equal '0', out.strip
+  end
+
+  # sin(pi*x) = 0 exactly on ZZ; restricting to ZZ keeps ZZ, restricting to
+  # RR keeps ZZ. rebuilt_family returns the NumberSet (solve.rb:258) and
+  # restrict lifts it as a root.
+  def test_a_family_that_is_the_integers_can_be_restricted
+    [RCAS::ZZ, RCAS::RR].each do |domain|
+      assert_equal [RCAS::ZZ], RCAS.solve(RCAS.sin(pi * @x), @x, domain: domain)
+    end
+  end
+
+  # Squaring sqrt(x**2) = -x gives x**2 = x**2, which says nothing about the
+  # original: |x| = -x holds for x <= 0 only, so x = 1 is no solution.
+  def test_an_identity_after_squaring_is_not_a_verdict
+    [[RCAS.sqrt(@x**2), -@x, -1, 1], [RCAS.sqrt(@x**2), @x, 1, -1]].each do |l, r, yes, no|
+      refused_or do
+        set = RCAS.solve(eq(l, r), @x)
+        assert set.include?(yes) && !set.include?(no)
+      end
+    end
+  end
+
+  # exp(x) = -1 and sin(x) = 2 have no real solution (exp > 0, |sin| <= 1);
+  # under domain: RR the answers log(-1) = i*pi and asin(2) + 2*pi*k are not real.
+  def test_a_real_domain_drops_nonreal_answers
+    assert_equal [], RCAS.solve(RCAS.exp(@x) + 1, @x, domain: RCAS::RR)
+    assert_equal [], RCAS.solve(RCAS.sin(@x) - 2, @x, domain: RCAS::RR)
+    assert_equal [], RCAS.solve(RCAS.cos(@x) - 2, @x, domain: RCAS::RR)
+  end
 end

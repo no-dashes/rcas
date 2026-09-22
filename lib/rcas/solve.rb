@@ -197,6 +197,9 @@ module RCAS
       found =
         begin
           univariate(f, x, 0, all: !principal)
+        rescue Whole => e
+          # squaring gave an identity, and the answer is a set (S18)
+          return e.set
         rescue NotImplementedError
           constant = trig_constant(f)
           raise if constant.nil?
@@ -453,6 +456,9 @@ module RCAS
       sign = RCAS.signs[x.name]
       return roots if wanted.nil? && sign.nil?
       roots.flat_map do |root|
+        # {k | k in ZZ} came back as ZZ itself: the smaller of the two sets
+        # (third review, S17)
+        next [wanted && !root.subset?(wanted) ? wanted : root] if root.is_a?(NumberSet)
         next restrict_family(root, wanted, sign) if root.is_a?(ImageSet)
         (wanted && Infer.excluded?(root, wanted)) || (sign && wrong_sign?(root, sign)) ? [] : [root]
       end
@@ -466,6 +472,9 @@ module RCAS
     # {pi + 2*pi*k | k in ZZ} not at all. A family of any other shape stays
     # whole: "some member might qualify" is the honest answer there.
     def restrict_family(set, wanted, sign)
+      # a family off the real line has no member in RR: asin(2) + 2*pi*k
+      # under domain: RR (third review, S19)
+      return [] if wanted && wanted <= RR && set.nonreal?
       return [set] unless wanted && wanted <= QQ && set.parameters.size == 1
       k = set.parameters.first
       slope = begin
@@ -926,6 +935,16 @@ module RCAS
     # Two radicals go one to each side, sqrt(x) = sqrt(2 - x), and the
     # squared equation has one radical fewer; what is left is squared again
     # one level down.
+    # The answer of an equation that is a whole set rather than points.
+    class Whole < StandardError
+      attr_reader :set
+
+      def initialize(set)
+        @set = set
+        super("the solutions form the set #{set}")
+      end
+    end
+
     def radical_equation(f, x, depth)
       constant, terms = Simplify.termize(f)
       with, without = terms.partition { |factors, _| root_index(factors, x) }
@@ -936,6 +955,14 @@ module RCAS
       others = with.drop(1) + without
       rest = Simplify.rebuild_sum(-constant, others.to_h.transform_values { |c| -c })
       g = (Expand.expand(Simplify.power_node(side, q)) - Expand.expand(Simplify.power_node(rest, q))).simplify
+      if Scalar.zero?(g)
+        # sqrt(x**2) = -x squares to x**2 = x**2, which says nothing: an even
+        # root is the non-negative one, so the equation holds exactly where
+        # the other side is not negative - that set, or a refusal below the
+        # top (an "every value" verdict about the square was wrong: S18)
+        raise NotImplementedError, "squaring #{f} = 0 gives an identity" unless q.even? && depth.zero? && with.size == 1 && side_is_root?(side, x)
+        raise Whole, Inequalities.solve(Inequality.new(rest, :>=, 0), x)
+      end
       if root_denominator(g, x) > 1 || g.each_node.any? { |n| root_index_of(n, x) }
         # still a radical: fine if there are fewer radical terms than before
         remaining = Simplify.termize(g).last.count { |factors, _| root_index(factors, x) }
@@ -956,6 +983,13 @@ module RCAS
       defined_roots(f, x, univariate(combined, x, depth + 1))
     rescue NotImplementedError
       nil
+    end
+
+    # A single radical with coefficient 1: sqrt(u) itself, so that
+    # sqrt(u) = rest holds exactly where rest >= 0 once the squares agree.
+    def side_is_root?(side, x)
+      coeff, factors = Simplify.factorize(side)
+      coeff == 1 && factors.size == 1 && root_index_of(Simplify.power_node(*factors.first), x)
     end
 
     # The denominator of a fractional exponent on a base that involves x.
