@@ -342,22 +342,23 @@ MANUAL.md                   the user manual (usage); README.md (setup only); ass
   settings, tests, pointers). Usage goes in MANUAL. Logo at the top of
   both with the "This logo was AI generated" hint; `assets/rcas-logo.jpeg`
   is the 960px copy used in documents.
-- **The tour is embedded in a collapsed `<details>`** near the top of both
-  (21 Sept 2026, the user's ask: "ideally so that the data isn't loaded
-  whenever you open it"). Three facts decided that shape, all measured
-  rather than assumed - `gh api /markdown` renders a string exactly as
-  github.com would, which is how to check any of this. GitHub's sanitizer
-  keeps `<video>` with `src`, `controls`, `muted`, `width` and `height` and
-  **strips `poster`, `preload`, `loop`, `playsinline` and `style`**, so
-  neither a thumbnail nor `preload="none"` is available. A bare `<video>`
-  therefore fetches `bytes=0-` on every page view, while one inside a
-  closed `<details>` fetches *nothing* until the reader opens it, and then
-  loads normally (measured against a local server counting requests). And
-  a release asset plays in a `<video>` even though GitHub serves it
-  `application/octet-stream` with `Content-Disposition: attachment` -
-  media elements ignore both - which is why the *link* downloads but the
-  player does not. Keep the width attribute: without it the 1120px video
-  overflows the ~1012px column, and `style` cannot be used to cap it.
+- **The tour is a poster linking to YouTube**, at the top of MANUAL.md and as
+  a link in README.md (21-22 Sept 2026, after two wrong turns). What is worth
+  knowing, because it cost a round trip: **`gh api /markdown` is not the
+  sanitizer github.com uses for a file**, and trusting it produced an embed
+  that rendered as an empty `<details>` on the blob page. The API keeps
+  `<video>`; the blob view *strips* it unless the `src` is GitHub-hosted
+  media (a `github.com/user-attachments/assets/<uuid>` URL from dragging a
+  file into a comment box, which GitHub then rewrites to a signed
+  `private-user-images.githubusercontent.com` URL and wraps in its own
+  collapsible player - `zai-org/GLM-4`'s README is a live example). It also
+  *escapes* `<iframe>`, so a YouTube embed renders as literal text and the
+  thumbnail-link is the only route. To check any of this, fetch the real
+  `github.com/<repo>/blob/...` page and look at the rendered richText, not
+  the API and not the raw source that sits in the same payload. A release
+  asset is served `application/octet-stream` with `Content-Disposition:
+  attachment`, so a link to one downloads - media elements ignore both
+  headers and would have played it, but only if the tag survived.
 - Smoke-test interactively with piped input:
   `printf 'x + 1\n' | ruby bin/rcas` (no `=> ` prefix without a tty) or
   `printf '/settings\n' | RCAS_HOME=/tmp/h ruby bin/rcas-chat`.

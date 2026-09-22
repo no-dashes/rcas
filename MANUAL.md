@@ -11,13 +11,10 @@ REPL. This manual walks through everything that is finished. Every
 transcript in it is checked by `test/manual_test.rb`, so the outputs are
 exactly what the current code prints.
 
-<details>
-<summary><b>Watch the tour</b> - eight minutes, chapter by chapter. Nothing is
-downloaded until you open this.</summary>
-
-<video src="https://github.com/no-dashes/rubyCAS/releases/download/screencasts/rcas-tour.mp4" controls width="900"></video>
-
-</details>
+<p align="center">
+  <a href="https://youtu.be/3Lm5DHgfwxo"><img src="https://img.youtube.com/vi/3Lm5DHgfwxo/maxresdefault.jpg" alt="Tour of rubyCAS: eight minutes, chapter by chapter" width="720"></a><br>
+  <em>Watch the tour - eight minutes, chapter by chapter</em>
+</p>
 
 Start a session with
 
@@ -30,10 +27,11 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
 `RCAS.solve`), or `include RCAS::Functions`, `RCAS::Sets` and
 `RCAS::Constants` to get the bare names used below.
 
-The tour above is [rcas-tour.mp4](https://github.com/no-dashes/rubyCAS/releases/download/screencasts/rcas-tour.mp4),
-attached to the releases rather than kept in the repository, and
-[assets/rcas-intro.gif](assets/rcas-intro.gif) is a one-minute version of the
-same thing. Both are recorded from a real session by
+The tour above is on [YouTube](https://youtu.be/3Lm5DHgfwxo); the file itself is
+[rcas-tour.mp4](https://github.com/no-dashes/rubyCAS/releases/download/screencasts/rcas-tour.mp4)
+with the releases, kept out of the repository so a clone stays small, and
+[assets/rcas-intro.gif](assets/rcas-intro.gif) is a one-minute version. All
+three are recorded from a real session by
 [tools/screencast](tools/screencast), the same way the transcripts here are
 checked - nothing in them is typed by hand.
 

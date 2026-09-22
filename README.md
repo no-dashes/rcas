@@ -26,17 +26,9 @@ A minute of it, from exact arithmetic to typeset answers:
   <img src="assets/rcas-intro.gif" alt="a minute of rcas: exact arithmetic, calculus, solving, typeset output" width="840">
 </p>
 
-The longer tour through everything rcas can do is an eight-minute video.
-
-<details>
-<summary><b>Watch the tour</b> - eight minutes, chapter by chapter. Nothing is
-downloaded until you open this.</summary>
-
-<video src="https://github.com/no-dashes/rubyCAS/releases/download/screencasts/rcas-tour.mp4" controls width="840"></video>
-
-</details>
-
-It is [rcas-tour.mp4](https://github.com/no-dashes/rubyCAS/releases/download/screencasts/rcas-tour.mp4),
+The longer tour through everything rcas can do is an eight-minute video,
+[Tour of rubyCAS](https://youtu.be/3Lm5DHgfwxo) on YouTube; the file itself is
+[rcas-tour.mp4](https://github.com/no-dashes/rubyCAS/releases/download/screencasts/rcas-tour.mp4),
 kept with the releases rather than in the repository, so a clone stays small.
 Both are built from a script of input lines by
 [tools/screencast](tools/screencast) - the script is replayed against a real
