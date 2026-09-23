@@ -139,6 +139,34 @@ class Review5FollowupsTest < Minitest::Test
     RCAS.assume(@x < 0) { assert_equal "2*log(-x)", RCAS.expand_log(RCAS.log(@x**2)).to_s }
   end
 
+  # ---- section 3 ------------------------------------------------------------------
+
+  # One spelling per family: a positive step and the base in [0, step).
+  def test_families_have_one_normal_form
+    assert_equal RCAS.solve(RCAS.cos(@x), @x), RCAS.solve(RCAS.sin(2 * @x) / RCAS.sin(@x), @x)
+    assert_equal ["{pi/2 + pi*k | k in ZZ}"], RCAS.solve(RCAS.cos(@x), @x).map(&:to_s)
+  end
+
+  # A negative number on the right of a sum or difference reads with the
+  # other sign.
+  def test_a_negative_number_prints_with_the_other_sign
+    assert_equal "x + 7/10", RCAS::Sub.new(@x, n(-7r / 10)).to_s
+    assert_equal "x - 3", RCAS::Add.new(@x, n(-3)).to_s
+  end
+
+  # Float matrices of any size have eigenvalues; a multiple one is polished
+  # and keeps its eigenvector (L10).
+  def test_float_eigenvalues_of_a_three_by_three
+    m = RCAS.matrix([[2.0, 1.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 3.0]])
+    values = m.eigenvalues.map { |v| v.is_a?(RCAS::Num) ? v.value : v }
+    assert_equal 3, values.size
+    assert values.count { |v| (v - 2).abs < 1e-8 } == 2
+    refute m.diagonalizable?
+    assert_equal [1, 1], m.eigenvectors.map { |_, _, vs| vs.size }
+    s = RCAS.matrix([[4.0, 1.0, 2.0], [1.0, 3.0, 0.5], [2.0, 0.5, 5.0]])
+    assert_in_delta 12.0, s.eigenvalues.sum { |v| v.value }, 1e-12 # the trace
+  end
+
   # ---- 2.8 domains ---------------------------------------------------------------
 
   # The domain makes no claim where there is no value, the matrix builder

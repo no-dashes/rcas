@@ -12,13 +12,17 @@ module RCAS
 
     module_function
 
+    def negative_number?(e) = e.is_a?(Num) && e.value.is_a?(Numeric) && e.value.real? && e.value.negative?
+
     def print(expr)
       case expr
       when Var then expr.name.to_s
       when Num then number(expr.value)
       when Neg then "-#{wrap(expr.arg, UNARY, :inner)}"
-      when Add then binary(expr, " + ")
-      when Sub then binary(expr, " - ")
+      when Add then negative_number?(expr.right) ? binary(Sub.new(expr.left, Num.new(-expr.right.value)), " - ") : binary(expr, " + ")
+      # a negative number on the right reads as the other sign: x - (-7/10)
+      # is x + 7/10 (fifth review, 3.3); the tree itself is unchanged
+      when Sub then negative_number?(expr.right) ? binary(Add.new(expr.left, Num.new(-expr.right.value)), " + ") : binary(expr, " - ")
       when Mul then binary(expr, "*")
       when Div then binary(expr, "/")
       when Pow then "#{wrap(expr.base, POWER, :left)}**#{wrap(expr.exponent, POWER, :right)}"

@@ -280,7 +280,32 @@ module RCAS
           return Scalar.zero?(constant) ? everywhere(x, domain, poles, original) : []
         end
       roots = dedupe(found).map { |root| family(root, x, f) }
-      ordered(absorbed(dedupe(restrict(off_poles(merge_families(roots), poles, x), x, domain))))
+      ordered(dedupe(absorbed(dedupe(restrict(off_poles(merge_families(roots), poles, x), x, domain))).map { |r| normal_family(r) }))
+    end
+
+    # One spelling per set (the fifth review, 3.2): base + step*k with, over
+    # ZZ, a positive real step and the base reduced into [0, step) - the
+    # {pi*(1 + 2*k)/2} that family_off_poles built is {pi/2 + pi*k}, which is
+    # what solve(cos(x)) says. Over NN the direction is part of the set and
+    # only the spelling changes. Anything else is left as it is.
+    def normal_family(set)
+      return set unless set.is_a?(ImageSet)
+      pair = set.affine or return set
+      base, step = pair
+      k = set.parameters.first
+      if set.domain == ZZ && step.variables.empty? && base.variables.empty?
+        sign = Decide.sign(step)
+        return set unless %i[positive negative].include?(sign)
+        step = Neg.new(step).simplify if sign == :negative
+        ratio = (base / step).simplify
+        if ratio.is_a?(Num) && (ratio.value.is_a?(Integer) || ratio.value.is_a?(Rational))
+          base = (base - step * Num.new(ratio.value.floor)).simplify
+        end
+      end
+      ImageSet.new((base + step * k).simplify, set.parameters, set.domain)
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
+      set
     end
 
     # A point that is a member of a family is said by the family: x*sin(x)
@@ -865,6 +890,7 @@ module RCAS
       n = coeffs.size - 1
       return [] if n < 1
       return exact_roots(coeffs) if coeffs.all? { |c| c.is_a?(Num) && (c.value.is_a?(Integer) || c.value.is_a?(Rational)) }
+      return float_roots(coeffs) if n > 2 && coeffs.all? { |c| c.is_a?(Num) && c.value.is_a?(Numeric) && c.value.real? }
 
       factored = symbolic_roots_by_factoring(coeffs)
       return factored if factored
@@ -1008,6 +1034,69 @@ module RCAS
       roots.each_with_index.map do |z, i|
         Num.new(nearest.include?(i) ? z.real : z)
       end.sort_by { |r| r.value.is_a?(Complex) ? [r.value.real, r.value.imaginary] : [r.value, 0] }
+    end
+
+    # Float coefficients (a Float matrix's characteristic polynomial, the
+    # fifth review's L10): Durand-Kerner in Floats. A Float polynomial has
+    # no exact real-root count, so a root is real when no other root is its
+    # conjugate - the roots of a real polynomial come in conjugate pairs,
+    # and one left without a partner can only be real.
+    def float_roots(coeffs)
+      n = coeffs.size - 1
+      lead = coeffs.last.value.to_f
+      a = coeffs.map { |c| c.value.to_f / lead }
+      roots = (0...n).map { |k| Complex(0.4, 0.9)**k }
+      value = ->(z) { a.each_with_index.reduce(0) { |acc, (c, k)| acc + c * z**k } }
+      500.times do
+        moved = 0.0
+        roots = roots.each_with_index.map do |z, i|
+          denom = roots.each_with_index.reduce(1) { |acc, (w, j)| i == j ? acc : acc * (z - w) }
+          step = denom.zero? ? 0 : value.call(z) / denom
+          moved += step.abs
+          z - step
+        end
+        break if moved < 1e-15
+      end
+      scale = [roots.map(&:abs).max || 1.0, 1.0].max
+      roots = polished_clusters(roots, a, scale)
+      paired = []
+      roots.each_with_index do |z, i|
+        next if paired.include?(i)
+        partner = roots.each_index.find { |j| j != i && !paired.include?(j) && (roots[j] - z.conj).abs <= 1e-7 * scale && z.imaginary.abs > 1e-7 * scale }
+        paired.push(i, partner) if partner
+      end
+      roots.each_with_index.map do |z, i|
+        Num.new(paired.include?(i) ? z : z.real)
+      end.sort_by { |r| r.value.is_a?(Complex) ? [1, r.value.real, r.value.imaginary] : [0, r.value, 0] }
+    end
+
+    # Roots that coincide to the accuracy Durand-Kerner reaches at a
+    # multiple root (about eps**(1/m)) are one root of multiplicity m, and
+    # Newton's method for it, z - m*p(z)/p'(z), polishes their mean: a
+    # double eigenvalue 2 had come back as 2.0000000038 and 2.000000038,
+    # and neither had an eigenvector.
+    def polished_clusters(roots, a, scale)
+      value = ->(z) { a.each_with_index.reduce(0) { |acc, (c, k)| acc + c * z**k } }
+      slope = ->(z) { a.each_with_index.reduce(0) { |acc, (c, k)| k.zero? ? acc : acc + k * c * z**(k - 1) } }
+      clusters = []
+      roots.each do |z|
+        home = clusters.find { |c| (c.first - z).abs <= 1e-5 * scale }
+        home ? home << z : clusters << [z]
+      end
+      clusters.flat_map do |cluster|
+        m = cluster.size
+        z = cluster.sum / m
+        if m > 1
+          30.times do
+            d = slope.call(z)
+            break if d.zero?
+            step = m * value.call(z) / d
+            break if step.abs <= 1e-16 * scale
+            z -= step
+          end
+        end
+        [z] * m
+      end
     end
 
     # The number of distinct real roots of a polynomial over QQ: the sign
