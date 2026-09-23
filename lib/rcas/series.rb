@@ -200,6 +200,14 @@ module RCAS
     end
 
     def one_sided(g, side)
+      outer = Thread.current[:rcas_one_sided]
+      Thread.current[:rcas_one_sided] = true
+      one_sided_limit(g, side)
+    ensure
+      Thread.current[:rcas_one_sided] = outer
+    end
+
+    def one_sided_limit(g, side)
       g = g.subs(T => -T) if side == :left
       s = nil
       begin
@@ -443,9 +451,19 @@ module RCAS
     end
 
     def signed_infinity(c)
-      sign = Scalar.numeric?(c) ? c.value : (c.variables.empty? ? c.evalf : nil)
-      raise SeriesError, "sign of #{c} unknown" unless sign.is_a?(Numeric) && sign.real?
-      sign.negative? ? Neg.new(OO).simplify : OO
+      coefficient_sign(c).negative? ? Neg.new(OO).simplify : OO
+    end
+
+    # -1 or 1 for a coefficient whose sign is decided - exactly (Decide) for
+    # a constant, by the assumptions for a parameter; a Float read off
+    # evalf took cos(10**-30) - 1 for 0 (fourth review). SeriesError when
+    # the sign is not known.
+    def coefficient_sign(c)
+      c = Expression.lift(c)
+      sign = c.variables.empty? ? Decide.sign(c) : RCAS.sign_of(c)
+      return 1 if sign == :positive
+      return -1 if sign == :negative
+      raise SeriesError, "sign of #{c} unknown"
     end
 
     # ---- the expansion ----------------------------------------------------------
@@ -518,8 +536,37 @@ module RCAS
     # sign(x) the limit 0 at 0 (third review, D3).
     KINKED = %i[abs sign floor ceil round].freeze
 
+    # |u| and sign(u) where u -> 0 have no series, but on one side of the
+    # point they do: for t -> 0+ the sign of u is the sign of its leading
+    # coefficient, so |u| is that sign times u. one_sided sets the side
+    # (the fourth review: limit(abs(x), x, 0) had become formal, and abs is
+    # continuous there). nil where this does not apply.
+    def one_sided_kink(name, s, order)
+      return nil unless Thread.current[:rcas_one_sided] && %i[abs sign].include?(name)
+      return nil unless s.constant_term.is_a?(Num) && s.constant_term.value.zero?
+      lead = s.terms[s.min_exponent]
+      return nil if lead.variables.include?(Series::LOG.name)
+      sign = begin
+        coefficient_sign(lead)
+      rescue SeriesError
+        return nil
+      end
+      name == :abs ? s.scale(Num.new(sign)) : Series.constant(Num.new(sign), order)
+    end
+
+    def removable(derivative, w, c)
+      value = Limits.limit(derivative, w, c)
+      return nil if value.is_a?(Limit) || infinite?(value) || value == UNDEFINED || !value.variables.empty? && value.variables != c.variables
+      value
+    rescue SeriesError, ZeroDivisionError, NotImplementedError
+      nil
+    end
+
     def non_analytic!(f, c)
       return unless KINKED.include?(f.name)
+      if %i[abs sign].include?(f.name) && !c.variables.empty? && %i[positive negative].include?(RCAS.sign_of(c))
+        return # |x + a| at x = 0 for a > 0 is x + a
+      end
       value = begin
         Expression.lift(c).evalf
       rescue StandardError => rescued
@@ -555,22 +602,21 @@ module RCAS
       end
 
       if name == :atan && s.min_exponent.negative?
-        c = s.terms[s.min_exponent]
-        sign = Scalar.numeric?(c) ? c.value : (c.variables.empty? ? c.evalf : nil)
-        raise SeriesError, "sign of #{c}" unless sign.is_a?(Numeric) && sign.real?
+        sign = coefficient_sign(s.terms[s.min_exponent])
         half_pi = Series.constant((sign.negative? ? -PI / 2 : PI / 2).simplify, order)
         return half_pi - function(Fn.new(:atan, [Pow.new(f.args.first, Num.new(-1))]), order)
       end
       if %i[erf erfc].include?(name) && s.min_exponent.negative?
         # erf(+-oo) = +-1 up to an exponentially small tail: a constant, for limits
-        c = s.terms[s.min_exponent]
-        sign = Scalar.numeric?(c) ? c.value : (c.variables.empty? ? c.evalf : nil)
-        raise SeriesError, "sign of #{c}" unless sign.is_a?(Numeric) && sign.real?
+        sign = coefficient_sign(s.terms[s.min_exponent])
         value = name == :erf ? (sign.negative? ? -1 : 1) : (sign.negative? ? 2 : 0)
         return Series.constant(Num.new(value), order)
       end
       raise SeriesError, "#{f} has an essential singularity" if s.min_exponent.negative?
       c = s.constant_term
+      if (kink = one_sided_kink(name, s, order))
+        return kink
+      end
       non_analytic!(f, c)
       s0 = s - Series.constant(c, order)
       w = Var.new(:_w)
@@ -582,9 +628,10 @@ module RCAS
           value = begin
             derivative.subs(w => c).simplify
           rescue ZeroDivisionError
-            # asin at 1, Si's sin(t)/t at 0: a derivative with no value there
-            # is no Taylor coefficient (a bare ZeroDivisionError before)
-            raise SeriesError, "#{f} has no Taylor series where its argument is #{c}"
+            # Si's derivative sin(t)/t at 0 has a removable hole, whose value
+            # is the limit; asin's 1/sqrt(1 - t**2) at 1 has a pole, and a
+            # derivative with no finite value is no Taylor coefficient
+            removable(derivative, w, c) or raise SeriesError, "#{f} has no Taylor series where its argument is #{c}"
           end
           coefficients << (value / factorial).simplify
           derivative = derivative.diff(w)

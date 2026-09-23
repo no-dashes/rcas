@@ -181,11 +181,11 @@ module RCAS
     # that compares precisions itself (Decide).
     GUARDS = [GUARD, 3 * GUARD, 7 * GUARD, 15 * GUARD, 31 * GUARD, 63 * GUARD].freeze
 
-    def evalf(expr, digits, bindings = {}, certify: true)
+    def evalf(expr, digits, bindings = {}, certify: true, **more)
       digits = Integer(digits)
       raise ArgumentError, "evalf: digits must be positive, got #{digits}" unless digits.positive?
       expr = Expression.lift(expr)
-      table = table_of(bindings)
+      table = table_of(bindings.merge(more))
       unless certify
         state = { limit: digits }
         value = walk(expr, digits + GUARD, table, state)
@@ -194,7 +194,7 @@ module RCAS
       end
       previous = nil
       shrinking = 0
-      GUARDS.each do |guard|
+      GUARDS.each_with_index do |guard, level|
         state = { limit: digits }
         value = walk(expr, digits + guard, table, state)
         keep = [digits, state[:limit]].min
@@ -203,16 +203,31 @@ module RCAS
         return Decimal.new(value.mult(1, keep), keep) if keep < digits
         if previous
           return Decimal.new(value.mult(1, digits), digits) if agree?(value, previous, digits)
-          shrinking = value.abs < previous.abs * BigDecimal("1e-#{guard / 3}") ? shrinking + 1 : 0
-          return Decimal.new(BigDecimal(0), digits) if shrinking >= 2 || (value.zero? && previous.abs < BigDecimal("1e-#{digits + guard / 3}"))
+          # an exact 0 is what a cancellation deeper than the working
+          # precision looks like (exp(10**-60) - 1 at 30 digits), so zeros
+          # agree only at the last two guards, where the value is 0 to more
+          # than 600 digits; a value that shrinks with every step is a
+          # zero too (sin(pi*10**15)), but only if it was never exactly 0
+          return Decimal.new(BigDecimal(0), digits) if value.zero? && previous.zero? && level == GUARDS.size - 1
+          shrinking = !previous.zero? && value.abs < previous.abs * BigDecimal("1e-#{guard / 3}") ? shrinking + 1 : 0
+          return Decimal.new(BigDecimal(0), digits) if shrinking >= 2
         end
         previous = value
       end
       raise NoConvergence, "evalf: #{expr} could not be certified to #{digits} digits; the working precision ran out before two evaluations agreed"
     end
 
+    # The value at `digits` (plus the guard) and the largest magnitude met
+    # on the way, which bounds its absolute error: Decide believes a value
+    # only well above scale*10**-digits.
+    def evalf_with_scale(expr, digits)
+      state = { limit: digits, scale: BigDecimal(0) }
+      value = walk(Expression.lift(expr), digits + GUARD, {}, state)
+      [value, state[:scale], [digits, state[:limit]].min]
+    end
+
     def agree?(a, b, digits)
-      return true if a.zero? && b.zero?
+      return false if a.zero? || b.zero?
       (a - b).abs <= [a.abs, b.abs].max * BigDecimal("1e-#{digits}")
     end
 
@@ -221,6 +236,14 @@ module RCAS
     # ---- the walk -----------------------------------------------------------
 
     def walk(node, prec, bindings, state)
+      value = step(node, prec, bindings, state)
+      # the largest magnitude met on the way bounds the absolute error of
+      # the result (Decide asks for it; a cancellation cannot be finer)
+      state[:scale] = [state[:scale], value.abs].max if state.key?(:scale) && value.is_a?(BigDecimal) && value.finite?
+      value
+    end
+
+    def step(node, prec, bindings, state)
       case node
       when Num     then number(node.value, prec, state)
       when Const   then constant(node, prec, state)
@@ -339,7 +362,13 @@ module RCAS
       unless (ELEMENTARY + SPECIAL).include?(node.name) && node.args.size == 1
         unsupported!("#{node.name}", node)
       end
-      x = walk(node.args.first, prec, bindings, state)
+      arg = node.args.first
+      # |b**r| = |b|**r for real b and r: the modulus of a principal root of
+      # a negative number is real, though the root is not
+      if node.name == :abs && arg.is_a?(Pow) && arg.exponent.is_a?(Num) && arg.exponent.value.is_a?(Rational)
+        return power_of(walk(arg.base, prec, bindings, state).abs, walk(arg.exponent, prec, bindings, state), prec, arg)
+      end
+      x = walk(arg, prec, bindings, state)
       SPECIAL.include?(node.name) ? special(node.name, x, prec, node) : apply(node.name, x, prec, node)
     end
 
@@ -640,7 +669,7 @@ module RCAS
       scale = [left.abs, right.abs, BigDecimal(1)].max
       return (left + right).div(2, work) if (left - right).abs <= scale * BigDecimal("1e-#{work / 4}")
       raise NoConvergence, "evalf: the integrand has no value at #{point.round(12).to_s('F')} inside the range"
-    rescue ZeroDivisionError, Unsupported
+    rescue ZeroDivisionError
       raise NoConvergence, "evalf: the integrand has no value near #{point.round(12).to_s('F')} inside the range"
     end
 

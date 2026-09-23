@@ -34,14 +34,23 @@ module RCAS
           constant_coefficient_solution(coeffs, forcing, n, constants)
         end
       unless init.empty?
-        early = init.keys.map { |i| Expression.lift(i) }.select { |i| i.is_a?(Num) && i.value < @start.to_i }
-        unless early.empty?
-          # the closed form holds from the first index past the singularities
-          # of the coefficients; before it, it says nothing (u(0) = 1 for
-          # u(n + 1) = (n - 3)*u(n) made the constant 1/(-4)!: S6)
+        # the closed form holds from the first index past the singularities
+        # of its ratios; before that it holds only if it agrees with the
+        # sequence the recurrence itself builds from the initial values.
+        # u(0) = 1 for u(n + 1) = (n - 3)*u(n) made the constant 1/(-4)!
+        # (S6); n! and n*n! are defined at 0, and u(n + 2) = 2*(n + 2)*u(n + 1)
+        # - (n + 1)*(n + 2)*u(n) runs from there (fourth review). Constant
+        # coefficients have no singularities, so u(-1) is as good as u(0).
+        early = @start ? init.keys.map { |i| Expression.lift(i) }.select { |i| i.is_a?(Num) && i.value < @start } : []
+        specific = begin
+          initial_values(general, init, n, constants)
+        rescue ZeroDivisionError
+          nil
+        end
+        if specific.nil? || (!early.empty? && !propagates?(specific, coeffs, init, n))
           raise NotImplementedError, "rsolve: the closed form holds from #{n} = #{@start} on, so it cannot take the initial value at #{early.map(&:to_s).join(', ')}"
         end
-        general = initial_values(general, init, n, constants)
+        general = specific
       end
       Equation.new(Fn.new(name, [n]), general)
     ensure
@@ -131,7 +140,7 @@ module RCAS
       end
       # as many solutions as the order is not yet a basis: they have to be
       # independent, which their Casoratian says (third review, S5)
-      unless independent?(found, n, order, @start.to_i)
+      unless independent?(found, n, order, @start || 0)
         raise NotImplementedError, "rsolve: the hypergeometric solutions #{found.map(&:to_s).join(', ')} do not span the solutions (see hyper)"
       end
       found.map do |t|
@@ -140,16 +149,43 @@ module RCAS
       end.reduce(:+).simplify
     end
 
+    # The sequence the recurrence builds from `order` consecutive initial
+    # values, compared with the closed form over those indices and a few
+    # more: true only when every value is decided equal.
+    def propagates?(closed, coeffs, init, n)
+      order = coeffs.size - 1
+      values = init.to_h { |i, v| [Integer(Expression.lift(i).value), Expression.lift(v)] }
+      first = values.keys.min
+      return false unless (first...first + order).all? { |i| values.key?(i) }
+      (first...first + order + 4).each do |j|
+        lead = coeffs.last.subs(n => Num.new(j)).simplify
+        return false if Scalar.zero?(lead)
+        rest = (0...order).map { |i| coeffs[i].subs(n => Num.new(j)) * values.fetch(j + i) }.reduce(:+)
+        values[j + order] ||= (Neg.new(rest) / lead).simplify
+      end
+      values.all? { |j, v| Decide.zero?((closed.subs(n => Num.new(j)) - v).simplify) == true }
+    rescue ZeroDivisionError, KeyError, ArgumentError, TypeError
+      false
+    end
+
     # det[t_j(m + i)] != 0 at some integer m past the start: then the terms
-    # are independent. Exact at every point, so a zero there is a zero.
+    # are independent. Dependent only when that determinant is decided zero
+    # at every point tried - for a parameter, identically; terms that do not
+    # evaluate (a product node) or a determinant that is not decided keep
+    # the count, which is the claim Petkovsek's algorithm makes (a basis
+    # n!, a**n*n! was called dependent: fourth review).
     def independent?(terms, n, order, start)
-      (start..start + 4).any? do |m|
+      verdicts = (start..start + 4).map do |m|
         rows = (0...order).map do |i|
           terms.map { |t| t.subs(n => Num.new(m + i)).simplify }
         end
-        next false unless rows.flatten.all? { |v| v.is_a?(Num) }
-        Scalar.zero?(Elimination.det(rows)) == false
+        next nil if rows.flatten.any? { |v| v.each_node.any? { |e| e.is_a?(Product) || e.is_a?(Sum) || e == UNDEFINED } }
+        det = Elimination.det(rows).simplify
+        det.variables.empty? ? Decide.zero?(det) : Decide.identically_zero?(det)
       end
+      !verdicts.all?(true)
+    rescue ZeroDivisionError
+      true
     rescue StandardError => rescued
       RCAS.guard!(rescued)
       true # nothing to evaluate: the count stands, as before

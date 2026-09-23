@@ -101,8 +101,9 @@ module RCAS
 
       g = gosper(f, k)
       if g
-        upper = to == OO ? tail_limit(g, k) : g.subs(k => to + 1)
-        return (upper - g.subs(k => from)).cancel if upper
+        upper = to == OO ? tail_limit(g, k) : at_bound(g, k, to + 1)
+        lower = at_bound(g, k, from)
+        return (upper - lower).cancel if upper && lower
       end
       if to == OO && (known = classical_series(f, k, from))
         return known
@@ -116,6 +117,61 @@ module RCAS
       Sum.new(f, k, from, original)
     end
 
+    # r(k)*f(k), with a pole of r that a binomial(k + a, c) of f cancels
+    # cancelled: 2**k*binomial(k, 2)*(k**2 - 5*k + 8)/(k**2 - k) is
+    # 2**k*(k**2 - 5*k + 8)/2, which has a value at k = 0 and 1 - and so has
+    # the closed form at every n. binomial(k + a, c) with a whole c is the
+    # polynomial (k + a)(k + a - 1).../c!.
+    def without_removable_poles(r, f, k)
+      g = (r * f).simplify
+      return g unless denominator_in?(r, k)
+      _, factors = Simplify.factorize(f)
+      polynomial = Num.new(1)
+      rest = {}
+      factors.each do |base, exp|
+        top, bottom = base.is_a?(Fn) && base.name == :binomial ? base.args : []
+        whole = bottom.is_a?(Num) && bottom.value.is_a?(Integer) && bottom.value.between?(1, 12) && exp.is_a?(Integer) && exp.positive?
+        if whole && Solve.polynomial_coefficients(top, k)&.size == 2
+          falling = (0...bottom.value).map { |i| top - i }.reduce(:*) / Combinatorics.factorial_value(bottom.value)
+          polynomial *= falling**exp
+        else
+          Simplify.add_factor(rest, base, exp)
+        end
+      end
+      return g if polynomial == Num.new(1)
+      cancelled = (r * polynomial).cancel
+      return g if denominator_in?(cancelled, k)
+      (cancelled.factor * Simplify.rebuild_product(Simplify.factorize(f).first, rest)).simplify
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
+      (r * f).simplify
+    end
+
+    # binomial(k + a, c) with a whole c >= 0: a polynomial in k.
+    def polynomial_binomial?(e, k)
+      return false unless e.is_a?(Fn) && e.name == :binomial && e.args.size == 2
+      top, bottom = e.args
+      bottom.is_a?(Num) && bottom.value.is_a?(Integer) && !bottom.value.negative? &&
+        !bottom.variables.include?(k.name) && Solve.polynomial_coefficients(top, k)&.size.to_i <= 2
+    end
+
+    def denominator_in?(r, k)
+      fraction = Fraction.as_fraction(r)
+      !fraction.nil? && fraction.last.to_expr.variables.include?(k.name)
+    end
+
+    # The antidifference at a bound. 2**k*binomial(k, 2)*(8 - 5*k + k**2)/(k**2 - k)
+    # has removable poles at 0 and 1, where binomial(k, 2) vanishes; the
+    # identity g(k + 1) - g(k) = f(k) holds there by continuity, so the value
+    # is the limit (a bare ZeroDivisionError before: fourth review). nil
+    # when the limit is not a finite value.
+    def at_bound(g, k, bound)
+      g.subs(k => bound).simplify
+    rescue ZeroDivisionError
+      value = Limits.limit(g, k, bound)
+      value.is_a?(Limit) || Limits.infinite?(value) || value == UNDEFINED ? nil : value
+    end
+
     # f = binomial(n, k)*r(k) with a symbolic n, and r has no pole at
     # k = n + 1, n + 2, ...: then every term past n is 0 and the sum may run
     # to infinity. r has to be a product of powers in k (a rational function
@@ -125,7 +181,8 @@ module RCAS
       top = f.each_node.find { |e| e.is_a?(Fn) && e.name == :binomial && e.args.first == to && e.args.last == k }
       return false unless top
       rest = (f / top).simplify
-      return false if rest.each_node.any? { |e| e.is_a?(Fn) && e.variables.include?(k.name) && e.name != :exp }
+      # binomial(k, 2) is the polynomial k*(k - 1)/2 and has no pole
+      return false if rest.each_node.any? { |e| e.is_a?(Fn) && e.variables.include?(k.name) && e.name != :exp && !polynomial_binomial?(e, k) }
       _, factors = Simplify.factorize(rest)
       factors.all? do |base, exp|
         next true unless base.variables.include?(k.name)
@@ -330,7 +387,9 @@ module RCAS
       conditions = Solve.polynomial_coefficients(equation, k) or return nil
       solution = Solve.linear_system(conditions, xs).first or return nil
       x_expr = xk.subs(solution).subs(xs.to_h { |v| [v, Num.new(0)] }) # free unknowns: any value works
-      g = (bm.to_expr * x_expr * f / c.to_expr).cancel
+      # the rational factor cancels on its own: with the term inside, a
+      # binomial(k, 3) stood between (k - 3)/4 and its common factor
+      g = without_removable_poles((bm.to_expr * x_expr / c.to_expr).cancel, f, k)
       check = (g.subs(k => k + 1) - g - f).cancel
       Scalar.zero?(check) || Decide.identically_zero?(check) ? g : nil
     rescue DomainError, NotImplementedError, ZeroDivisionError

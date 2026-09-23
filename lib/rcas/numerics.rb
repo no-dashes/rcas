@@ -40,11 +40,44 @@ module RCAS
     # knows, which is a hundred times faster than substituting into the
     # tree: adaptive Simpson over sin(1000*x) wants 300000 values and took
     # ten seconds (third review, section 5). Anything else takes the tree.
+    # The integrand as a Float function: the compiled lambda where it has a
+    # value, the tree evaluator where it does not - asin(1.5) is complex, and
+    # |asin(x)| is still real (the compiled lambda said nil and nintegrate
+    # refused: fourth review) - and, for a tree whose exact constants are
+    # beyond the Floats (10**400), evalf with its wide fallback.
     def caller_for(expr, var)
-      compiled = compile(Expression.lift(expr), Expression.lift(var).name)
-      return compiled if compiled
-      tree = Expression.floatify_tree(Expression.lift(expr))
+      expr = Expression.lift(expr)
       name = Expression.lift(var).name
+      huge = beyond_floats?(expr)
+      expr = expr.simplify if huge
+      huge &&= beyond_floats?(expr)
+      compiled = compile(expr, name)
+      tree = tree_caller(expr, name)
+      exact = huge ? exact_caller(expr, name) : nil
+      return tree if compiled.nil? && exact.nil?
+      lambda do |value|
+        compiled&.call(value) || tree.call(value) || exact&.call(value)
+      end
+    end
+
+    def beyond_floats?(expr)
+      expr.each_node.any? do |n|
+        n.is_a?(Num) && (v = n.value).is_a?(Numeric) && v.real? && !v.is_a?(Float) && !v.zero? && !v.abs.to_f.between?(1e-300, 1e300)
+      end
+    end
+
+    def exact_caller(expr, name)
+      lambda do |value|
+        result = expr.subs(name => Num.new(value)).evalf
+        RCAS.real_float(result)
+      rescue StandardError => rescued
+        RCAS.guard!(rescued)
+        nil
+      end
+    end
+
+    def tree_caller(expr, name)
+      tree = Expression.floatify_tree(expr)
       lambda do |value|
         result = tree.call(name => value)
         result = result.value if result.is_a?(Num)
@@ -159,10 +192,43 @@ module RCAS
         ->(_) { nil }
       end
       root = to.nil? ? newton(g, derivative, from, var, expr) : bisect(g, derivative, from, to, var, expr)
-      if pole?(g, root)
+      case crossing(g, root, from, to)
+      when :pole
         raise ArgumentError, "nsolve: #{expr} has a pole at #{root}, not a root; give a range on one side of it"
+      when :jump
+        raise ArgumentError, "nsolve: #{expr} changes sign at #{root} without passing through 0 - a jump, not a root"
       end
       digits ? Precision.refine(expr, var, root, digits) : root
+    end
+
+    # What the function does where the sign changes, read off |f| at
+    # distances growing tenfold from 40 units in the last place to a
+    # hundred million of them, on each side and inside the range: towards
+    # a root |f| shrinks, however steeply (the real cube root of x - 3/10 is
+    # 4e-6 an ulp away, which the old size test took for a jump), towards a
+    # pole it grows, across a jump it stays put. :root, :pole or :jump; a
+    # root when f is exactly 0 there or the sides disagree.
+    def crossing(g, x, from, to)
+      value = g.call(x)
+      return :root if value&.zero?
+      low, high = [from, to.nil? ? from : to].minmax
+      low, high = -Float::INFINITY, Float::INFINITY if to.nil?
+      unit = 4 * Float::EPSILON * [x.abs, 1e-300].max
+      ratios = [-1, 1].filter_map do |side|
+        values = (1..8).filter_map do |j|
+          t = x + side * unit * 10**j
+          next unless t >= low && t <= high
+          g.call(t)&.abs
+        end
+        next nil if values.size < 3
+        near, far = values.first, values.last
+        near.zero? ? Float::INFINITY : far / near
+      end
+      return value.nil? ? :pole : :root if ratios.empty?
+      return :pole if ratios.all? { |r| r < 0.5 }
+      return :jump if ratios.all? { |r| r.between?(0.5, 2.0) }
+      return :pole if value.nil? && ratios.none? { |r| r > 2.0 }
+      :root
     end
 
     # Converged when the bracket is a few units in the last place wide: a
@@ -170,18 +236,6 @@ module RCAS
     # exp(-50*x)*(x - 1/2) is 1e-22 at 1, and |f| < 1e-12 answered with
     # those (third review, S20).
     def narrow?(lo, hi) = (hi - lo).abs <= 4 * Float::EPSILON * [lo.abs, hi.abs, Float::MIN].max
-
-    # A function changes sign across a pole as it does across a root, and
-    # bisection walks straight into it: nsolve(1/x, x: -1..1) used to come
-    # back with 0.0. Closer in, a root gets smaller and a pole gets bigger.
-    def pole?(g, x)
-      return true if g.call(x).nil?
-      near, closer = [1e-6, 1e-10].map do |d|
-        [g.call(x - d), g.call(x + d)].compact.map(&:abs).max
-      end
-      return true if near.nil? || closer.nil? # undefined arbitrarily close by
-      closer > near && closer > 1.0
-    end
 
     def arguments(var, guess, range, expr)
       unless range.empty?
@@ -210,7 +264,6 @@ module RCAS
       return hi if fhi.zero?
       raise ArgumentError, "nsolve: #{expr} has the same sign at #{lo} and #{hi}; give a range that brackets a root" if flo * fhi > 0
 
-      scale = [flo.abs, fhi.abs].max
       x = (lo + hi) / 2.0
       steps = 0
       until narrow?(lo, hi) || steps > 4 * MAX_STEPS
@@ -227,17 +280,7 @@ module RCAS
         return x if value.zero?
         value * flo > 0 ? (lo = x; flo = value) : (hi = x; fhi = value)
       end
-      x = flo.abs <= fhi.abs ? lo : hi
-      return x if pole?(g, x) # the caller says it is a pole
-      jump!(expr, x, [flo.abs, fhi.abs].min, scale)
-      x
-    end
-
-    # A sign change whose two sides stay large as the bracket closes is a
-    # jump, not a root: a step from -1 to 1 has no zero anywhere (S20).
-    def jump!(expr, x, remaining, scale)
-      return unless remaining > 1e-6 * scale
-      raise ArgumentError, "nsolve: #{expr} changes sign at #{x} without passing through 0 - a jump, not a root"
+      flo.abs <= fhi.abs ? lo : hi # the caller tells a root from a pole or a jump
     end
 
     # The value at x, or at the nearest point inside the bracket where the

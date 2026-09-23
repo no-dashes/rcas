@@ -46,10 +46,19 @@ module RCAS
       return number_sign(e.value) if e.is_a?(Num)
       exact = exact_value(e)
       return :zero if exact&.zero?
-      found = precise_sign(e, nonzero: !exact.nil?)
-      return found unless found == :unsupported
-      float_sign(e)
+      found, value, bound = precise(e)
+      return found if SIGNS.include?(found)
+      if found == :unsupported
+        found = float_sign(e)
+        return found if found
+      end
+      # every evaluation was consistent with 0, and no evaluation can
+      # prove that: a root separation bound or a normal form can
+      return :zero if value && algebraic_zero?(e, value, bound)
+      :zero if exact.nil? && symbolic_zero?(e)
     end
+
+    SIGNS = %i[positive negative].freeze
 
     # true, false, or nil when undecided. Complex constants are welcome.
     def zero?(e)
@@ -71,11 +80,18 @@ module RCAS
           return true if signs.all?(:zero)
           return nil
         end
-        return complex_float_zero?(e)
+        return complex_zero?(e)
       end
       s = sign(e)
       return s == :zero if s
-      complex_float_zero?(e) # log(-1) is complex without an i in sight
+      return false if annihilator_at_zero(e) == :nonzero
+      complex_zero?(e) # log(-1) is complex without an i in sight
+    end
+
+    def complex_zero?(e)
+      verdict = complex_float_zero?(e)
+      return verdict unless verdict.nil?
+      symbolic_zero?(e) ? true : nil
     end
 
     # An expression in indeterminates that no normal form reduces
@@ -140,29 +156,89 @@ module RCAS
 
     def parts_symbolic?(part) = part.each_node.any? { |n| n.is_a?(Fn) && %i[re im].include?(n.name) }
 
+    # :positive or :negative when two precisions agree on a value well above
+    # the rounding error of the largest magnitude in the walk (a value that
+    # is smaller could be what is left of an exact 0 whose terms each
+    # rounded); nil when every level is consistent with 0 - which is not a
+    # proof of 0 (exp(10**-100) - 1 is exactly 0 at 30 and 60 digits); and
     # :unsupported when Precision cannot evaluate the expression at all, or
     # only to the digits of a Float inside it.
-    def precise_sign(e, nonzero: false)
-      values = []
+    def precise_sign(e) = precise(e).first
+
+    # [verdict, value, bound] - the last value and its error bound come
+    # along for algebraic_zero?
+    def precise(e)
+      previous = nil
       LEVELS.each do |digits|
-        value = begin
-          Precision.evalf(e, digits, certify: false)
+        value, scale, keep = begin
+          Precision.evalf_with_scale(e, digits)
         rescue ZeroDivisionError
           return nil
         rescue StandardError, NotImplementedError => rescued
           RCAS.guard!(rescued)
           return :unsupported
         end
-        return :unsupported if value.digits < digits
-        values << value.value
-        next if values.size < 2
-        coarse, fine = values[-2], values[-1]
-        return :zero if !nonzero && (fine.zero? || fine.abs <= coarse.abs * SHRINK)
-        if !fine.zero? && !coarse.zero? && (fine - coarse).abs <= fine.abs * AGREE
-          return fine.positive? ? :positive : :negative
+        return :unsupported if keep < digits
+        bound = scale.mult(BigDecimal("1e-#{digits}"), 5)
+        if previous
+          coarse, coarse_bound = previous
+          consistent = (value - coarse).abs <= coarse_bound + bound
+          return [value.positive? ? :positive : :negative] if consistent && value.abs > bound
         end
+        previous = [value, bound]
       end
+      [nil, *previous]
+    end
+
+    # An algebraic constant - rationals, radicals, i, RootOf - is a root of
+    # the polynomial Algebraic.annihilator builds. If 0 is not a root the
+    # constant is not 0; if it is, the other roots are at least
+    # |q0|/(|q0| + max|qi|) away from it (Cauchy's bound for q = p/x**m),
+    # and a value evaluated below that distance is 0. That proves
+    # sqrt(2)*sqrt(3) - sqrt(6) = 0, which has three radicals and is beyond
+    # Algebraic.exact.
+    def algebraic_zero?(e, value, bound)
+      q = annihilator_at_zero(e)
+      return false if q.nil? || q == :nonzero
+      separation = Rational(q.first) / (q.first + q.drop(1).max.to_r)
+      value.abs + bound < BigDecimal(separation.numerator).div(separation.denominator, 20) / 2
+    end
+
+    # The coefficients of p/x**m (absolute values, constant term first) when
+    # 0 is a root of the annihilating polynomial p of an algebraic constant,
+    # :nonzero when it is not - a proof that the constant is not 0 - and
+    # nil when the constant is not algebraic in that sense or too large.
+    def annihilator_at_zero(e)
+      return nil unless e.each_node.all? { |n| ALGEBRAIC_NODES.any? { |c| n.is_a?(c) } } && e.each_node.count <= 40
+      x = Var.new(:_decide)
+      coefficients = Coefficients.coeffs(Algebraic.annihilator(e, x), x)
+      return nil unless coefficients.all? { |c| c.is_a?(Num) && (c.value.is_a?(Integer) || c.value.is_a?(Rational)) }
+      m = coefficients.index { |c| !c.value.zero? }
+      return nil if m.nil?
+      return :nonzero if m.zero?
+      coefficients.drop(m).map { |c| c.value.abs }
+    rescue StandardError, NotImplementedError => rescued
+      RCAS.guard!(rescued) if rescued.is_a?(StandardError)
       nil
+    end
+
+    ALGEBRAIC_NODES = [Num, Add, Sub, Mul, Div, Neg, Pow, RootOf].freeze
+
+    # A constant that the normal forms reduce to 0: expand, cancel, the
+    # Pythagorean identity. Asked only after every evaluation came out
+    # consistent with 0, so the cost is paid where a proof is wanted.
+    def symbolic_zero?(e)
+      return false if Thread.current[:rcas_decide_symbolic] # the normal forms asked us
+      begin
+        Thread.current[:rcas_decide_symbolic] = true
+        simplified = e.simplify
+        simplified.is_a?(Num) ? simplified.value == 0 : Scalar.identically_zero?(simplified)
+      ensure
+        Thread.current[:rcas_decide_symbolic] = nil
+      end
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
+      false
     end
 
     def float_sign(e)
@@ -186,7 +262,7 @@ module RCAS
     def float_with_scale(e)
       nodes = e.each_node.to_a
       return [nil, 0.0] if nodes.size > 400
-      scale = 1.0
+      scale = 0.0
       value = nil
       nodes.each do |node|
         v = begin

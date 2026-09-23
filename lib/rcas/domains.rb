@@ -355,34 +355,60 @@ module RCAS
       :nonnegative
     end
 
-    # A product of knowns, or an even power, or a sum of nonnegatives.
+    # A product of knowns, or an even power, or a sum of terms of one sign.
+    # -a is negative when a is positive (the fourth review: a pole at -a
+    # stayed "possibly inside" under a > 0), and a power of a positive base
+    # is positive only with a real exponent - |2**i| is 1, not 2**i.
     def expression_sign(expr)
       case expr
+      when Neg then negated_sign(sign_of(expr.arg))
+      when Sub then sum_sign(sign_of(expr.left), negated_sign(sign_of(expr.right)))
+      when Add then sum_sign(sign_of(expr.left), sign_of(expr.right))
+      when Mul then combine_signs(sign_of(expr.left), sign_of(expr.right))
+      when Div
+        # where the quotient is defined its denominator is not 0
+        below = { nonnegative: :positive, nonpositive: :negative }.fetch(sign_of(expr.right)) { |s| s }
+        combine_signs(sign_of(expr.left), below)
       when Pow
         base_sign = sign_of(expr.base)
-        return :positive if base_sign == :positive
+        exponent = expr.exponent
+        whole = exponent.is_a?(Num) && exponent.value.is_a?(Integer)
+        return :positive if base_sign == :positive && (whole || real?(exponent))
         # An even power is not negative - of a real number. y**2 at y = 2i
         # is -4, and an undeclared y is not real (the branch-cut policy),
         # so abs(y**2 + 1) keeps its abs until y is declared.
-        even = expr.exponent.is_a?(Num) && expr.exponent.value.is_a?(Integer) && expr.exponent.value.even?
-        return :nonnegative if even && (base_sign || real?(expr.base))
+        if whole && exponent.value.even?
+          return :positive if base_sign == :negative
+          return :nonnegative if base_sign || real?(expr.base)
+        end
+        return base_sign if whole && %i[negative nonpositive].include?(base_sign)
         nil
-      when Mul
-        combine_signs(sign_of(expr.left), sign_of(expr.right))
-      when Add
-        left = sign_of(expr.left)
-        right = sign_of(expr.right)
-        return :positive if [left, right].all? { |s| %i[positive nonnegative].include?(s) } && [left, right].include?(:positive)
-        %i[positive nonnegative].include?(left) && %i[positive nonnegative].include?(right) ? :nonnegative : nil
       end
+    end
+
+    STRICT = { positive: :nonnegative, negative: :nonpositive }.freeze
+    UP = %i[positive nonnegative].freeze
+    DOWN = %i[negative nonpositive].freeze
+
+    def negated_sign(sign) = { positive: :negative, negative: :positive, nonnegative: :nonpositive, nonpositive: :nonnegative }[sign]
+
+    def sum_sign(left, right)
+      [UP, DOWN].each do |side|
+        next unless side.include?(left) && side.include?(right)
+        return [left, right].include?(side.first) ? side.first : side.last
+      end
+      nil
     end
 
     def combine_signs(left, right)
       return nil if left.nil? || right.nil?
-      return :positive if left == :positive && right == :positive
-      return :nonnegative if %i[positive nonnegative].include?(left) && %i[positive nonnegative].include?(right)
-      return :negative if [left, right].count(:negative) == 1 && [left, right].all? { |s| %i[positive negative].include?(s) }
-      nil
+      up = [left, right].count { |s| DOWN.include?(s) }.even?
+      strict = [left, right].all? { |s| STRICT.key?(s) }
+      if up
+        strict ? :positive : :nonnegative
+      else
+        strict ? :negative : :nonpositive
+      end
     end
 
     def nonnegative?(expr) = %i[positive nonnegative].include?(sign_of(expr))
@@ -407,7 +433,11 @@ module RCAS
       when Neg then no_naturals(domain(expr.arg))
       when Add, Mul then join(domain(expr.left), domain(expr.right))
       when Sub then no_naturals(join(domain(expr.left), domain(expr.right)))
-      when Div then join(join(domain(expr.left), domain(expr.right)), QQ)
+      when Div
+        below = domain(expr.right)
+        # no value at a denominator of 0, which x in NN may be (C5)
+        return nil if below && below <= NN && !positive_base?(expr.right)
+        join(join(domain(expr.left), below), QQ)
       when Pow then power(expr)
       when Fn  then function(expr)
       when Piecewise then expr.values.map { |v| domain(v) }.reduce { |a, b| join(a, b) }
@@ -464,17 +494,29 @@ module RCAS
       if exp.is_a?(Num)
         v = exp.value
         return base if v.is_a?(Integer) && v >= 0
+        # 1/x and x**(-1/2) have no value at 0, which x in NN may be: no
+        # claim, as for log(x) (fourth review, C5)
+        return nil if v.real? && v.negative? && base <= NN && !positive_base?(expr.base)
         return base.join(QQ) if v.is_a?(Integer)
         return CC unless v.real?
-        return base <= NN ? RR : CC
+        return RR if base <= NN || (base <= RR && positive_base?(expr.base))
+        return CC
       end
 
       ed = domain(exp)
       return nil if ed.nil?
       return base if ed <= NN
       return base.join(QQ) if ed <= ZZ
-      return RR if ed <= RR && base <= NN
+      return RR if ed <= RR && (base <= NN || (base <= RR && positive_base?(expr.base)))
       CC
+    end
+
+    # sqrt(pi) and sqrt(7 - 4*sqrt(3)) are real: the radicand is positive
+    # (fourth review: x**2 < pi was refused as "cannot decide").
+    def positive_base?(b)
+      sign = RCAS.sign_of(b)
+      return sign == :positive if sign || !b.variables.empty?
+      Decide.sign(b) == :positive
     end
 
     def function(expr)
@@ -507,7 +549,10 @@ module RCAS
       return nil if u.is_a?(Num) && u.value.is_a?(Numeric) && u.value.zero?
       sign = u.variables.empty? ? Decide.sign(u) : RCAS.sign_of(u)
       return RR if sign == :positive
-      return nil if sign == :nonnegative || (sign.nil? && arg <= NN) # 0 may be among the values
+      # 0 may be among the values of a natural number, where log has none;
+      # a square that may be 0 is still in CC wherever log is defined
+      # (a matrix of log(x**2) could not be built: fourth review)
+      return nil if (sign.nil? || sign == :nonnegative) && arg <= NN
       CC
     end
   end

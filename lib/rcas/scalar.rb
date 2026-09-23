@@ -78,11 +78,10 @@ module RCAS
     # it used to come out as 0; i*exp(-40) is complex and has no
     # arbitrary-precision value, so it went on the float verdict and was
     # zero too. Decide takes the parts apart and asks each at two
-    # precisions. Only what it cannot decide falls back on the float.
-    def vanishes?(expr)
-      decided = Decide.zero?(expr)
-      decided.nil? ? true : decided
-    end
+    # precisions, and a normal form proves the zeros. What it leaves
+    # undecided is not zero: that is the generic-pivot assumption (the
+    # fourth review: exp(-30)*gamma(1/3) was a zero determinant).
+    def vanishes?(expr) = Decide.zero?(expr) == true
     def one?(a) = a.is_a?(Num) && a.value == 1
     def negative?(a) = a.is_a?(Num) && Simplify.negative?(a.value)
     def numeric?(a) = a.is_a?(Num)

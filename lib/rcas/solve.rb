@@ -72,27 +72,101 @@ module RCAS
 
     # No member on the real line: the step is real and a member is not, so
     # every member has the same non-zero imaginary part ({pi - acos(2) +
-    # 2*pi*k}, the zeros of 2 + cos(x)).
+    # 2*pi*k}, the zeros of 2 + cos(x)). Only an affine family is measured.
     def nonreal?
-      return false unless parameters.size == 1
-      step = (at(1) - at(0)).simplify
-      Inequalities.real?(step) && !Inequalities.real?(at(0))
-    rescue NotImplementedError, StandardError
+      pair = affine or return false
+      base, step = pair
+      Inequalities.real?(step) && !Inequalities.real?(base)
+    rescue NotImplementedError
+      false
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       false
     end
 
+    # [base, step] when the family is base + step*k, nil otherwise.
+    def affine
+      return nil unless parameters.size == 1
+      coefficients = Solve.polynomial_coefficients(expr, parameters.first)
+      return nil unless coefficients && coefficients.size <= 2 && coefficients.none? { |c| c.variables.include?(parameters.first.name) }
+      [coefficients[0].simplify, (coefficients[1] || Num.new(0)).simplify]
+    end
+
     # The members between two numbers, when they can be counted out; [] for
-    # a family that never meets the real line.
+    # a family that never meets the real line; nil when they cannot be
+    # counted - too many, infinitely many, or a family whose shape is not
+    # understood. Counting base + k*step from at(0) and at(1) was right
+    # only for an arithmetic family: sqrt(pi*k), the kinks of |sin(x**2)|,
+    # lost four of seven, and 1/(2*pi*k) divided by zero (fourth review).
+    # Only the indices of the family's own domain count (k >= 0 over NN).
     def between(lo, hi, limit: 1024)
       return nil unless parameters.size == 1
       return [] if nonreal?
-      base = numeric(at(0))
-      step = base && numeric(at(1))
-      return nil if base.nil? || step.nil? || (step - base).abs < 1e-12
-      first, last = [((lo - base) / (step - base)).floor, ((hi - base) / (step - base)).ceil].minmax
+      indices = affine ? affine_indices(lo, hi) : crossing_indices(lo, hi)
+      return nil if indices.nil?
+      first, last = indices
+      first = [first, 0].max if domain == NN
+      return [] if first > last
       return nil if last - first > limit
-      (first..last).map { |i| at(i) }.select { |m| (v = numeric(m)) && v >= lo && v <= hi }
+      (first..last).filter_map do |i|
+        member = begin
+          at(i)
+        rescue ZeroDivisionError
+          next
+        end
+        member if (v = numeric(member)) && v >= lo && v <= hi
+      end
     end
+
+    private
+
+    def affine_indices(lo, hi)
+      base, step = affine.map { |c| numeric(c) }
+      return nil if base.nil? || step.nil? || step.abs < 1e-12
+      [((lo - base) / step).floor, ((hi - base) / step).ceil].minmax
+    end
+
+    # expr(k) is continuous between the edges of its real domain, so it
+    # meets [lo, hi] on the pieces cut out by the solutions of expr = lo and
+    # expr = hi and those edges; one sample decides each piece. nil when a
+    # solution cannot be named, or a piece that reaches to infinity stays
+    # inside (1/(2*pi*k) crowds towards 0: infinitely many members).
+    def crossing_indices(lo, hi)
+      k = parameters.first
+      cuts = [lo, hi].flat_map do |bound|
+        roots = Solve.solve(expr - Num.new(bound.to_r), k)
+        return nil unless roots.is_a?(Array) && roots.all? { |r| r.is_a?(Expression) && r.variables.empty? }
+        roots.filter_map { |r| numeric(r) }
+      end
+      edges = Analysis.real_domain(expr, k).intervals.flat_map { |i| [i.low, i.high] }
+                      .reject { |e| Limits.infinite?(e) }.map { |e| numeric(e) or return nil }
+      points = (cuts + edges).uniq.sort
+      inside = ->(t) { (v = value_at(k, t)) && v >= lo && v <= hi }
+      found = []
+      ([-Float::INFINITY] + points).zip(points + [Float::INFINITY]).each do |a, b|
+        t = if a.infinite? && b.infinite? then 0.0
+            elsif a.infinite? then b - 1
+            elsif b.infinite? then a + 1
+            else (a + b) / 2
+            end
+        next unless inside.call(t)
+        return nil if a.infinite? || b.infinite?
+        found << [a.floor, b.ceil]
+      end
+      points.each { |t| found << [t.floor, t.ceil] if inside.call(t) }
+      return [1, 0] if found.empty?
+      [found.map(&:first).min, found.map(&:last).max]
+    rescue NotImplementedError, ArgumentError, ZeroDivisionError
+      nil
+    end
+
+    def value_at(k, t)
+      numeric(expr.subs(k.name => Num.new(t)))
+    rescue ZeroDivisionError
+      nil
+    end
+
+    public
 
     def variables = expr.variables - parameters.map(&:name)
     def to_expr = expr
@@ -187,7 +261,7 @@ module RCAS
       # what says it; raising made a true statement look like a failure.
       # Every value *of x*: with x declared an integer, sin(pi*x) vanishes
       # on ZZ and nowhere else, so the reals would be an overstatement.
-      return everywhere(x, domain, poles) if Scalar.zero?(f) || rational_identity?(f, x)
+      return everywhere(x, domain, poles, original) if Scalar.zero?(f) || rational_identity?(f, x)
       found =
         begin
           univariate(f, x, 0, all: !principal)
@@ -197,7 +271,7 @@ module RCAS
         rescue NotImplementedError
           constant = trig_constant(f)
           raise if constant.nil?
-          return Scalar.zero?(constant) ? everywhere(x, domain, poles) : []
+          return Scalar.zero?(constant) ? everywhere(x, domain, poles, original) : []
         end
       roots = dedupe(found).map { |root| family(root, x, f) }
       ordered(dedupe(restrict(off_poles(merge_families(roots), poles, x), x, domain)))
@@ -216,12 +290,15 @@ module RCAS
 
     # Every value of x is a solution: the declared domain when there is one,
     # the reals otherwise - less the poles of the equation as written, so
-    # (x**2 - 1)/(x - 1) = x + 1 holds everywhere but at 1. Poles that come
-    # in a family cannot be taken out of a finite union of intervals, and
-    # the reals would claim them: that is refused.
-    def everywhere(x, domain, poles = [])
+    # (x**2 - 1)/(x - 1) = x + 1 holds everywhere but at 1, and less the
+    # points where it has no value at all (log(x)/log(x) = 1 is false at
+    # 0: its real domain says so). Poles that come in a family cannot be
+    # taken out of a finite union of intervals, and the reals would claim
+    # them: that is refused. So is a declared ZZ, QQ or CC with a pole in
+    # it, since rcas has no set "the integers but 1" to answer with (the
+    # declared set itself was the answer, pole and all: fourth review).
+    def everywhere(x, domain, poles = [], original = nil)
       declared = domain || RCAS.assumption(x.name)
-      return declared if declared
       points = poles.flat_map do |d|
         found = Solve.solve(d, x)
         raise NotImplementedError, "every #{x} where #{d} != 0 is a solution; that set is not a finite union of intervals" unless found.is_a?(Array)
@@ -230,9 +307,20 @@ module RCAS
       if points.any? { |p| p.is_a?(ImageSet) }
         raise NotImplementedError, "every #{x} off the zeros of #{poles.join(', ')} is a solution; that set is not a finite union of intervals"
       end
+      if declared && declared != RR
+        inside = points.reject { |p| Infer.excluded?(p, declared) }
+        return declared if inside.empty?
+        raise NotImplementedError, "every #{x} in #{declared} except #{inside.map(&:to_s).join(', ')} is a solution; rcas has no set to write that with"
+      end
       real = points.select { |p| Analysis.numeric(p) }
-      return RealSet.reals if real.empty?
-      RealSet.reals - RealSet.new(real.map { |p| Interval.point(p) })
+      set = real.empty? ? RealSet.reals : RealSet.reals - RealSet.new(real.map { |p| Interval.point(p) })
+      return set if original.nil?
+      defined = begin
+        Analysis.real_domain(original, x)
+      rescue NotImplementedError, ArgumentError
+        nil
+      end
+      defined.is_a?(RealSet) ? set - (RealSet.reals - defined) : set
     end
 
     # Roots and families of the simplified equation that are poles of the

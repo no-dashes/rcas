@@ -870,6 +870,11 @@ module RCAS
           return RCAS.sqrt(Num.new(arg.value.real**2 + arg.value.imaginary**2)).simplify
         end
         return Num.new(arg.value.abs) if arg.is_a?(Num)
+        # |b**z| = b**re(z) for b > 0: |2**i| is 1 (the fourth review, C1)
+        if arg.is_a?(Pow) && RCAS.sign_of(arg.base) == :positive && !ComplexParts.real_valued?(arg.exponent)
+          real = ComplexParts.re(arg.exponent)
+          return (arg.base**real).simplify unless real.each_node.any? { |n| n.is_a?(Fn) && %i[re im].include?(n.name) }
+        end
         if arg.variables.empty? && arg.each_node.any? { |n| n.is_a?(Num) && n.value.is_a?(Complex) }
           re, im = ComplexParts.parts(arg)
           return RCAS.sqrt((re**2 + im**2).expand).simplify unless [re, im].any? { |part| part.each_node.any? { |n| n.is_a?(Fn) && %i[re im].include?(n.name) } }

@@ -102,11 +102,21 @@ module RCAS
     # sqrt(u**2) is u, -u or abs(u), by the sign of u on the parameter
     # ranges - a sign that is proved, never sampled.
     def root_factor(base, ranges)
-      case proven_sign(base, ranges)
-      when :positive then base
-      when :negative then Neg.new(base).simplify
+      case proven_sign(base, ranges) || real_sign(base, ranges)
+      when :positive, :nonnegative then base
+      when :negative, :nonpositive then Neg.new(base).simplify
       else Fn.new(:abs, [base])
       end
+    end
+
+    # The sign that needs no range: 4*u**2 + 4*v**2 is not negative for the
+    # real parameters of any range (the abs kept it formal: fourth review),
+    # and on a box the enclosure of the base may be one-signed.
+    def real_sign(base, ranges)
+      names = ranges.map { |var, _, _| Expression.lift(var).name }
+      sign = RCAS.assume(**names.to_h { |n| [n, RR] }) { RCAS.sign_of(base) }
+      return sign if sign
+      ranges.empty? ? nil : Analysis.sign_on_box(base, ranges)
     end
 
     # In one variable the zeros decide (Analysis.sign_on_interval). On a box
@@ -119,6 +129,8 @@ module RCAS
       base = Expression.lift(base)
       one = single_range(base, ranges)
       return Analysis.sign_on_interval(base, one[0], one[1], one[2]) if one
+      boxed = ranges.empty? ? nil : Analysis.sign_on_box(base, ranges)
+      return boxed if %i[positive negative].include?(boxed)
       coeff, factors = Simplify.factorize(base)
       return nil unless coeff.is_a?(Numeric) && coeff.real? && !coeff.zero?
       negative = coeff.negative?
@@ -252,7 +264,9 @@ module RCAS
     def nonvanishing?(d, xs, ranges)
       sign = RCAS.assume(**xs.to_h { |x| [x.name, RR] }) { RCAS.sign_of(d) }
       return true if %i[positive negative].include?(sign)
-      !ranges.empty? && %i[positive negative].include?(proven_sign(d, ranges))
+      # x**2 + y**2 >= 2 on [1, 2]x[1, 2]: the enclosure proves it (the
+      # vortex on that square was refused: fourth review)
+      !ranges.empty? && (%i[positive negative].include?(proven_sign(d, ranges)) || %i[positive negative].include?(Analysis.sign_on_box(d, ranges)))
     rescue StandardError => rescued
       RCAS.guard!(rescued)
       false
@@ -314,24 +328,84 @@ module RCAS
     def conservative?(field, vars = nil)
       f = components(field, "conservative?", [2, 3])
       xs = coordinates(field, vars, f.size)
+      return symmetric?(f, xs) if regular?(f, xs)
+      # a field with a singularity is conservative on its domain when it has
+      # a potential there: grad(1/r) is, the vortex is not
+      return true if symmetric?(f, xs) && global_potential(f, xs)
       regular_on!(f, xs, [], "conservative?")
-      pairs = (0...f.size).to_a.combination(2)
-      pairs.all? { |i, j| Scalar.zero?((f[i].diff(xs[j]) - f[j].diff(xs[i])).simplify) }
+    end
+
+    def symmetric?(f, xs)
+      (0...f.size).to_a.combination(2).all? { |i, j| Scalar.zero?((f[i].diff(xs[j]) - f[j].diff(xs[i])).simplify) }
+    end
+
+    def regular?(f, xs)
+      regular_on!(f, xs, [], "conservative?")
+      true
+    rescue NotImplementedError
+      false
     end
 
     # The potential f with gradient f = field, up to a constant: integrate
     # the first component, then correct it with what the next components
-    # still miss. Raises when the field has no potential.
+    # still miss. Raises when the field has no potential. A potential found
+    # is its own proof, whatever the topology of the domain - checked by
+    # differentiating, and by asking that it be singular only where the
+    # field is: (2x, 2y)/(x**2 + y**2) has log(x**2 + y**2) (refused as
+    # singular before: fourth review), while the vortex's -atan(x/y) breaks
+    # on the line y = 0, where the field is smooth.
     def potential(field, vars = nil)
       f = components(field, "potential", [2, 3])
       xs = coordinates(field, vars, f.size)
-      raise ArgumentError, "potential: (#{f.join(', ')}) is not conservative" unless conservative?(f, xs)
+      raise ArgumentError, "potential: (#{f.join(', ')}) is not conservative" unless symmetric?(f, xs)
+      return construct_potential(f, xs) if regular?(f, xs)
+      global_potential(f, xs) or regular_on!(f, xs, [], "potential")
+    end
+
+    def construct_potential(f, xs)
       f.each_with_index.reduce(Num.new(0)) do |found, (component, i)|
         missing = (component - found.diff(xs[i])).simplify
         antiderivative = Integrate.integrate(missing, xs[i])
         raise ArgumentError, "potential: cannot integrate #{missing} with respect to #{xs[i]}" if antiderivative.is_a?(Integral)
         (found + antiderivative).simplify
       end
+    end
+
+    # A potential of a singular field that is defined wherever the field
+    # is, with the field as its gradient; nil otherwise.
+    def global_potential(f, xs)
+      phi = construct_potential(f, xs)
+      gradient = xs.each_with_index.all? { |x, i| Scalar.zero?((phi.diff(x) - f[i]).simplify) }
+      gradient && singular_within?(phi, f, xs) ? phi : nil
+    rescue ArgumentError
+      nil
+    end
+
+    # Every place the potential may break - a denominator, the argument of
+    # a log, a radicand - is a zero of the field's denominators: each of its
+    # irreducible factors is one of theirs.
+    def singular_within?(phi, f, xs)
+      field_factors = f.flat_map { |c| xs.flat_map { |x| Analysis.denominators(Expression.lift(c), x) } }
+                       .flat_map { |d| irreducible_factors(d, xs) }.uniq
+      breaks = xs.flat_map { |x| Analysis.denominators(phi, x) } +
+               phi.each_node.select { |n| n.is_a?(Fn) && n.name == :log }.map { |n| n.args.first } +
+               phi.each_node.select { |n| n.is_a?(Pow) && n.exponent.is_a?(Num) && !n.exponent.value.is_a?(Integer) }.map(&:base) +
+               phi.each_node.select { |n| n.is_a?(Fn) && !%i[log exp sin cos].include?(n.name) }.flat_map(&:args)
+      breaks.uniq.all? do |b|
+        next true if b.variables.empty?
+        irreducible_factors(b, xs).all? { |factor| field_factors.any? { |g| Scalar.zero?((factor - g).simplify) || Scalar.zero?((factor + g).simplify) } }
+      end
+    end
+
+    def irreducible_factors(d, xs)
+      d = Expression.lift(d)
+      d = d.base while d.is_a?(Pow) && d.exponent.is_a?(Num) && d.exponent.value.positive? # (x**2 + y**2)**(3/2)
+      numerator = Fraction.as_fraction(d, xs.map(&:name))
+      return [Expression.lift(d)] if numerator.nil? || !numerator.last.constant?
+      Factor.factor(numerator.first).factors.map { |g, _| g.to_expr }.reject { |g| g.variables.empty? }
+    rescue StandardError, NotImplementedError => rescued
+      RCAS.guard!(rescued) if rescued.is_a?(StandardError)
+      [Expression.lift(d)]
     end
   end
 end

@@ -421,7 +421,8 @@ module RCAS
     # c >= 0 and any w. Everything else stays inside. nil when nothing comes
     # out, which is what stops the rule from firing on its own result.
     def root_of_product(base, exp)
-      return nil unless base.is_a?(Mul)
+      # sqrt(pi**2) is pi and sqrt(1/pi**2) is 1/pi, as sqrt(4*pi**2) is 2*pi
+      return nil unless base.is_a?(Mul) || base.is_a?(Div) || (base.is_a?(Pow) && base.exponent.is_a?(Num) && base.exponent.value.is_a?(Integer))
       coeff, factors = factorize(base)
       outside = {}
       inside = {}

@@ -44,6 +44,7 @@ module RCAS
   module Integrate
     MAX_DEPTH = 8
     MAX_UNKNOWNS = 400
+    MAX_SYMBOLIC_UNKNOWNS = 100
     ATOM_FUNCTIONS = %i[exp log sin cos sinh cosh atan asin acos].freeze
     TABLE_FUNCTIONS = %i[exp log sin cos tan sinh cosh atan].freeze
 
@@ -1113,6 +1114,12 @@ module RCAS
         keys = (unknown_tables.flat_map(&:keys) + ftab.keys).uniq
         rows = keys.map { |k| unknown_tables.map { |t| t[k] || Num.new(0) } }
         rhs = keys.map { |k| ftab[k] || Num.new(0) }
+        # with symbolic constants in the entries (pi in the surface of
+        # revolution of sin(2*pi*x)) every step of the elimination cancels,
+        # and a system of hundreds of unknowns ran for minutes (fourth
+        # review); such an ansatz is refused, and the integral stays formal
+        symbolic = (rows.flatten + rhs).any? { |e| !Expression.lift(e).is_a?(Num) }
+        return nil if symbolic && (unknown_tables.size > MAX_SYMBOLIC_UNKNOWNS || rows.size > 4 * MAX_SYMBOLIC_UNKNOWNS)
         solution = parametric_solve(rows, rhs) || begin
           matrix = MatrixSpace.new(QQ, rows.size, unknown_tables.size).unchecked(rows)
           matrix.solve(rhs)
@@ -1143,7 +1150,7 @@ module RCAS
       # cancelling solver of the q-side does it; nil hands a numeric system
       # back to the matrix.
       def parametric_solve(rows, rhs)
-        return nil if (rows.flatten + rhs).all? { |e| Expression.lift(e).variables.empty? }
+        return nil if (rows.flatten + rhs).all? { |e| Expression.lift(e).is_a?(Num) }
         unknowns = rows.first.each_index.map { |i| Var.new(:"_heurisch#{i}") }
         conditions = rows.zip(rhs).map do |row, b|
           row.each_with_index.reduce(Simplify.negate(Expression.lift(b))) { |acc, (c, i)| acc + Expression.lift(c) * unknowns[i] }.simplify

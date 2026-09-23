@@ -405,9 +405,23 @@ module RCAS
     # claim the function is defined where nobody has looked. The message
     # says which condition it was, in rcas's own words rather than as a
     # backtrace out of Inequalities.
+    def off_zeros(d, x)
+      zeros = Solve.solve(d, x)
+      return nil unless zeros.is_a?(Array) && zeros.all? { |z| z.is_a?(Expression) && z.variables.empty? }
+      real = zeros.select { |z| Inequalities.real?(z) }.map { |z| Inequalities.real_part(z) }
+      real.empty? ? RealSet.reals : RealSet.reals - RealSet.new(real.map { |z| Interval.point(z) })
+    rescue NotImplementedError, ArgumentError
+      nil
+    end
+
     def solved_condition(condition, x)
       Inequalities.solve(condition, x)
     rescue NotImplementedError => e
+      # d != 0 is the line less the zeros of d, which solve names for more
+      # than polynomials (log(x) != 0 is every x but 1)
+      if condition.op == :!= && (off = off_zeros(condition.lhs - condition.rhs, x))
+        return off
+      end
       # cause: nil, or irb prints this backtrace and the one underneath it
       raise NotImplementedError, "real_domain: where #{condition} holds is not decided here (#{e.message})", cause: nil
     end
@@ -570,6 +584,80 @@ module RCAS
       when :negative then Neg.new(u).simplify
       else Fn.new(:abs, [u])
       end
+    end
+
+    # An interval [lo, hi] of Rationals that contains every value of u on
+    # the box {name => [lo, hi]} - interval arithmetic, so a proof: x**2 +
+    # y**2 lies in [2, 8] on [1, 2]x[1, 2] and never vanishes there. nil for
+    # anything it does not enclose (a function, a denominator that may be 0).
+    def enclosure(u, box)
+      case u
+      when Num
+        v = u.value
+        v.is_a?(Integer) || v.is_a?(Rational) ? [v.to_r, v.to_r] : nil
+      when Var then box[u.name]
+      when Const then u.name == :pi ? [Rational(314_159_265, 100_000_000), Rational(314_159_266, 100_000_000)] : nil
+      when Neg
+        a = enclosure(u.arg, box) or return nil
+        [-a[1], -a[0]]
+      when Add, Sub
+        a = enclosure(u.left, box) or return nil
+        b = enclosure(u.right, box) or return nil
+        u.is_a?(Add) ? [a[0] + b[0], a[1] + b[1]] : [a[0] - b[1], a[1] - b[0]]
+      when Mul
+        a = enclosure(u.left, box) or return nil
+        b = enclosure(u.right, box) or return nil
+        products = a.product(b).map { |p, q| p * q }
+        [products.min, products.max]
+      when Div
+        a = enclosure(u.left, box) or return nil
+        b = enclosure(u.right, box) or return nil
+        return nil if b[0] <= 0 && b[1] >= 0
+        enclosure_product(a, [1 / b[1], 1 / b[0]])
+      when Pow
+        n = u.exponent
+        return nil unless n.is_a?(Num) && n.value.is_a?(Integer) && n.value.abs <= 64
+        a = enclosure(u.base, box) or return nil
+        n = n.value
+        if n.negative?
+          return nil if a[0] <= 0 && a[1] >= 0
+          a = [1 / a[1], 1 / a[0]]
+          n = -n
+        end
+        low, high = a.map { |e| e**n }.minmax
+        low = 0r if n.even? && a[0] <= 0 && a[1] >= 0
+        [low, high]
+      end
+    end
+
+    def enclosure_product(a, b)
+      products = a.product(b).map { |p, q| p * q }
+      [products.min, products.max]
+    end
+
+    # The box of a list of ranges, innermost first, each bound enclosed
+    # over the ranges outside it; nil when a bound is not enclosed.
+    def box_of(ranges)
+      box = {}
+      ranges.reverse_each do |var, from, to|
+        lo = enclosure(Expression.lift(from).simplify, box) or return nil
+        hi = enclosure(Expression.lift(to).simplify, box) or return nil
+        box[Expression.lift(var).name] = [[lo[0], hi[0]].min, [lo[1], hi[1]].max]
+      end
+      box
+    end
+
+    # :positive, :negative, :nonnegative, :nonpositive or nil for u on the
+    # box, by its enclosure.
+    def sign_on_box(u, ranges)
+      box = box_of(ranges) or return nil
+      lo, hi = enclosure(Expression.lift(u).simplify, box)
+      return nil if lo.nil?
+      return :positive if lo.positive?
+      return :negative if hi.negative?
+      return :nonnegative if lo.zero?
+      return :nonpositive if hi.zero?
+      nil
     end
 
     # The sign of u on the interval, or nil. A continuous u keeps one sign

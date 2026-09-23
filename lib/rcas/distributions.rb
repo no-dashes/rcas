@@ -536,10 +536,20 @@ module_function
 
 # The pmfs in logarithms, for Float parameters: C(n, k) p**k (1 - p)**(n - k)
 # and exp(-l) l**k/k! without the overflow of their parts.
+# The exact binomial coefficient times the powers where the Floats hold
+# them - C(10, 5)/2**10 is 0.24609375 to the last bit, which lgamma's
+# exp(log ...) was not (fourth review) - and the logarithms where a
+# product under- or overflows.
 def binomial_pmf(n, k, p)
   return 0.0 if k.negative? || k > n
   return (k == 0 ? 1.0 : 0.0) if p.zero?
   return (k == n ? 1.0 : 0.0) if p == 1.0
+  coefficient = (1..k).reduce(1) { |c, i| c * (n - k + i) / i }.to_f if [k, n - k].min <= 2000
+  if coefficient&.finite?
+    rest = p < 1e-4 ? Math.exp((n - k) * log_one_minus(p)) : (1.0 - p)**(n - k)
+    direct = coefficient * p**k * rest
+    return direct if direct.finite? && direct > 1e-290
+  end
   Math.exp(Math.lgamma(n + 1).first - Math.lgamma(k + 1).first - Math.lgamma(n - k + 1).first +
            k * Math.log(p) + (n - k) * log_one_minus(p))
 end
@@ -549,6 +559,10 @@ def log_one_minus(p) = p.abs < 1e-4 ? -(p + p * p / 2 + p**3 / 3) : Math.log(1 -
 
 def poisson_pmf(k, rate)
   return 0.0 if k.negative?
+  if k <= 170
+    direct = Math.exp(-rate) * rate**k / (1..k).reduce(1, :*).to_f
+    return direct if direct.finite? && direct > 1e-290
+  end
   Math.exp(-rate + k * Math.log(rate) - Math.lgamma(k + 1).first)
 end
 

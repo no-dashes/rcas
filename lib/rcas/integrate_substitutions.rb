@@ -27,7 +27,7 @@ module RCAS
 
       def radical(f, x, depth)
         ring = QQ[x.name]
-        root = radicand(f, x, ring) or return nil
+        root = radicand(f, x, ring) or return normalized_radical(f, x, depth)
         even = Num.new(0) # R0(x)
         odd = Num.new(0)  # R1(x), to be multiplied by sqrt(Q)
         constant, table = Expand.table(f)
@@ -64,6 +64,48 @@ module RCAS
           result += part
         end
         result.simplify
+      end
+
+      # A quadratic with real constant coefficients, a*x**2 + b*x + c, is
+      # K*(e1*v**2 + e2) with e1, e2 = +-1, K > 0, x = lambda*v + mu: complete
+      # the square, a*(u**2 + d) with u = x + b/(2a), and scale u = sqrt|d|*v.
+      # The integrand in v has a rational radicand, which the rest of this
+      # rule takes: sqrt(1 + 4*pi**2*x**2) was out of reach, and the surface
+      # of revolution of sin(2*pi*x) ran through the whole heuristic instead
+      # (fourth review).
+      def normalized_radical(f, x, depth)
+        bases = f.each_node.select { |n| n.is_a?(Pow) && n.exponent.is_a?(Num) && n.exponent.value.is_a?(Rational) && depends?(n.base, x) }
+                 .map(&:base).uniq
+        return nil unless bases.size == 1
+        base = bases.first
+        c, b, a = Solve.polynomial_coefficients(base, x)
+        return nil unless a && Solve.polynomial_coefficients(base, x).size == 3 && [a, b, c].all? { |k| k.variables.empty? }
+        sa = Decide.sign(a)
+        return nil unless %i[positive negative].include?(sa)
+        mu = (Neg.new(b) / (2 * a)).simplify
+        d = (c / a - b**2 / (4 * a**2)).simplify
+        sd = Decide.sign(d)
+        return nil unless %i[positive negative].include?(sd)
+        e1 = sa == :positive ? 1 : -1
+        e2 = e1 * (sd == :positive ? 1 : -1)
+        magnitude = sd == :positive ? d : Neg.new(d).simplify
+        lambda = RCAS.sqrt(magnitude).simplify
+        k = ((sa == :positive ? a : Neg.new(a)) * magnitude).simplify
+        v = Var.new(:"_n#{depth}")
+        inner = (Num.new(e1) * v**2 + Num.new(e2)).simplify
+        g = (replace_quadratic(f, base, k, inner).subs(x => lambda * v + mu) * lambda).simplify
+        return nil if depends?(g, x)
+        r = Integrate.attempt(g, v, depth + 1)
+        return nil unless r && Integrate.complete?(r)
+        r.subs(v => (x - mu) / lambda).simplify
+      end
+
+      def replace_quadratic(e, base, k, inner)
+        if e.is_a?(Pow) && e.base == base && e.exponent.is_a?(Num)
+          return (k**e.exponent) * inner**e.exponent
+        end
+        return k * inner if e == base
+        e.map_children { |child| replace_quadratic(child, base, k, inner) }
       end
 
       # The quadratic under a square root in f, or nil.
