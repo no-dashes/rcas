@@ -63,6 +63,53 @@ module RCAS
 
     module_function
 
+    # The antiderivative a reader is given: at the parameter values where a
+    # denominator of the generic answer vanishes, the integrand is integrated
+    # again and the answer is a Piecewise - sin(a*x)*cos(x) at a = 1 is
+    # sin(x)**2/2, where the generic form divides by 1 - a, and x**a at
+    # a = -1 is log(x). The fifth review's decision, as MuPAD and SymPy do;
+    # `generic: true` (MuPAD's IgnoreSpecialCases) keeps the short form.
+    # Only the public entry points ask for this: the rules inside rcas want
+    # the generic antiderivative.
+    def with_special_cases(expr, var, generic: false)
+      f = Expression.lift(expr)
+      x = Expression.lift(var)
+      found = integrate(f, x)
+      return found if generic || !complete?(found)
+      parameters = (f.variables & found.variables) - [x.name]
+      return found if parameters.empty?
+      branches = special_values(found, x, parameters).filter_map do |parameter, value|
+        at = integrate(f.subs(parameter => value).simplify, x)
+        complete?(at) ? [Equation.new(parameter, value), at] : nil
+      end
+      branches.empty? ? found : Piecewise.new(branches + [[Piecewise::OTHERWISE, found]])
+    end
+
+    # [parameter, value] pairs at which a denominator of the antiderivative
+    # that is free of x vanishes, for one parameter at a time.
+    def special_values(found, x, parameters)
+      denominators = []
+      found.each_node do |node|
+        case node
+        when Div then denominators << node.right
+        when Pow then denominators << node.base if node.exponent.is_a?(Num) && node.exponent.value.is_a?(Numeric) && node.exponent.value.real? && node.exponent.value.negative?
+        end
+      end
+      pairs = denominators.uniq.reject { |d| d.variables.include?(x.name) }.flat_map do |d|
+        movers = d.variables & parameters
+        next [] unless movers.size == 1
+        parameter = Var.new(movers.first)
+        roots = begin
+          Solve.solve(d, parameter, principal: true)
+        rescue ArgumentError, NotImplementedError, RCAS::Unsupported
+          next []
+        end
+        next [] unless roots.is_a?(Array)
+        roots.select { |r| r.is_a?(Expression) && r.variables.empty? }.map { |r| [parameter, r.simplify] }
+      end
+      pairs.uniq
+    end
+
     def integrate(expr, var)
       x = Expression.lift(var)
       raise ArgumentError, "integration variable must be a symbol" unless x.is_a?(Var)
@@ -128,7 +175,7 @@ module RCAS
       budget = MAX_BREAKS
       kinks.each do |kink|
         roots = begin
-          Solve.solve(kink.args.first, x)
+          Solve.solve(kink.args.first, x, domain: RR)
         rescue StandardError, NotImplementedError, RCAS::Unsupported => rescued
           RCAS.guard!(rescued, refused: true)
           return nil
@@ -204,7 +251,7 @@ module RCAS
       budget = MAX_BREAKS
       candidates.uniq.each do |d|
         roots = begin
-          Solve.solve(d, x)
+          Solve.solve(d, x, domain: RR)
         rescue StandardError, NotImplementedError, RCAS::Unsupported => rescued
           RCAS.guard!(rescued, refused: true)
           nil
@@ -291,7 +338,7 @@ module RCAS
       budget = MAX_BREAKS
       candidates.uniq.each do |d|
         roots = begin
-          Solve.solve(d, x, all: true)
+          Solve.solve(d, x, all: true, domain: RR)
         rescue StandardError, NotImplementedError, RCAS::Unsupported => rescued
           RCAS.guard!(rescued, refused: true)
           nil

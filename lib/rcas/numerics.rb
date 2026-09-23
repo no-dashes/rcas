@@ -496,7 +496,7 @@ module RCAS
 
     def zeros_between(u, var, a, b)
       return [] unless u.variables.include?(var.name)
-      roots = Solve.solve(u, var)
+      roots = Solve.solve(u, var, domain: RR)
       return [] unless roots.is_a?(Array)
       roots.flat_map { |r| r.is_a?(ImageSet) ? (r.between(a, b, limit: MAX_BREAKPOINTS) || []) : [r] }
     rescue StandardError, NotImplementedError, RCAS::Unsupported => rescued

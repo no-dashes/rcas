@@ -282,4 +282,15 @@ class ReviewSolveTest < Minitest::Test
     assert_equal [], RCAS.solve(RCAS.sin(@x) - 2, @x, domain: RCAS::RR)
     assert_equal [], RCAS.solve(RCAS.cos(@x) - 2, @x, domain: RCAS::RR)
   end
+
+  # A point real_domain admits must give a real value. rcas evaluates the
+  # principal branch: (-8)**(1/3) = 1 + i*3**(1/2), (-1/2)**(-1/2) = -i*2**(1/2),
+  # (-2)**(1/2) = i*2**(1/2); gamma has a pole at -1.
+  def test_real_domain_agrees_with_evaluation
+    [[@x**n(1/3r), -8], [@x**@x, -1/2r], [n(-2)**@x, 1/2r], [RCAS.gamma(@x), -1]].each do |f, p|
+      domain = RCAS.real_domain(f, @x)
+      next unless domain.include?(p)
+      assert value_at(f, @x, n(p)), "real_domain(#{f.inspect}) contains #{p}, where the value is not real"
+    end
+  end
 end

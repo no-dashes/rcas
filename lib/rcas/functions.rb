@@ -41,8 +41,12 @@ module RCAS
       r.constant? ? r.simplify : r
     end
 
-    # cbrt(8) is 2; cbrt(2) stays 2**(1/3)
-    def cbrt(x) = root(x, 3)
+    # surd(-8, 3) is -2: the real n-th root (for odd n, -|x|**(1/n) below 0),
+    # where x**(1/n) and root(x, n) are the principal one, 1 + i*sqrt(3) at -8
+    def surd(x, n) = Functions.fold(Fn.new(:surd, [Expression.lift(x), Expression.lift(n)]))
+
+    # cbrt(-8) is -2, the real cube root: surd(x, 3); cbrt(2) stays 2**(1/3)
+    def cbrt(x) = surd(x, 3)
 
     # binomial(5, 2) is 10; binomial(n, 2) stays symbolic (expand it with expand)
     def binomial(n, k) = Functions.fold(Fn.new(:binomial, [n, k]))
@@ -338,10 +342,10 @@ module RCAS
 
     # integrate(x**2 * exp(x), x); definite: integrate(x**2, x, 0, 1) or integrate(x**2, x: 0..1);
     # iterated: integrate(x*y, x: 0..1, y: 0..2) integrates over x first
-    def integrate(expr, var = nil, from = nil, to = nil, **range)
+    def integrate(expr, var = nil, from = nil, to = nil, generic: false, **range)
       return Functions.iterated_integral(expr, range) if range.size > 1
       var, from, to = Functions.range_arguments(var, from, to, range, "integrate", discrete: false) if var.nil? || from
-      from.nil? ? Integrate.integrate(expr, var) : Integrate.definite(expr, var, from, to)
+      from.nil? ? Integrate.with_special_cases(expr, var, generic: generic) : Integrate.definite(expr, var, from, to)
     end
 
     # polynomial structure: degree(f, x), lcoeff(f, x), coeff(f, x, 2), collect(f, x)
@@ -406,8 +410,10 @@ module RCAS
     # trigonometric and logarithmic rewriting
     def trigsimp(expr) = Trigonometry.trigsimp(expr)
     def expand_trig(expr) = Trigonometry.expand_trig(expr)
-    def expand_log(expr) = Trigonometry.expand_log(expr)
-    def logcombine(expr) = Trigonometry.logcombine(expr)
+    # expand_log(log(x**2)) stays; with x > 0 assumed, or force: true, it is 2*log(x)
+    def expand_log(expr, force: false) = Trigonometry.expand_log(expr, force: force)
+    # logcombine(log(x) + log(y)) stays; with x, y > 0 assumed, or force: true, it is log(x*y)
+    def logcombine(expr, force: false) = Trigonometry.logcombine(expr, force: force)
 
     # hold { 1 + 2 } keeps the block's source as an unevaluated expression;
     # evaluate(expr) computes the formal integrals, derivatives, sums and limits in it.
@@ -615,7 +621,7 @@ module RCAS
 
     def self.infer_domain(entries)
       entries.reduce(ZZ) do |d, e|
-        ed = Scalar.domain(Expression.lift(e))
+        ed = Infer.where_defined { Scalar.domain(Expression.lift(e)) }
         raise DomainError, "can't infer a domain for #{e}; pass one explicitly or declare its variables" unless ed
         d.join(ed)
       end
@@ -681,6 +687,34 @@ module RCAS
     end
 
     # Constant folding for function applications; called by Simplify.
+    # The real n-th root once the sign of the radicand is known: a positive
+    # one has its ordinary root, a negative one -|x|**(1/n) for odd n and no
+    # real root for even n (undefined). The design decision of the fifth
+    # review: ** stays principal, as in MuPAD, Maple and Mathematica, and
+    # surd (their name) is the real root.
+    def self.surd_value(fn)
+      x, n = fn.args
+      # evalf floats every leaf, the index too: 3.0 is still the index 3
+      n = Num.new(n.value.to_i) if n.is_a?(Num) && n.value.is_a?(Float) && n.value.finite? && n.value == n.value.round
+      return fn unless n.is_a?(Num) && n.value.is_a?(Integer) && n.value.positive?
+      k = n.value
+      return x if k == 1
+      if x.is_a?(Num) && x.value.is_a?(Float)
+        v = x.value
+        return UNDEFINED if v.negative? && k.even?
+        return Num.new(v.negative? ? -((-v)**(1.0 / k)) : v**(1.0 / k))
+      end
+      sign = x.variables.empty? ? Decide.sign(x) : RCAS.sign_of(x)
+      case sign
+      when :positive, :nonnegative, :zero then (x**Num.new(Rational(1, k))).simplify
+      when :negative, :nonpositive
+        return fn unless k.odd? || sign == :negative
+        return UNDEFINED if k.even?
+        Neg.new(Pow.new(Neg.new(x).simplify, Num.new(Rational(1, k)))).simplify
+      else fn
+      end
+    end
+
     def self.fold(fn)
       if QFunctions::NAMES.include?(fn.name)
         folded = QFunctions.fold(fn)
@@ -690,6 +724,7 @@ module RCAS
         n, k = fn.args
         return Combinatorics.binomial_value(n, k) || fn
       end
+      return surd_value(fn) if fn.name == :surd && fn.args.size == 2
       if fn.name == :mod && fn.args.size == 2
         a, m = fn.args
         return fn unless a.is_a?(Num) && m.is_a?(Num) && a.value.real? && m.value.real? && !m.value.zero?
@@ -901,6 +936,13 @@ module RCAS
         return nil unless v.is_a?(Integer) && v > 1 && v.even?
         Summation.zeta_even(v)
       when :log
+        # the principal value of a negative number: log(-1) is i*pi and
+        # log(-2) is log(2) + i*pi. Held back until the fifth review settled
+        # that real_domain(x*log(-2)) is empty (every subexpression real),
+        # and needed once solve is complete: exp(x) = -1 is i*pi + 2*pi*i*k
+        if arg.is_a?(Num) && (arg.value.is_a?(Integer) || arg.value.is_a?(Rational)) && arg.value.negative?
+          return (Functions.fold(Fn.new(:log, [Num.new(-arg.value)])) + I * PI).simplify
+        end
         return nil unless arg.is_a?(Num) && arg.value.is_a?(Integer) && arg.value > 1
         division = NumberTheory.prime_division(arg.value, hard: false)
         return nil if division.nil?

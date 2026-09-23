@@ -36,7 +36,7 @@ module RCAS
 
       attr_reader :f, :var, :domain, :symmetry, :period, :zeros, :intercept, :gaps,
                   :limits, :asymptotes, :derivatives, :extrema, :monotonicity,
-                  :inflections, :curvature
+                  :inflections, :curvature, :hints
 
       def initialize(**parts)
         parts.each { |name, value| instance_variable_set("@#{name}", value) }
@@ -60,6 +60,7 @@ module RCAS
         out << ["monotonic", items(monotonicity) { |i, kind| ["#{kind} on ", i] }, nil, repeats(monotonicity)]
         out << ["inflections", items(inflections) { |p, v| ["(", p, ", ", v, ")"] }, nil, repeats(inflections)]
         out << ["curvature", items(curvature) { |i, kind| ["#{kind} on ", i] }, nil, repeats(curvature)]
+        (hints || []).each { |hint| out << ["note", [[hint]]] }
         out
       end
 
@@ -144,7 +145,8 @@ module RCAS
         extrema: extrema(f, x, first),
         monotonicity: label(sign_chart(first, x, inside, cuts, cycle), :increasing, :decreasing),
         inflections: inflections(f, x, second),
-        curvature: label(sign_chart(second, x, inside, cuts, cycle), :convex, :concave)
+        curvature: label(sign_chart(second, x, inside, cuts, cycle), :convex, :concave),
+        hints: Analysis.root_hints(f, x)
       )
     end
 
@@ -317,7 +319,9 @@ module RCAS
       g = Expression.lift(g)
       return [] unless g.variables.include?(x.name)
       begin
-        found = (@cycle && one_period(g, x)) || Solve.solve(g, x, principal: @principal != false)
+        # a discussion is about a real function: its points are real ones
+        # (solve is complete over CC since the fifth review)
+        found = (@cycle && one_period(g, x)) || Solve.solve(g, x, principal: @principal != false, domain: RR)
         return nil unless found.is_a?(Array)
         found.select { |root| root.is_a?(ImageSet) ? !root.nonreal? : real?(root) }
       rescue NotImplementedError, RCAS::Unsupported, ArgumentError, DomainError
@@ -331,7 +335,7 @@ module RCAS
     # principal zeros were those of sin(2*x), one period of pi, so 3*pi/2
     # was missing (fourth review). nil when the families cannot be counted.
     def one_period(g, x)
-      found = Solve.solve(g, x)
+      found = Solve.solve(g, x, domain: RR)
       return nil unless found.is_a?(Array)
       top = Analysis.numeric(@cycle) or return nil
       found.flat_map do |root|

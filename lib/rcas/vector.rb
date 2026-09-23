@@ -23,7 +23,7 @@ module RCAS
       entries = entries.map { |e| Scalar.lift(e) }
       entries = entries.map { |e| base.normalize_coefficient(e) } if base.respond_to?(:normalize_coefficient)
       entries.each do |e|
-        next if base.include?(e)
+        next if Infer.where_defined { base.include?(e) }
         hint = e.variables.reject { |v| RCAS.assumption(v) }
         hint = hint.empty? ? "" : " (declare #{hint.join(', ')} with assume(#{hint.first}: #{base}))"
         raise DomainError, "#{e} is not in #{base}#{hint}"

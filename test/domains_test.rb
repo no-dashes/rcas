@@ -162,7 +162,7 @@ class DomainsTest < Minitest::Test
     assert_equal ZZ, (:x + 1).domain
     assert_equal ZZ, (:x**2).domain
     assert_equal QQ, (:x / 2).domain
-    assert_equal QQ, (:x**-1).domain
+    assert_nil (:x**-1).domain, "no value at x = 0: no claim (the fifth review's decision)"
     assert_equal NN, (:n + 1).domain
     assert_equal ZZ, (:n - 1).domain
     assert_equal ZZ, (-:n).domain

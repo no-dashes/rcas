@@ -283,6 +283,8 @@ module RCAS
         return "#{factorial_base(args.first)}!"
       when :binomial
         return "\\binom{#{print(args[0])}}{#{print(args[1])}}" if args.size == 2
+      when :surd
+        return "\\sqrt[#{print(args[1])}]{#{print(args[0])}}" if args.size == 2
       when :mod
         return "#{wrap(args[0], MULTIPLICATIVE, :left)} \\bmod #{wrap(args[1], MULTIPLICATIVE, :right)}" if args.size == 2
       when :conj

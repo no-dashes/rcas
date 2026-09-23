@@ -113,10 +113,14 @@ class SolveTest < Minitest::Test
   end
 
   def test_transcendental_equations
-    assert_equal ["log(5)"], strs(s(RCAS.exp(:x) - 5, :x))
-    assert_equal ["0", "log(2)"], strs(s(RCAS.exp(2 * :x) - 3 * RCAS.exp(:x) + 2, :x))
+    # complete over CC, the real answer with domain: RR (the fifth review's
+    # decision, as MuPAD and solveset)
+    assert_equal ["{2*i*pi*k + log(5) | k in ZZ}"], strs(s(RCAS.exp(:x) - 5, :x))
+    assert_equal ["log(5)"], strs(s(RCAS.exp(:x) - 5, :x, domain: RCAS::RR))
+    assert_equal ["{2*i*pi*k | k in ZZ}", "{2*i*pi*k + log(2) | k in ZZ}"], strs(s(RCAS.exp(2 * :x) - 3 * RCAS.exp(:x) + 2, :x))
+    assert_equal ["0", "log(2)"], strs(s(RCAS.exp(2 * :x) - 3 * RCAS.exp(:x) + 2, :x, domain: RCAS::RR))
     assert_equal ["exp(2)"], strs(s(RCAS.log(:x) - 2, :x))
-    assert_equal [3], s(2**:x - 8, :x)
+    assert_equal [3], s(2**:x - 8, :x, domain: RCAS::RR)
     assert_equal ["pi/6", "5*pi/6"], strs(s(RCAS.sin(:x) - Rational(1, 2), :x, principal: true))
     assert_equal ["-pi/2", "pi/2"], strs(s(RCAS.cos(:x), :x, principal: true))
     assert_equal ["pi/4"], strs(s(RCAS.tan(:x) - 1, :x, principal: true))
@@ -197,7 +201,8 @@ class SolveTest < Minitest::Test
                  "the two families of a period apart are one of half the period"
     assert_equal ["{pi/12 + pi*k | k in ZZ}", "{5*pi/12 + pi*k | k in ZZ}"],
                  RCAS.solve(RCAS.sin(2 * :x) - Rational(1, 2), :x).map(&:to_s)
-    assert_equal ["log(3)"], RCAS.solve(RCAS.exp(:x) - 3, :x).map(&:to_s), "no period to add"
+    assert_equal ["{2*i*pi*k + log(3) | k in ZZ}"], RCAS.solve(RCAS.exp(:x) - 3, :x).map(&:to_s), "the period of exp is 2*pi*i"
+    assert_equal ["log(3)"], RCAS.solve(RCAS.exp(:x) - 3, :x, domain: RCAS::RR).map(&:to_s), "and one real member"
     assert_equal ["-2**(1/2)", "2**(1/2)"], RCAS.solve(:x**2 - 2, :x).map(&:to_s)
     # the answer checks out against the equation it solves, with no assumption from the reader
     assert_equal ["1/2", "1/2"], RCAS.solve(RCAS.sin(:x) - Rational(1, 2), :x)
@@ -382,9 +387,12 @@ class SolveTest < Minitest::Test
     x = RCAS::Var.new(:x)
     assert_equal ["{2*k | k in ZZ}"], strs(RCAS.solve((-1)**x - 1, x))
     assert_equal ["{1 + 2*k | k in ZZ}"], strs(RCAS.solve((-1)**x + 1, x))
-    assert_empty RCAS.solve((-1)**x - 2, x)
+    # a value the powers of -1 never take on the integers is taken off them:
+    # (-1)**x = exp(i*pi*x) = 2 at 2*k - i*log(2)/pi (the fifth review)
+    assert_equal ["{2*k - i*log(2)/pi | k in ZZ}"], strs(RCAS.solve((-1)**x - 2, x))
     assert_equal ["{4*k | k in ZZ}"], strs(RCAS.solve(RCAS::I**x - 1, x))
-    assert_equal ["2"], strs(RCAS.solve(2**x - 4, x)), "no period when the base is bigger than one"
+    assert_equal ["{2 + 2*i*pi*k/log(2) | k in ZZ}"], strs(RCAS.solve(2**x - 4, x)), "a complex period for a base bigger than one"
+    assert_equal ["2"], strs(RCAS.solve(2**x - 4, x, domain: RR)), "and one real member"
     assert_equal ["0"], strs(RCAS.solve((-1)**x - 1, x, principal: true))
     RCAS.assume(x: ZZ) do
       assert_equal ["{1 + 2*k | k in ZZ}"], strs(RCAS.solve(RCAS.cos(RCAS::PI * x) + 1, x)),

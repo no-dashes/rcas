@@ -140,7 +140,7 @@ module RCAS
     def crossing_indices(lo, hi)
       k = parameters.first
       cuts = [lo, hi].flat_map do |bound|
-        roots = Solve.solve(expr - Num.new(bound.to_r), k)
+        roots = Solve.solve(expr - Num.new(bound.to_r), k, domain: RR)
         return nil unless roots.is_a?(Array) && roots.all? { |r| r.is_a?(Expression) && r.variables.empty? }
         roots.filter_map { |r| numeric(r) }
       end
@@ -583,6 +583,9 @@ module RCAS
       # a family off the real line has no member in RR: asin(2) + 2*pi*k
       # under domain: RR (third review, S19)
       return [] if wanted && wanted <= RR && set.nonreal?
+      if wanted && wanted <= RR && (members = real_members(set))
+        return members.reject { |m| Infer.excluded?(m, wanted) || (sign && wrong_sign?(m, sign)) }
+      end
       return [set] unless wanted && wanted <= QQ && set.parameters.size == 1
       k = set.parameters.first
       slope = begin
@@ -608,6 +611,30 @@ module RCAS
     end
 
     def rational?(e) = e.is_a?(Num) && (e.value.is_a?(Integer) || e.value.is_a?(Rational))
+
+    # The real members of a family whose step is not real: base + step*k is
+    # real where im(base) + im(step)*k = 0, at one k or none - log(2) of
+    # {log(2) + 2*pi*i*k}, nothing of {i*pi + 2*pi*i*k}. This is what
+    # domain: RR makes of the complete answer over CC. nil for a family of
+    # another shape, or when a part is not decided.
+    def real_members(set)
+      pair = set.affine or return nil
+      base, step = pair
+      im_step = ComplexParts.im(step).simplify
+      return nil unless im_step.variables.empty? && Decide.zero?(im_step) == false
+      im_base = ComplexParts.im(base).simplify
+      return nil unless im_base.variables.empty?
+      index = (Neg.new(im_base) / im_step).simplify
+      return nil unless index.is_a?(Num) || Decide.zero?(ComplexParts.im(index)) == true
+      k = index.is_a?(Num) ? index.value : nil
+      return [] unless k.is_a?(Integer) || (k.is_a?(Rational) && k.denominator == 1)
+      return [] unless set.domain.include?(k.to_i)
+      member = set.at(k.to_i)
+      [ComplexParts.re(member).simplify]
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
+      nil
+    end
 
     # a + b*k with a, b rational is an integer exactly on a residue class of
     # k: b*k + a in ZZ is s*p*k = -q*r (mod q*s) for b = p/q, a = r/s, a
@@ -1009,6 +1036,8 @@ module RCAS
     def transcendental(f, x, depth, all: false)
       atoms = f.each_node.select { |n| depends?(n, x) && transcendental_atom?(n) }.uniq
       atoms = atoms.sort_by { |n| -n.each_node.count }
+      common = common_exponential(atoms, x)
+      atoms.unshift(common) if common && !atoms.include?(common)
       t = Var.new(:"_s#{depth}")
 
       atoms.each do |u|
@@ -1195,7 +1224,9 @@ module RCAS
     def logarithmic_equation(f, x, depth)
       logs = f.each_node.count { |n| n.is_a?(Fn) && n.name == :log && depends?(n, x) }
       return nil unless logs > 1
-      combined = Trigonometry.logcombine(f).simplify
+      # every candidate is verified against the equation, so the logarithms
+      # may be combined as if their arguments were positive
+      combined = Trigonometry.logcombine(f, force: true).simplify
       return nil if combined == f
       defined_roots(f, x, univariate(combined, x, depth + 1))
     rescue NotImplementedError, RCAS::Unsupported
@@ -1258,7 +1289,25 @@ module RCAS
         (n.is_a?(Pow) && !n.exponent.is_a?(Num))
     end
 
-    # Replace the atom u by t. exp(k*v) becomes t**k for every rational k.
+    # exp(v/l) for the exponentials exp(r_i*v) of f, l the least common
+    # denominator of the r_i: every one of them is a whole power of it
+    # (exp(x/2) and exp(x/3) are powers of exp(x/6)). nil when they are not
+    # rational multiples of one argument.
+    def common_exponential(atoms, x)
+      exps = atoms.select { |n| n.is_a?(Fn) && n.name == :exp }
+      return nil if exps.size < 2
+      first = exps.first.args.first
+      ratios = exps.map do |e|
+        r = (e.args.first / first).simplify
+        return nil unless r.is_a?(Num) && (r.value.is_a?(Integer) || r.value.is_a?(Rational))
+        r.value.to_r
+      end
+      numerator = ratios.map(&:numerator).reduce(:gcd)
+      denominator = ratios.map(&:denominator).reduce(:lcm)
+      Fn.new(:exp, [(first * Num.new(Rational(numerator, denominator))).simplify])
+    end
+
+    # Replace the atom u by t. exp(k*v) becomes t**k for every whole k.
     def replace_atom(f, u, x, t)
       if u.is_a?(Fn) && u.name == :exp
         v = u.args.first
@@ -1269,7 +1318,10 @@ module RCAS
           factors.each do |base, exp|
             if base == Simplify.exp_base && exp.is_a?(Expression) && depends?(exp, x)
               ratio = (exp / v).simplify
-              return nil unless ratio.is_a?(Num)
+              # a whole power only: exp(x) as exp(2*x)**(1/2) takes the
+              # principal root and forgets the branch, and over CC that put
+              # x = i*pi among the zeros of exp(2x) - 3*exp(x) + 2
+              return nil unless ratio.is_a?(Num) && ratio.value.is_a?(Integer)
               new_factors[t] = (new_factors[t] || 0) + ratio.value
             else
               new_factors[base] = exp
@@ -1330,7 +1382,10 @@ module RCAS
         turn = ->(multiple) { period ? multiple * PI * period : Num.new(0) }
         targets =
           case u.name
-          when :exp  then [Fn.new(:log, [v])]
+          # complete over CC (the fifth review's decision, as MuPAD and
+          # solveset): exp(x) = 2 is log(2) + 2*pi*i*k; domain: RR keeps k = 0
+          when :exp  then [period ? Fn.new(:log, [v]) + 2 * PI * I * period : Fn.new(:log, [v])]
+          when :surd then [v**u.args.last] # the real root: surd(u, n) = v is u = v**n, checked by verify
           when :log  then [Fn.new(:exp, [v])]
           when :sin  then [Fn.new(:asin, [v]) + turn.call(2), PI - Fn.new(:asin, [v]) + turn.call(2)]
           when :cos  then [Fn.new(:acos, [v]) + turn.call(2), -Fn.new(:acos, [v]) + turn.call(2)]
@@ -1349,8 +1404,12 @@ module RCAS
         if depends?(u.base, x) && !depends?(u.exponent, x)
           univariate((u.base - v**(1 / u.exponent)).simplify, x, depth + 1, all: all)
         elsif !depends?(u.base, x)
+          # b**u = exp(u*log(b)) = v: u*log(b) = log(v) + 2*pi*i*k, so
+          # (-1)**x = 2 has the solutions 2*k - i*log(2)/pi (it answered [])
+          turn = all ? period_parameter(u.exponent - v, x) : nil
+          logarithm = turn ? Fn.new(:log, [v]) + 2 * PI * I * turn : Fn.new(:log, [v])
           roots_of_unity(u, v, x, depth, all: all) ||
-            univariate((u.exponent - Fn.new(:log, [v]) / Fn.new(:log, [u.base])).simplify, x, depth + 1, all: all)
+            univariate((u.exponent - logarithm / Fn.new(:log, [u.base])).simplify, x, depth + 1, all: all)
         else
           cannot_invert!(u, v)
         end
@@ -1381,12 +1440,15 @@ module RCAS
       order = (2..MAX_ORDER).find { |n| unity?(Simplify.pow_number(base.value, n), 1) }
       return nil if order.nil?
       turn = all ? period_parameter(u.exponent - v, x) : nil
-      (0...order).filter_map do |j|
+      found = (0...order).filter_map do |j|
         next nil unless unity?(Simplify.pow_number(base.value, j), v.value)
         target = Num.new(j)
         target = (target + Num.new(order) * turn).simplify if turn
         univariate((u.exponent - target).simplify, x, depth + 1)
       end.flatten
+      # a value the powers of b never take: not "no solution" but the
+      # logarithm's (complex) ones
+      found.empty? ? nil : found
     end
 
     def unity?(value, target) = Scalar.zero?(Expression.lift(Simplify.normalize_number(value - target)))

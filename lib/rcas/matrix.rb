@@ -33,7 +33,7 @@ module RCAS
       entries = row_arrays.map { |r| r.map { |e| Scalar.lift(e) } }
       entries = entries.map { |r| r.map { |e| base.normalize_coefficient(e) } } if base.respond_to?(:normalize_coefficient)
       entries.flatten.each do |e|
-        raise DomainError, "#{e} is not in #{base}" unless base.include?(e)
+        raise DomainError, "#{e} is not in #{base}" unless Infer.where_defined { base.include?(e) }
       end
       Matrix.new(self, entries)
     end

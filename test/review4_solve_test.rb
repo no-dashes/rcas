@@ -193,4 +193,23 @@ class Review2SolveTest < Minitest::Test
       end
     end
   end
+
+  # (x**2 - x)/x >= 0 is x - 1 >= 0 with x != 0: [1, oo). The sign chart
+  # samples the region left of 1 at 0, a removable pole, and evaluates the
+  # raw quotient there: ZeroDivisionError (inequalities.rb, sign_chart).
+  def test_a_removable_pole_at_a_sample_point_does_not_crash
+    [[(@x**2 - @x) / @x >= 0, [1, 2], [0, Rational(1, 2), -1]],
+     # Off x = 0 this is x + 1 < 0, i.e. (-oo, -1); at -1/2 the value is +1/2.
+     # (Round 4 had -1/2 inside, which was wrong; the developer caught it.)
+     [(@x**2 + @x) / @x < 0, [-2, Rational(-3, 2)], [0, -1, Rational(-1, 2), 1]],
+     [(@x**3 - @x) / @x > 0, [2, -2], [0, Rational(1, 2)]]].each do |ineq, inside, outside|
+      s = begin
+        RCAS.solve(ineq, @x)
+      rescue NotImplementedError, RCAS::Unsupported
+        next
+      end
+      inside.each { |v| assert s.include?(n(v)), "#{ineq}: #{s} misses #{v}" }
+      outside.each { |v| refute s.include?(n(v)), "#{ineq}: #{s} contains #{v}" }
+    end
+  end
 end

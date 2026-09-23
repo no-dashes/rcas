@@ -264,7 +264,7 @@ module RCAS
       edges = []
       f.each_node { |n| edges << n.args.first if n.is_a?(Fn) && n.name == :log && n.args.first.variables.include?(x.name) }
       poles = (denominators(f, x) + edges).uniq.flat_map do |g|
-        found = Solve.solve(g, x)
+        found = Solve.solve(g, x, domain: RR)
         raise RCAS::Unsupported, "vertical asymptotes of #{f}: #{g} = 0 vanishes on a whole interval" unless found.is_a?(Array)
         found
       end
@@ -451,15 +451,21 @@ module RCAS
     # without an i in sight, and real_domain((-1)**sqrt(2) + x) said the whole
     # line (third review, T5a). A constant part shown not to be real puts the
     # question too.
+    # A point is in the real domain when every subexpression is real and
+    # defined there - Mathematica's rule for FunctionDomain, and the fifth
+    # review's decision - so a subexpression that is a non-real constant
+    # leaves nothing: i*sqrt(x) and x*log(-2) are real nowhere, however
+    # their values fall. "Where is the value real" is another question, asked
+    # as solve(im(f) == 0, x). The expression is simplified first, so that
+    # (1 + i)*(1 - i)*x, which is 2*x, keeps its line.
     def real_locus(f, x)
-      scattered_power!(f, x)
-      explicit = f.each_node.any? { |n| n.is_a?(Num) && n.value.is_a?(Complex) && !n.value.imaginary.zero? }
-      return nil unless explicit || f.each_node.any? { |n| (n.is_a?(Pow) || n.is_a?(Fn)) && n.variables.empty? && nonreal_constant?(n) }
-      imaginary = RCAS.assume(x.name => RR) { ComplexParts.im(f) }
-      return nil if Scalar.zero?(imaginary)
-      return RealSet.empty if imaginary.variables.empty? # a constant that is not 0
-      raise RCAS::Unsupported, "real_domain: where #{f} is real is not decided here (its imaginary part is #{imaginary})" unless imaginary.variables == [x.name]
-      points_of(imaginary, x)
+      scattered = scattered_set(f, x)
+      g = f.simplify
+      nonreal = g.each_node.any? do |n|
+        (n.is_a?(Num) && n.value.is_a?(Complex) && !n.value.imaginary.zero?) ||
+          ((n.is_a?(Pow) || n.is_a?(Fn)) && n.variables.empty? && nonreal_constant?(n))
+      end
+      nonreal ? RealSet.empty : scattered
     end
 
     def nonreal_constant?(n)
@@ -472,23 +478,59 @@ module RCAS
     end
 
     # b**u with u moving with x and b possibly negative is real on a
-    # scattered set: (-2)**x at the integers, x**x for x > 0 and at the
-    # negative integers. No finite union of intervals is that, and (0, oo)
-    # or the whole line would each be a claim (S15): refused.
-    def scattered_power!(f, x)
+    # scattered set, and gamma(u) off one: (-2)**x at the integers, x**x on
+    # (0, oo) and at the negative integers, gamma(x) off 0, -1, -2, ... No
+    # finite union of intervals is that (S15), so the answer is a
+    # ScatteredSet, for a linear argument or exponent; nil when f has no
+    # such part, and a refusal for a shape that is not named here or for
+    # more than one of them.
+    def scattered_set(f, x)
+      found = []
       f.each_node do |n|
-        # gamma and factorial have a pole at every non-positive integer
-        # (gamma(x) at -1 is no number): the complement is not a finite
-        # union either (S15)
         if n.is_a?(Fn) && %i[gamma factorial].include?(n.name) && n.args.first.variables.include?(x.name)
-          raise RCAS::Unsupported, "real_domain: #{n} has a pole at every point where its argument is a non-positive integer"
+          found << poles_of_gamma(n, x)
+          next
         end
         next unless n.is_a?(Pow) && n.exponent.variables.include?(x.name)
         base = n.base
         sign = base.variables.empty? ? Decide.sign(base) : RCAS.assume(x.name => RR) { RCAS.sign_of(base) }
         next if sign == :positive
-        raise RCAS::Unsupported, "real_domain: #{n} is real only on a scattered set of points where its base is negative"
+        found << scattered_power(n, x)
       end
+      found = found.uniq
+      return nil if found.empty?
+      raise RCAS::Unsupported, "real_domain: #{f} is real on the meeting of several scattered sets, which is not written here" if found.size > 1
+      found.first
+    end
+
+    # gamma(a*x + b) has a pole where a*x + b is 0, -1, -2, ...; factorial(u)
+    # where u is -1, -2, ...
+    def poles_of_gamma(n, x)
+      coefficients = Solve.polynomial_coefficients(n.args.first, x)
+      unless coefficients&.size == 2 && coefficients.none? { |c| c.variables.any? }
+        raise RCAS::Unsupported, "real_domain: #{n} has a pole at every point where its argument is a non-positive integer"
+      end
+      b, a = coefficients
+      k = Var.new(:k)
+      top = n.name == :gamma ? Neg.new(k) : Neg.new(k) - 1
+      ScatteredSet.new(RealSet.reals, minus: [ImageSet.new(((top - b) / a).simplify, [k], NN)])
+    end
+
+    # c**(a*x + b) for a negative constant c is real where the exponent is a
+    # whole number, since it is |c|**u*exp(i*pi*u); x**x (principal powers
+    # all through) is real for x > 0 and at the negative integers.
+    def scattered_power(n, x)
+      k = Var.new(:k)
+      if n.base.variables.empty? && Decide.sign(n.base) == :negative
+        coefficients = Solve.polynomial_coefficients(n.exponent, x)
+        if coefficients&.size == 2 && coefficients.none? { |c| c.variables.any? }
+          b, a = coefficients
+          return ScatteredSet.new(RealSet.empty, plus: [ImageSet.new(((k - b) / a).simplify, [k], ZZ)])
+        end
+      elsif n.base == x && n.exponent == x
+        return ScatteredSet.new(RealSet.new([Interval.open(Num.new(0), OO)]), plus: [ImageSet.new((Neg.new(k) - 1).simplify, [k], NN)])
+      end
+      raise RCAS::Unsupported, "real_domain: #{n} is real only on a scattered set of points where its base is negative"
     end
 
     # A condition rcas cannot solve is not an empty one: dropping it would
@@ -496,7 +538,7 @@ module RCAS
     # says which condition it was, in rcas's own words rather than as a
     # backtrace out of Inequalities.
     def off_zeros(d, x)
-      zeros = Solve.solve(d, x)
+      zeros = Solve.solve(d, x, domain: RR)
       return nil unless zeros.is_a?(Array) && zeros.all? { |z| z.is_a?(Expression) && z.variables.empty? }
       real = zeros.select { |z| Inequalities.real?(z) }.map { |z| Inequalities.real_part(z) }
       real.empty? ? RealSet.reals : RealSet.reals - RealSet.new(real.map { |z| Interval.point(z) })
@@ -514,15 +556,6 @@ module RCAS
       end
       # cause: nil, or irb prints this backtrace and the one underneath it
       raise RCAS::Unsupported, "real_domain: where #{condition} holds is not decided here (#{e.message})", cause: nil
-    end
-
-    # The zeros of g as a set of single points: the one condition that is an
-    # equation rather than an inequality.
-    def points_of(g, x)
-      roots = Solve.solve(g, x) or raise RCAS::Unsupported, "the zeros of #{g}"
-      RealSet.new(roots.select { |r| real_point?(r) }.map { |r| Interval.point(r) })
-    rescue ArgumentError => e
-      raise RCAS::Unsupported, "real_domain: the zeros of #{g} are not named here (#{e.message})", cause: nil
     end
 
     # The inverse functions whose real argument has to stay in [-1, 1].
@@ -546,8 +579,11 @@ module RCAS
     def domain_conditions(f, x)
       conditions = denominators(f, x).map { |d| Inequality.new(d, :!=, 0) }
       f.each_node do |node|
+        # every fractional power is the principal one, real only for a base
+        # that is not negative - x**(1/3) too; surd(x, 3) is the real root
+        # (the fifth review's decision on odd roots)
         if node.is_a?(Pow) && node.exponent.is_a?(Num) && node.exponent.value.is_a?(Rational) &&
-           node.exponent.value.denominator.even? && condition_argument?(node.base, x)
+           node.exponent.value.denominator > 1 && condition_argument?(node.base, x)
           conditions << Inequality.new(node.base, :>=, 0)
         elsif node.is_a?(Fn) && node.name == :log && condition_argument?(node.args.first, x)
           conditions << Inequality.new(node.args.first, :>, 0)
@@ -561,11 +597,43 @@ module RCAS
 
     # ---- several variables ---------------------------------------------------------
 
-    def variables_of(f, vars)
+    # A word for a reader who wrote x**(1/3) and meant the real cube root:
+    # ** is the principal root, which has no real value for a negative base
+    # (the fifth review's decision), and surd is the real one. One hint per
+    # such power whose base moves with x.
+    def root_hints(f, x)
+      Expression.lift(f).each_node.select do |n|
+        n.is_a?(Pow) && n.exponent.is_a?(Num) && n.exponent.value.is_a?(Rational) &&
+          n.exponent.value.denominator.odd? && n.exponent.value.denominator > 1 && n.base.variables.include?(x.name)
+      end.uniq.map do |n|
+        q = n.exponent.value.denominator
+        name = q == 3 ? "cube" : "#{q}th"
+        "#{n} has no real value where #{n.base} < 0; surd(#{n.base}, #{q}) is the real #{name} root"
+      end
+    end
+
+    COORDINATES = %i[x y z].freeze
+
+    # The coordinates, named rather than guessed (the fifth review's
+    # decision, as Mathematica and MuPAD ask for the list): the ones given,
+    # or the free names when they are among x, y and z, or - for a field in
+    # names of its own - when there are as many of them as components
+    # (line_integral's rule).
+    # Anything else is refused with the name that is in the way: in
+    # x**2 + a*y, a is a parameter, and the gradient had a third component.
+    def variables_of(f, vars, components: nil, name: "gradient")
       return Array(vars).map { |v| Expression.lift(v) } if vars && !Array(vars).empty?
       names = Array(f).flat_map { |g| Expression.lift(g).variables }.uniq.sort
-      raise ArgumentError, "name the variables, e.g. gradient(f, [x, y])" if names.empty?
-      names.map { |n| Var.new(n) }
+      raise ArgumentError, "name the variables, e.g. #{name}(f, [x, y])" if names.empty?
+      # the count rule is for a field in names of its own (u, v); a field
+      # that uses x or y and one more name has a parameter in it
+      counted = names.size == components && (names & COORDINATES).empty?
+      return names.map { |n| Var.new(n) } if (names - COORDINATES).empty? || counted
+      extra = names - COORDINATES
+      coordinates = names & COORDINATES
+      suggestion = coordinates.empty? ? names : coordinates
+      raise ArgumentError, "#{name}: #{extra.join(', ')} #{extra.size == 1 ? 'is' : 'are'} not a coordinate; " \
+                           "pass the coordinates, e.g. #{name}(f, [#{suggestion.join(', ')}])"
     end
 
     def gradient(f, vars = nil)
@@ -576,33 +644,33 @@ module RCAS
 
     def hessian(f, vars = nil)
       f = Expression.lift(f)
-      xs = variables_of(f, vars)
+      xs = variables_of(f, vars, name: "hessian")
       rows = xs.map { |a| xs.map { |b| f.diff(a).diff(b) } }
       MatrixSpace.new(RR, xs.size, xs.size).unchecked(rows)
     end
 
     def jacobian(fs, vars = nil)
       fs = Array(fs).map { |f| Expression.lift(f) }
-      xs = variables_of(fs, vars)
+      xs = variables_of(fs, vars, components: fs.size, name: "jacobian")
       MatrixSpace.new(RR, fs.size, xs.size).unchecked(fs.map { |f| xs.map { |x| f.diff(x) } })
     end
 
     def divergence(field, vars = nil)
       fs = Array(field).map { |f| Expression.lift(f) }
-      xs = variables_of(fs, vars)
+      xs = variables_of(fs, vars, components: fs.size, name: "divergence")
       raise ArgumentError, "divergence: #{fs.size} components for #{xs.size} variables" unless fs.size == xs.size
       fs.each_with_index.map { |f, i| f.diff(xs[i]) }.reduce(:+).simplify
     end
 
     def laplacian(f, vars = nil)
       f = Expression.lift(f)
-      xs = variables_of(f, vars)
+      xs = variables_of(f, vars, name: "laplacian")
       xs.map { |x| f.diff(x, 2) }.reduce(:+).simplify
     end
 
     def curl(field, vars = nil)
       fs = Array(field).map { |f| Expression.lift(f) }
-      xs = variables_of(fs, vars)
+      xs = variables_of(fs, vars, components: fs.size, name: "curl")
       raise ArgumentError, "curl: three components and three variables are needed" unless fs.size == 3 && xs.size == 3
       components = [
         fs[2].diff(xs[1]) - fs[1].diff(xs[2]),
@@ -783,7 +851,7 @@ module RCAS
     def zero_inside?(g, var, lo, hi)
       return false unless g.variables.include?(var.name)
       roots = begin
-        Solve.solve(g, var)
+        Solve.solve(g, var, domain: RR)
       rescue StandardError, NotImplementedError, RCAS::Unsupported => rescued
         RCAS.guard!(rescued, refused: true)
         return nil
@@ -864,7 +932,7 @@ module RCAS
     def lagrange(f, constraints, vars = nil)
       f = Expression.lift(f)
       gs = Array(constraints).map { |g| Solve.to_zero(g) }
-      xs = variables_of([f] + gs, vars)
+      xs = variables_of([f] + gs, vars, name: "lagrange")
       multipliers = gs.each_index.map { |i| Var.new(gs.size == 1 ? :lambda : :"lambda#{i + 1}") }
       equations = xs.map do |x|
         gs.each_with_index.reduce(f.diff(x)) { |acc, (g, i)| acc - multipliers[i] * g.diff(x) }.simplify

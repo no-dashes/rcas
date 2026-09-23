@@ -155,56 +155,99 @@ module RCAS
       nil
     end
 
-    # log(a*b**n/c) => log(a) + n*log(b) - log(c)   (arguments assumed positive)
-    #
-    # "Assumed" is the word: a base whose sign is *declared* negative is
-    # taken by its absolute value, log(x**2) = 2*log(-x) for x < 0, and the
-    # i*pi that an odd number of negative factors leaves is added back -
-    # log(x**2) = 2*log(x) there was off by 2*pi*i (third review, C4, A5).
-    # A negative base under a fractional power is not expanded at all.
-    def expand_log(expr)
-      expr = Expression.lift(expr).map_children { |c| expand_log(c) }
+    # log(a*b**n/c) => log(a) + n*log(b) - log(c), for the factors it holds
+    # for: log(p*u) = log(p) + log(u) and log(p**n) = n*log(p) when p > 0,
+    # which is proved (Decide for a constant, the assumptions for a symbol).
+    # The fifth review's decision: the rules no longer assume an undeclared
+    # argument positive - log(x**2) is 0 at x = -1 and 2*log(x) is 2*i*pi.
+    # A factor whose sign is declared negative is taken by its absolute value
+    # when it is all there is, with the i*pi an odd number of them leaves
+    # (third review, C4, A5). `force: true` is the textbook manipulation,
+    # every argument taken as positive (SymPy's name for MuPAD's
+    # IgnoreAnalyticConstraints).
+    def expand_log(expr, force: false)
+      expr = Expression.lift(expr).map_children { |c| expand_log(c, force: force) }
       return expr unless expr.is_a?(Fn) && expr.name == :log && expr.args.size == 1
       coeff, factors = Simplify.factorize(expr.args.first.simplify)
       return expr if factors.empty? || (factors.size == 1 && factors.values.first == 1 && coeff == 1)
-      flips = 0
-      pieces = factors.map do |base, exp|
-        next Expression.lift(exp) * Fn.new(:log, [base]) unless %i[negative].include?(RCAS.sign_of(base))
-        return expr unless exp.is_a?(Integer)
-        flips += exp
-        Num.new(exp) * Fn.new(:log, [Neg.new(base).simplify])
+      pieces = []
+      kept = {}
+      negatives = {}
+      factors.each do |base, exp|
+        sign = base.variables.empty? ? Decide.sign(base) : RCAS.sign_of(base)
+        if sign == :negative && exp.is_a?(Integer)
+          negatives[base] = exp
+        elsif force || sign == :positive
+          pieces << Expression.lift(exp) * Fn.new(:log, [base])
+        else
+          kept[base] = exp
+        end
       end
+      unless kept.empty?
+        # what is not proved positive stays inside one logarithm, with the
+        # negative factors and a negative coefficient
+        negatives.each { |base, exp| kept[base] = exp }
+        if coeff.is_a?(Numeric) && coeff.real? && coeff.positive?
+          pieces.concat(coefficient_logs(coeff))
+          coeff = 1
+        end
+        pieces << Fn.new(:log, [Simplify.rebuild_product(coeff, kept)])
+        return pieces.reduce { |acc, p| acc + p }.simplify
+      end
+      flips = negatives.values.sum
+      negatives.each { |base, exp| pieces << Num.new(exp) * Fn.new(:log, [Neg.new(base).simplify]) }
       pieces << I * PI if flips.odd? && !(coeff.is_a?(Numeric) && coeff.real? && coeff.negative?)
       if flips.odd? && coeff.is_a?(Numeric) && coeff.real? && coeff.negative?
         coeff = -coeff # two negatives: the product is positive after all
       end
-      if coeff.is_a?(Rational)
-        pieces << Fn.new(:log, [Num.new(coeff.numerator)]) unless coeff.numerator == 1
-        pieces << -Fn.new(:log, [Num.new(coeff.denominator)])
-      elsif coeff != 1
+      if coeff.is_a?(Numeric) && coeff.real? && coeff.negative?
+        return expr if pieces.empty?
         pieces << Fn.new(:log, [Num.new(coeff)])
+      else
+        pieces.concat(coefficient_logs(coeff))
       end
       pieces.reduce { |acc, p| acc + p }.simplify
     end
 
+    def coefficient_logs(coeff)
+      return [] if coeff == 1
+      return [Fn.new(:log, [Num.new(coeff)])] unless coeff.is_a?(Rational)
+      logs = []
+      logs << Fn.new(:log, [Num.new(coeff.numerator)]) unless coeff.numerator == 1
+      logs << -Fn.new(:log, [Num.new(coeff.denominator)])
+      logs
+    end
+
     # a*log(u) + b*log(v) => log(u**a * v**b) for rational a, b - for the
-    # arguments it holds for. It is a rule about positive numbers: 2*log(-1)
-    # is 2*i*pi and log((-1)**2) is 0, and 3*log(i) is not log(-i)
-    # (third review, A4). So a logarithm joins only when its argument is
-    # positive or, for an indeterminate, not declared otherwise (the same
-    # convention as expand_log).
-    def logcombine(expr)
+    # arguments it holds for: positive ones, proved (2*log(-1) is 2*i*pi and
+    # log((-1)**2) is 0, and 3*log(i) is not log(-i): third review, A4).
+    # One argument whose sign is not known may still join the positive
+    # ones with coefficient 1, since log(p*u) = log(p) + log(u) for p > 0.
+    # Undeclared arguments are no longer assumed positive (the fifth
+    # review's decision); `force: true` combines every logarithm.
+    def logcombine(expr, force: false)
       expr = Expression.lift(expr).simplify
       constant, terms = Simplify.termize(expr)
       inside = {}
       rest = {}
+      loose = nil
       terms.each do |factors, coeff|
         log = factors.size == 1 && factors.values.first == 1 && factors.keys.first.is_a?(Fn) && factors.keys.first.name == :log &&
-              combinable?(factors.keys.first.args.first)
-        if log && (coeff.is_a?(Integer) || coeff.is_a?(Rational))
-          Simplify.add_factor(inside, factors.keys.first.args.first, coeff)
+              (coeff.is_a?(Integer) || coeff.is_a?(Rational))
+        argument = log && factors.keys.first.args.first
+        if log && (force || combinable?(argument))
+          Simplify.add_factor(inside, argument, coeff)
+        elsif log && coeff == 1 && loose.nil? && !argument.each_node.any? { |n| n.is_a?(Num) && n.value.is_a?(Complex) }
+          loose = factors
         else
           rest[factors] = coeff
+        end
+      end
+      if loose
+        if inside.empty?
+          rest[loose] = 1
+        else
+          Simplify.add_factor(inside, loose.keys.first.args.first, 1)
         end
       end
       return expr if inside.size < 2 && rest.size + inside.size == terms.size && inside.values.all? { |e| e == 1 }
@@ -215,8 +258,7 @@ module RCAS
 
     def combinable?(u)
       return Decide.sign(u) == :positive if u.variables.empty?
-      return false if u.each_node.any? { |n| n.is_a?(Num) && n.value.is_a?(Complex) }
-      !%i[negative nonpositive zero].include?(RCAS.sign_of(u))
+      RCAS.sign_of(u) == :positive
     end
   end
 end

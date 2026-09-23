@@ -50,7 +50,8 @@ class ReviewQualityTest < Minitest::Test
   def test_an_exact_root_survives_a_residual_that_is_only_rounding
     # exp(x) = 10**10 has the single real root 10*log(10) = 23.0258...; the
     # float residual at that root is 4e-5, which is rounding at magnitude 1e10.
-    roots = RCAS.solve(RCAS.exp(@x) - 10**10, @x)
+    # (the complete answer is a family since the fifth review; the real root is domain: RR's)
+    roots = RCAS.solve(RCAS.exp(@x) - 10**10, @x, domain: RCAS::RR)
     assert roots.any? { |r| (v = float_of(r)) && (v - 10 * Math.log(10)).abs < 1e-9 },
            "the root 10*log(10) was dropped: #{roots.inspect}"
   end

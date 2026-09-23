@@ -36,7 +36,8 @@ module RCAS
   # Sources (keys: MANUAL.md, Sources): power sums by Newton interpolation
   # and Bernoulli numbers, zeta(2m) [GKP94, §6.5]; Euler-Maclaurin tail for
   # zeta(s) numerically [GKP94, §9.5]; Gosper [Gos78] with the degree bound
-  # for the polynomial ansatz from [PWZ96, ch. 5].
+  # for the polynomial ansatz from [PWZ96, ch. 5]; reversed bounds by Karr's
+  # convention [Kar81].
   module Summation
     module_function
 
@@ -46,6 +47,15 @@ module RCAS
       from = Expression.lift(from)
       to = Expression.lift(to)
       whole_bounds!(from, to)
+      if (reversed = karr(from, to))
+        # Karr's convention [Kar81]: sum_{a}^{b} = -sum_{b+1}^{a-1} for
+        # b < a - 1, and 0 for the empty b = a - 1 - the one under which a
+        # closed form holds at every integer and additivity has no
+        # conditions, and what the closed forms computed already (the fifth
+        # review's decision; the direct sum said 0)
+        return Num.new(0) if reversed == :empty
+        return Neg.new(sum(f, k, reversed.first, reversed.last)).simplify
+      end
       return UNDEFINED if pole_in_range?(f, k, from, to)
       # a fixed pole past the lower bound is inside the range for every upper
       # bound beyond it: sum(1/((k - 3)*(k - 2)), k, 0, n) has no value from
@@ -64,7 +74,7 @@ module RCAS
     def integer_poles(f, k)
       Analysis.denominators(f, k).flat_map do |d|
         roots = begin
-          Solve.solve(d, k)
+          Solve.solve(d, k, domain: RR)
         rescue StandardError, NotImplementedError, RCAS::Unsupported => rescued
           RCAS.guard!(rescued, refused: true) if rescued.is_a?(StandardError)
           next []
@@ -72,6 +82,16 @@ module RCAS
         next [] unless roots.is_a?(Array)
         roots.filter_map { |r| r.value if r.is_a?(Num) && r.value.is_a?(Integer) }
       end
+    end
+
+    # [b + 1, a - 1] for integer bounds a > b + 1, :empty for b = a - 1, nil
+    # for an ordinary range or bounds that are not whole numbers.
+    def karr(from, to)
+      difference = (to - from).simplify
+      return nil unless difference.is_a?(Num) && difference.value.is_a?(Integer) && difference.value.negative?
+      return :empty if difference.value == -1
+      return nil unless from.is_a?(Num) && to.is_a?(Num)
+      [(to + 1).simplify, (from - 1).simplify]
     end
 
     # A sum runs over integers: sum(k, k, 1.5, 3) was 5.625, which is

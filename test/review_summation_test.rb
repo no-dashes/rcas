@@ -186,4 +186,16 @@ class ReviewSummationTest < Minitest::Test
     # Every partial sum of 0 + 0 + ... is 0, so the series converges to 0.
     assert_equal n(0), RCAS.sum(0, @k, 1, RCAS::OO)
   end
+
+  def test_empty_range_convention_is_the_same_on_every_path
+    # Whatever the convention, sum_{k=3}^{1} must not depend on the route:
+    # the sum is additive in the term, and the closed form at n = 1 must
+    # agree with evaluating the same sum numerically.
+    left = RCAS.sum(1 / @k + 1 / (@k * (@k + 1)), @k, 3, 1)
+    right = RCAS.sum(1 / @k, @k, 3, 1) + RCAS.sum(1 / (@k * (@k + 1)), @k, 3, 1)
+    assert_equal right.simplify, left.simplify
+    closed = RCAS.sum(@k**2, @k, 3, @n).subs(n: 1).simplify
+    held = RCAS::Sum.new(@k**2, @k, n(3), n(1)).evalf(digits: 20)
+    assert_in_delta value(closed, {}).to_f, held.to_f, 1e-12
+  end
 end

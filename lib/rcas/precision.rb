@@ -151,7 +151,10 @@ module RCAS
   # [PTVF07, §9.4].
   module Precision
     # Raised for anything that has no arbitrary-precision implementation.
-    class Unsupported < ArgumentError; end
+    # A refusal like any other since the fifth review (RCAS::Unsupported, a
+    # StandardError): it was an ArgumentError, which a caller who rescues
+    # refusals did not expect.
+    class Unsupported < RCAS::Unsupported; end
 
     # The quadrature ran out of levels: the integrand is too hard for the
     # digits asked, or the integral diverges. Told apart from Unsupported so
@@ -317,13 +320,21 @@ module RCAS
       if exponent.is_a?(Num) && exponent.value.is_a?(Integer)
         return integer_power(base, exponent.value, prec)
       end
-      # (-8)**(1/3) is -2: a negative base has a real odd root, and only
-      # the exact exponent of the node can say whether this is one.
-      if base.negative? && (root = odd_root(exponent))
-        value = power_of(-base, walk(exponent, prec, bindings, state), prec, node)
-        return root.negative? ? -value : value
-      end
+      # (-8)**(1/3) is the principal root 1 + i*sqrt(3), as the Float evalf
+      # has it, and not real: this walk took the real root -2 until the
+      # fifth review's decision (surd(-8, 3) is the real one)
       power_of(base, walk(exponent, prec, bindings, state), prec, node)
+    end
+
+    # surd(x, n): the real n-th root, -|x|**(1/n) below 0 for odd n.
+    def surd(node, prec, bindings, state)
+      x = walk(node.args.first, prec, bindings, state)
+      n = node.args.last
+      raise Unsupported, "evalf: #{node} needs a whole positive n" unless n.is_a?(Num) && n.value.is_a?(Integer) && n.value.positive?
+      k = BigDecimal(1).div(n.value, prec)
+      return power_of(x, k, prec, node) unless x.negative?
+      raise Unsupported, "evalf: #{node} is not real (an even root of a negative number)" if n.value.even?
+      -power_of(-x, k, prec, node)
     end
 
     def integer_power(base, n, prec)
@@ -344,13 +355,6 @@ module RCAS
       BigMath.exp(exponent.mult(BigMath.log(base, prec), prec), prec)
     end
 
-    # p/q with an odd q, as -1 or 1 for the sign of the result; nil when the
-    # power of a negative number is not real.
-    def odd_root(exponent)
-      return nil unless exponent.is_a?(Num) && exponent.value.is_a?(Rational) && exponent.value.denominator.odd?
-      exponent.value.numerator.odd? ? -1 : 1
-    end
-
     # ---- functions ----------------------------------------------------------
 
     ELEMENTARY = %i[exp log sin cos tan atan asin acos sinh cosh tanh abs sign floor ceil round factorial gamma].freeze
@@ -359,6 +363,7 @@ module RCAS
     SPECIAL = %i[erf erfc Si Ci Ei li zeta].freeze
 
     def function(node, prec, bindings, state)
+      return surd(node, prec, bindings, state) if node.name == :surd && node.args.size == 2
       unless (ELEMENTARY + SPECIAL).include?(node.name) && node.args.size == 1
         unsupported!("#{node.name}", node)
       end

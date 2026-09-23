@@ -53,9 +53,9 @@ module RCAS
       def pictures?(io = $stdout) = Render.inline?(io) && !Render.which(*Render::KaTeX::CHROME_CANDIDATES).nil?
     end
 
-    attr_reader :curves, :var, :xlo, :xhi, :ylo, :yhi, :title, :width, :height, :ylabels, :xlabels
+    attr_reader :curves, :var, :xlo, :xhi, :ylo, :yhi, :title, :width, :height, :ylabels, :xlabels, :notes
 
-    def initialize(curves, var:, xlo:, xhi:, ylo:, yhi:, title: nil, width: 60, height: 15, ylabels: nil, xlabels: nil)
+    def initialize(curves, var:, xlo:, xhi:, ylo:, yhi:, title: nil, width: 60, height: 15, ylabels: nil, xlabels: nil, notes: [])
       @curves = curves
       @var = var
       @xlo = xlo
@@ -67,6 +67,7 @@ module RCAS
       @height = height
       @ylabels = ylabels   # { value => text } instead of the y range
       @xlabels = xlabels   # [[value, text], ...] instead of the x range
+      @notes = notes       # lines under the picture: why part of it is missing
       freeze
     end
 
@@ -183,6 +184,7 @@ module RCAS
       lines << (" " * (gutter + 1)) + "└" + "─" * width
       lines << (" " * (gutter + 2)) + column_labels
       lines << "  " + legend if legend && !legend.empty?
+      notes.each { |note| lines << "  note: #{note}" }
       lines.join("\n")
     end
 
@@ -448,7 +450,9 @@ module RCAS
         Curve_for(g, variable, lo, hi, n, labels ? labels[i] : (functions.size > 1 ? g.to_s : nil))
       end
       ylo, yhi = y_range(curves, y)
-      Plot.new(curves, var: variable, xlo: lo, xhi: hi, ylo: ylo, yhi: yhi, title: title, width: width, height: height)
+      notes = functions.flat_map { |g| Analysis.root_hints(g, variable) }.uniq
+      notes = notes.select { |_| lo.negative? } # only where the picture reaches the missing part
+      Plot.new(curves, var: variable, xlo: lo, xhi: hi, ylo: ylo, yhi: yhi, title: title, width: width, height: height, notes: notes)
     end
 
     def Curve_for(g, variable, lo, hi, n, label)

@@ -438,8 +438,9 @@ module RCAS
       when Sub then no_naturals(join(domain(expr.left), domain(expr.right)))
       when Div
         below = domain(expr.right)
-        # no value at a denominator of 0, which x in NN may be (C5)
-        return nil if below && below <= NN && !positive_base?(expr.right)
+        # no value where the denominator is 0: no claim until it is known not
+        # to be (C5 for x in NN, and the fifth review's decision for RR too)
+        return nil unless nonzero?(expr.right)
         join(join(domain(expr.left), below), QQ)
       when Pow then power(expr)
       when Fn  then function(expr)
@@ -499,7 +500,7 @@ module RCAS
         return base if v.is_a?(Integer) && v >= 0
         # 1/x and x**(-1/2) have no value at 0, which x in NN may be: no
         # claim, as for log(x) (fourth review, C5)
-        return nil if v.real? && v.negative? && base <= NN && !positive_base?(expr.base)
+        return nil if v.real? && v.negative? && !nonzero?(expr.base)
         return base.join(QQ) if v.is_a?(Integer)
         return CC unless v.real?
         return RR if base <= NN || (base <= RR && positive_base?(expr.base))
@@ -514,6 +515,26 @@ module RCAS
       CC
     end
 
+    # The matrix and vector constructors ask a different question from
+    # `domain`: are the entries real *where they have a value*? A removable
+    # pole (a**2 - 1)/(a - 1) is a real entry of a real matrix. Inside the
+    # block a denominator counts as not vanishing.
+    def where_defined
+      outer = Thread.current[:rcas_where_defined]
+      Thread.current[:rcas_where_defined] = true
+      yield
+    ensure
+      Thread.current[:rcas_where_defined] = outer
+    end
+
+    # A denominator known not to vanish: by its sign, or decided for a
+    # constant.
+    def nonzero?(e)
+      return true if Thread.current[:rcas_where_defined] && !e.variables.empty?
+      return Decide.zero?(e) == false if e.variables.empty?
+      %i[positive negative].include?(RCAS.sign_of(e))
+    end
+
     # sqrt(pi) and sqrt(7 - 4*sqrt(3)) are real: the radicand is positive
     # (fourth review: x**2 < pi was refused as "cannot decide").
     def positive_base?(b)
@@ -523,6 +544,13 @@ module RCAS
     end
 
     def function(expr)
+      if expr.name == :surd && expr.args.size == 2
+        # the real root of a real number, for an odd index
+        base = domain(expr.args.first)
+        n = expr.args.last
+        odd = n.is_a?(Num) && n.value.is_a?(Integer) && n.value.odd?
+        return base && base <= RR && (odd || positive_base?(expr.args.first)) ? RR : nil
+      end
       arg = expr.args.size == 1 ? domain(expr.args.first) : nil
       return nil if arg.nil?
 

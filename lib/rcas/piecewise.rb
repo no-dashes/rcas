@@ -420,7 +420,7 @@ module RCAS
       everywhere = []
       located(pw, x).each do |_, set, value|
         found = begin
-          Solve.solve(Equation.new(value, rhs), x.name)
+          Solve.solve(Equation.new(value, rhs), x.name, domain: RR)
         rescue ArgumentError => e
           raise unless e.message.include?("every value")
           everywhere << set

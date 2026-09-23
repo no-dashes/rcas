@@ -278,11 +278,22 @@ rcas> [gcd(84, 36), lcm(4, 6), divisors(12)]
 => [12, 12, [1, 2, 3, 4, 6, 12]]
 rcas> solve(eq(3*x + 5, 17), x)
 => [4]
+rcas> solve(2**x - 8, x, domain: RR)
+=> [3]
+rcas> cbrt(-27)
+=> -3
 rcas> distance(point(0, 0), point(3, 4))
 => 5
 rcas> [mean([2, 4, 4, 5, 5]), median([2, 4, 4, 5, 5]), mode([2, 4, 4, 5, 5])]
 => [4, 4, [4, 5]]
 ```
+
+`domain: RR` asks for the real solutions. Without it `solve` gives all of
+them, and `2**x = 8` also has complex ones (`3 + 2*pi*i*k/log(2)` for every
+whole k), since the exponential repeats along the imaginary axis. `cbrt` is
+the real cube root, which is -3 at -27; the power `x**(1/3)` is the
+principal root of complex analysis, which has no real value for a negative
+x (1.2 says more).
 
 Read on: 1.1 Expressions, 1.2 Numbers and constants, 1.9 Geometry,
 1.10 Statistics, 1.11 Plotting.
@@ -594,7 +605,24 @@ rcas> sqrt(-4)
 => 2*i
 rcas> log(8)
 => 3*log(2)
+rcas> [cbrt(-8), surd(-32, 5), root(-8, 3)]
+=> [-2, -2, (-8)**(1/3)]
+rcas> root(-8, 3).evalf
+=> (1.0+1.7320508075688772i)
 ```
+
+There are two cube roots of -8 a reader may mean. `x**(1/n)` and
+`root(x, n)` are the *principal* root, the one complex analysis uses and
+MuPAD, Maple, Mathematica and SymPy write the same way: for -8 it is
+`2*exp(i*pi/3) = 1 + i*sqrt(3)`, and it has no real value for any negative
+x. `surd(x, n)` is the *real* root (MuPAD's and Maple's name), `-|x|**(1/n)`
+for a negative x and an odd n; an even n has none there (`undefined`).
+`cbrt(x)` is `surd(x, 3)`, as Mathematica's `CubeRoot` is, since that is
+what the cube root key of a calculator gives. Every path agrees with the
+choice: `evalf` in Floats and at more digits, `real_domain`
+(`x**(1/3)` is real on `[0, oo)`, `surd(x, 3)` everywhere), `solve`
+(`surd(x, 3) = -2` at -8, `x**(1/3) = -2` nowhere), and `discuss` and
+`plot` of `x**(1/3)`, which add a note pointing at `surd`.
 
 `PI`, `E` and `I` are the exact constants (`pi` and `π` work as bare
 names too); `oo` and `∞` are infinity, used as a limit point and a
@@ -871,6 +899,21 @@ rcas> integrate(sqrt((1 - x)/(1 + x)), x)
 => 2*((1 - x)/(1 + x))**(1/2)/(1 + (1 - x)/(1 + x)) - 2*atan(((1 - x)/(1 + x))**(1/2))
 rcas> integrate(floor(x), x)
 => integral(floor(x), x)
+```
+
+An antiderivative with a parameter says where it stops holding: at the
+values that make a denominator of the generic answer vanish, the
+integrand is integrated again, and the answer is a `piecewise` - the
+branch shows why `a = 0` is different. `generic: true` gives the short
+form alone (MuPAD's `IgnoreSpecialCases`).
+
+```
+rcas> integrate(cos(a*x), x)
+=> piecewise(a.eq(0) => x, :else => sin(a*x)/a)
+rcas> integrate(x**a, x)
+=> piecewise(a.eq(-1) => log(x), :else => x**(1 + a)/(1 + a))
+rcas> integrate(cos(a*x), x, generic: true)
+=> sin(a*x)/a
 ```
 
 The same machinery gives `sqrt(tan(x))` in logarithms and arc tangents, by
@@ -1217,8 +1260,14 @@ rcas> real_domain(log(2) + x, x)
 => (-oo, oo)
 rcas> assume(a < 0) { real_domain(log(a) + x, x) }
 => {}
+rcas> real_domain(x**(1/3r), x)
+=> [0, oo)
+rcas> real_domain(surd(x, 3), x)
+=> (-oo, oo)
 rcas> real_domain(I*x, x)
-=> {0}
+=> {}
+rcas> assume(x: RR) { solve(im(I*x), x) }
+=> [0]
 ```
 
 `real_domain` collects one condition per denominator, even root and
@@ -1228,9 +1277,13 @@ a condition on a constant is decided rather than skipped - `log(-1) + x` is
 real nowhere. A condition on a *parameter* is decided from the assumptions
 in force (`assume(a < 0)` makes `log(a) + x` real nowhere) and refused by
 name when they do not settle it, since the honest answer would then be a
-case split on the parameter rather than a set of reals. An expression that
-carries `i` is real only where its imaginary part vanishes, so
-`real_domain(I*x, x)` is `{0}`.
+case split on the parameter rather than a set of reals. A point belongs to
+the real domain when *every subexpression* is real and defined there -
+the rule Mathematica documents for `FunctionDomain` - so an expression that
+carries `i`, or a constant such as `log(-2)`, has an empty real domain,
+however its value falls: `i*x` is real nowhere as a function. Where the
+*value* of an expression is real is a different question, asked as
+`solve(im(f) == 0, x)`: `{0}` for `i*x`.
 
 `extrema` returns the point, the value and the kind. The second derivative
 decides; where that vanishes too, as for `x**4`, the sign of the first
@@ -1381,6 +1434,18 @@ rcas> integrate(x*y, x: 0..1, y: 0..2)
 => 1
 rcas> lagrange(x + y, [x**2 + y**2 - 1], [x, y])
 => [{x=>-2**(1/2)/2, y=>-2**(1/2)/2}, {x=>2**(1/2)/2, y=>2**(1/2)/2}]
+```
+
+Without the list the coordinates are the names among `x`, `y` and `z`
+(or, for a field, as many names as it has components). Any other name is
+a parameter, and rcas asks rather than guesses - differentiating by it
+would give the gradient a component too many:
+
+```
+rcas> gradient(x**2 + a*y)
+=> ArgumentError: gradient: a is not a coordinate; pass the coordinates, e.g. gradient(f, [x, y])
+rcas> gradient(x**2 + a*y, [x, y])
+=> (2*x, a)
 ```
 
 At a critical point the Hessian says which kind it is: both eigenvalues
@@ -1804,7 +1869,17 @@ rcas> sum(1/n**2, n: 1..10)
 => 1968329/1270080
 rcas> sum(1/k, k: 1..n)
 => harmonic(n)
+rcas> [sum(k, k, 1, 0), sum(1/k, k, 3, 1), sum(k, k, 5, 1), product(k, k, 3, 1)]
+=> [0, -1/2, -9, 1/2]
 ```
+
+A sum whose upper bound is below its lower one follows Karr's convention
+[Kar81]: `sum(f, k, a, b)` is `-sum(f, k, b + 1, a - 1)` for `b < a - 1`, and
+the product is the reciprocal. It is the only convention under which a
+closed form `F(n)` holds for every integer `n` and
+`sum(f, k, a, b) + sum(f, k, b + 1, c) = sum(f, k, a, c)` holds for all
+`a, b, c` without conditions; Maple and SymPy use it too. The empty sum
+`b = a - 1` is 0, and the empty product 1, under any convention.
 
 #### Definite sums: creative telescoping
 
@@ -2001,12 +2076,27 @@ rcas> trigsimp(2*sin(x)*cos(x) - sin(2*x))
 rcas> trigsimp(1 / cos(x)**2 - tan(x)**2)
 => 1
 rcas> expand_log(log(x**2 * y / 3))
+=> -log(3) + log(x**2*y)
+rcas> assume(x > 0, y > 0) { expand_log(log(x**2 * y / 3)) }
+=> -log(3) + 2*log(x) + log(y)
+rcas> expand_log(log(x**2 * y / 3), force: true)
 => -log(3) + 2*log(x) + log(y)
 rcas> logcombine(2*log(x) - log(y) + 1)
+=> 1 + 2*log(x) - log(y)
+rcas> assume(x > 0, y > 0) { logcombine(2*log(x) - log(y) + 1) }
 => 1 + log(x**2/y)
+rcas> [log(x**2), 2*log(x)].map { |g| g.subs(x: -1).simplify }
+=> [0, 2*i*pi]
 ```
 
-`expand_log` and `logcombine` assume positive arguments.
+`log(a*b) = log(a) + log(b)` and `log(a**n) = n*log(a)` are rules about
+positive numbers, and the last line is why: at `x = -1` the two sides
+differ by `2*pi*i`. So `expand_log` and `logcombine` apply them only where
+the positivity of an argument is *proved* - a positive constant, or a sign
+you have assumed - and leave the rest inside one logarithm, as
+Mathematica, Maple, MuPAD and SymPy do. `force: true` is the textbook
+manipulation, every argument taken as positive; with it the answer is
+yours to check.
 
 ### 1.4 Equations and solving
 
@@ -2082,15 +2172,28 @@ Polynomials are solved exactly by factoring over the rationals, the
 quadratic formula, k-th roots for binomials and the symbolic quadratic
 formula; an irreducible factor of degree three or more with numeric
 coefficients gets floating-point roots. Transcendental equations are
-reduced to a polynomial in one atom and inverted; trigonometric inverses
-give the principal solutions of one period.
+reduced to a polynomial in one atom and inverted.
+
+`solve` is complete over the complex numbers, as MuPAD and SymPy's
+`solveset` are: every solution comes back, and an equation with infinitely
+many comes back as families. An exponential repeats along the imaginary
+axis, `exp(x + 2*pi*i) = exp(x)`, so `exp(x) = 5` is solved by
+`log(5) + 2*pi*i*k` for every whole `k`. `domain: RR` asks for the real
+solutions only, which is the school answer; `principal: true` keeps one
+period.
 
 ```
 rcas> solve(exp(x) - 5, x)
+=> [{2*i*pi*k + log(5) | k in ZZ}]
+rcas> solve(exp(x) - 5, x, domain: RR)
 => [log(5)]
 rcas> solve(exp(2*x) - 3*exp(x) + 2, x)
+=> [{2*i*pi*k | k in ZZ}, {2*i*pi*k + log(2) | k in ZZ}]
+rcas> solve(exp(2*x) - 3*exp(x) + 2, x, domain: RR)
 => [0, log(2)]
-rcas> solve(2**x - 8, x)
+rcas> solve(exp(x) + 1, x)
+=> [{i*pi + 2*i*pi*k | k in ZZ}]
+rcas> solve(2**x - 8, x, domain: RR)
 => [3]
 rcas> solve(log(x) - 2, x)
 => [exp(2)]
@@ -2216,9 +2319,13 @@ rcas> assume(x: ZZ) { solve(cos(PI*x) + 1, x) }
 => [{1 + 2*k | k in ZZ}]
 rcas> solve((-1)**x - 1, x)
 => [{2*k | k in ZZ}]
-rcas> solve(2**x - 4, x)
+rcas> solve((-1)**x - 2, x)
+=> [{2*k - i*log(2)/pi | k in ZZ}]
+rcas> solve(2**x - 4, x, domain: RR)
 => [2]
 ```
+
+`(-1)**x` takes the value 2 too, off the integers: it is `exp(i*pi*x)`.
 
 The set carries the domain of its parameter, which is what lets the family
 be checked: sine and cosine repeat every `2*pi` and the tangent every
@@ -2435,6 +2542,20 @@ rcas> assumptions
 => {:x=>x in ZZ, :n=>n in NN, :y=>y in QQ}
 rcas> forget
 => true
+```
+
+The inferred domain is a claim about every value the expression takes, so
+it makes none where the expression may have no value: `1/x` is undefined
+at 0, which a real x may be, and its domain is `nil` until `x != 0` is
+known. With `x > 0` assumed it is `RR`. (Building a matrix asks the
+other question, whether an entry is real where it has a value, so
+`matrix([[1/x]])` for a real x works.)
+
+```
+rcas> assume(x: RR) { [(1/x).domain, (1/(x**2 + 1)).domain] }
+=> [nil, RR]
+rcas> assume(x > 0) { (1/x).domain }
+=> RR
 ```
 
 An assumption is a statement, and `assumptions` lists it as one: a sign was
@@ -4245,25 +4366,25 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 
 | purpose | functions |
 |---|---|
-| elementary functions | `sin cos tan asin acos atan exp log sinh cosh sqrt cbrt root zeta abs sign erf erfc` |
+| elementary functions | `sin cos tan asin acos atan exp log sinh cosh sqrt cbrt root surd zeta abs sign erf erfc` |
 | combinatorics | `factorial binomial gamma` |
-| rewriting | `simplify expand cancel rationalize trigsimp expand_trig expand_log logcombine minpoly` |
+| rewriting | `simplify expand cancel rationalize trigsimp expand_trig expand_log logcombine minpoly` (the log rules only for proved positive arguments, or with `force: true`) |
 | rational functions | `numer denom apart gcd lcm quo rem divmod` |
 | integers | `factor ifactor isprime nextprime prevprime divisors totient invmod chrem congruence legendre jacobi order primitive_root continued_fraction convergents` |
 | polynomial structure | `degree ldegree lcoeff tcoeff coeff coeffs collect resultant discriminant interpolate` |
 | named polynomials | `Poly.chebyshev_t Poly.chebyshev_u Poly.legendre Poly.hermite Poly.hermite_prob Poly.laguerre Poly.gegenbauer Poly.jacobi Poly.bernoulli Poly.euler Poly.cyclotomic Poly.swinnerton_dyer Poly.abel Poly.fibonacci Poly.lucas Poly.bell` (a namespace, not bare names) |
 | constants | `PI E I oo UNDEFINED` (bare `pi`, `π`, `oo`, `∞`, `undefined`) |
 | evaluation | `subs evalf` (`evalf(f, 50)` for fifty digits) |
-| calculus | `integrate diff series taylor fps fourier limit sum product` |
+| calculus | `integrate` (`generic: true` without the special parameter values), `diff series taylor fps fourier limit sum product` |
 | case by case | `piecewise discontinuities kinks` |
 | hypergeometric summation | `sumrecursion sumcertificate hyper` |
 | q-analogues | `qbracket qfactorial qbinomial qpochhammer qgosper qsum qsumrecursion qsumcertificate qsolve qhyper` |
 | numerics | `nsolve nintegrate` (both take `digits:`) |
 | curve sketching | `critical_points extrema inflections asymptotes tangent normal real_domain`, `discuss` for all of it at once |
 | length, area, volume | `arclength revolution_volume revolution_surface` |
-| several variables | `gradient hessian jacobian divergence curl laplacian lagrange` |
+| several variables | `gradient hessian jacobian divergence curl laplacian lagrange` (coordinates x, y, z unless named) |
 | line and surface integrals | `line_integral surface_integral flux enclosed_area green stokes divergence_theorem conservative? potential` |
-| algebra | `solve` (`principal: true` for one period), `eq factor groebner reduce interval` |
+| algebra | `solve` (complete over the complex numbers; `domain: RR` for the real solutions, `principal: true` for one period), `eq factor groebner reduce interval` |
 | differential equations, recurrences | `D dsolve rsolve hyper laplace inverse_laplace` |
 | complex numbers | `re im conj arg` |
 | rounding | `floor ceil round mod` |
@@ -4437,6 +4558,7 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | Jordan normal form from chains of generalized eigenvectors | decompositions.rb | [HK71, ch. 7] |
 | Faulhaber sums by Newton interpolation, Bernoulli numbers, zeta(2m) | summation.rb | [GKP94, §6.5]; Euler-Maclaurin tail [GKP94, §9.5] |
 | Gosper's algorithm with the degree bound for the polynomial ansatz | summation.rb | [Gos78]; [PWZ96, ch. 5] |
+| Reversed sums and products (Karr's convention) | summation.rb, product.rb | [Kar81] |
 | products: factorial and gamma ratios for linear factors, exp of sums | product.rb | [GKP94, §5.5] |
 | recurrences: characteristic roots, undetermined coefficients, initial values | recurrence.rb | [GKP94, §7.3] |
 | hypergeometric solutions of a recurrence with polynomial coefficients (Petkovsek), polynomial solutions with Abramov's degree bound | petkovsek.rb, poly_recurrence.rb | [Pet92]; [Koe14, ch. 9]; [PWZ96, ch. 8] |
@@ -4535,6 +4657,8 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   2009, 474-479.
 - [HW08] G. H. Hardy, E. M. Wright, *An Introduction to the Theory of
   Numbers*, 6th ed., Oxford University Press 2008.
+- [Kar81] M. Karr, Summation in finite terms, *J. ACM* 28 (1981),
+  305-350.
 - [Ker66] I. O. Kerner, Ein Gesamtschrittverfahren zur Berechnung der
   Nullstellen von Polynomen, *Numer. Math.* 8 (1966), 290-294.
 - [Knu98] D. E. Knuth, *The Art of Computer Programming, vol. 2:

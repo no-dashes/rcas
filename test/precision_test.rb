@@ -62,7 +62,10 @@ class PrecisionTest < Minitest::Test
 
   def test_roots_and_powers
     assert_equal "1.2599210498948731647672106073", RCAS.evalf(RCAS.root(2, 3), 29).to_s
-    assert_equal "-2.0", RCAS.evalf(RCAS::Pow.new(RCAS::Num.new(-8), RCAS::Num.new(Rational(1, 3))), 20).to_s
+    # ** is the principal root, 1 + i*sqrt(3), which is not real; surd is the
+    # real one (the fifth review's decision)
+    assert_raises(RCAS::Precision::Unsupported) { RCAS.evalf(RCAS::Pow.new(RCAS::Num.new(-8), RCAS::Num.new(Rational(1, 3))), 20) }
+    assert_equal "-2.0", RCAS.evalf(RCAS::Fn.new(:surd, [RCAS::Num.new(-8), RCAS::Num.new(3)]), 20).to_s
     assert_equal "8.0", RCAS.evalf(2**RCAS::Num.new(3), 20).to_s
     assert_equal "0.125", RCAS.evalf(RCAS::Pow.new(RCAS::Num.new(2), RCAS::Num.new(-3)), 20).to_s
     assert_equal "8.824977827076287623856429604208", RCAS.evalf(2**PI, 31).to_s

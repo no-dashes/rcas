@@ -143,7 +143,9 @@ class ReviewTest < Minitest::Test
     RCAS.assume(A < 0) do
       assert_equal RCAS::RealSet.empty, RCAS.real_domain(RCAS.log(A) + X, X)
     end
-    assert_equal "{0}", RCAS.real_domain(RCAS::I * X, X).to_s
+    # every subexpression real (the fifth review's decision); the value of
+    # i*x is real at 0, which solve(im(f) == 0) says
+    assert_equal "{}", RCAS.real_domain(RCAS::I * X, X).to_s
   end
 
   # The counts above, so that a reader can check none has gone missing.

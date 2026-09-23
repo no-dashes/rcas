@@ -304,13 +304,17 @@ class AnalysisTest < Minitest::Test
     assert_raises(NotImplementedError, RCAS::Unsupported) { RCAS.real_domain(RCAS.sqrt(a) + x, x) }
   end
 
-  # An expression carrying i is real only where its imaginary part vanishes.
+  # A point is in the real domain when every subexpression is real there
+  # (the fifth review's decision, Mathematica's rule for FunctionDomain): an
+  # expression that carries i has none. Where the *value* is real is
+  # solve(im(f) == 0, x): {0} for i*x.
   def test_where_a_complex_expression_is_real
     x = RCAS::Var.new(:x)
-    assert_equal "{0}", RCAS.real_domain(RCAS::I * x, x).to_s
-    assert_equal "{0}", RCAS.real_domain(RCAS.sqrt(-1) * x, x).to_s
-    assert_equal "{-1/2}", RCAS.real_domain(2 * RCAS::I * x + RCAS::I, x).to_s
-    assert_equal "{0}", RCAS.real_domain(RCAS::I * x**2, x).to_s
+    assert_equal "{}", RCAS.real_domain(RCAS::I * x, x).to_s
+    assert_equal "{}", RCAS.real_domain(RCAS.sqrt(-1) * x, x).to_s
+    assert_equal "{}", RCAS.real_domain(2 * RCAS::I * x + RCAS::I, x).to_s
+    RCAS.assume(x: RCAS::RR) { assert_equal [RCAS::Num.new(0)], RCAS.solve(RCAS.im(RCAS::I * x), x) }
+    assert_equal "{}", RCAS.real_domain(RCAS::I * x**2, x).to_s
     assert_equal RCAS::RealSet.empty, RCAS.real_domain(x + RCAS::I, x), "a constant imaginary part"
     assert_equal RCAS::RealSet.reals, RCAS.real_domain(RCAS::I * RCAS::I * x, x), "i**2 is real"
     assert_equal RCAS::RealSet.reals, RCAS.real_domain(x**2 + 1, x), "and nothing without an i pays for this"

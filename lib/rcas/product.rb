@@ -51,6 +51,11 @@ module RCAS
         next unless b.is_a?(Num) && b.value.is_a?(Numeric) && b.value.real? && b.value != b.value.round
         raise ArgumentError, "product: the bounds must be integers, got #{b}"
       end
+      if (reversed = Summation.karr(from, to))
+        # Karr's convention, multiplicatively: prod_{a}^{b} = 1/prod_{b+1}^{a-1}
+        return Num.new(1) if reversed == :empty
+        return (1 / product(f, k, reversed.first, reversed.last)).simplify
+      end
       count = (to - from + 1).simplify
       return (f**count).simplify unless f.variables.include?(k.name)
       # a factor with no value makes a product with none: 1/k at k = 0

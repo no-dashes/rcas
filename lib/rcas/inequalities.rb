@@ -106,6 +106,7 @@ module RCAS
     def |(other) = RealSet.new(intervals + other.intervals)
 
     def &(other)
+      return other & self if other.is_a?(ScatteredSet)
       pieces = intervals.product(other.intervals).map { |a, b| RealSet.intersect(a, b) }.compact
       RealSet.new(pieces)
     end
@@ -148,6 +149,67 @@ module RCAS
   end
 
   # lhs < rhs, lhs <= rhs, lhs > rhs, lhs >= rhs
+  # Intervals, plus the members of some families, less the members of
+  # others: where gamma(x) is real (the line less {-k | k in NN}), where x**x
+  # is ((0, oo) and the negative integers) or (-2)**x (the integers). No
+  # finite union of intervals says any of these, and real_domain refused;
+  # every subexpression real (the fifth review's rule) is this set. The
+  # families are affine and counted by their own parameter domain;
+  # `within` is a set every member must lie in as well.
+  class ScatteredSet
+    attr_reader :base, :plus, :minus, :within
+
+    def initialize(base, plus: [], minus: [], within: RealSet.reals)
+      @base = base
+      @plus = plus
+      @minus = minus
+      @within = within
+      freeze
+    end
+
+    def include?(v)
+      v = Expression.lift(v)
+      return false unless within.include?(v)
+      (base.include?(v) || plus.any? { |set| ScatteredSet.member?(set, v) }) && minus.none? { |set| ScatteredSet.member?(set, v) }
+    end
+
+    def empty? = base.empty? && plus.empty?
+
+    def &(other)
+      raise RCAS::Unsupported, "the intersection of #{self} and #{other} is not written here" unless other.is_a?(RealSet)
+      # with nothing added, the base alone carries the restriction
+      return ScatteredSet.new(base & other, minus: minus, within: within) if plus.empty?
+      ScatteredSet.new(base & other, plus: plus, minus: minus, within: within & other)
+    end
+
+    # v = b + s*k for a k of the family's domain, decided exactly.
+    def self.member?(set, v)
+      pair = set.affine or return false
+      b, step = pair
+      index = ((v - b) / step).simplify
+      index.is_a?(Num) && (index.value.is_a?(Integer) || (index.value.is_a?(Rational) && index.value.denominator == 1)) && set.domain.include?(index.value.to_i)
+    rescue ZeroDivisionError
+      false
+    end
+
+    def ==(other) = other.is_a?(ScatteredSet) && [other.base, other.plus, other.minus, other.within] == [base, plus, minus, within]
+    alias eql? ==
+    def hash = [ScatteredSet, base, plus, minus, within].hash
+
+    def to_s
+      parts = []
+      parts << base.to_s unless base.empty?
+      parts.concat(plus.map(&:to_s))
+      text = parts.empty? ? "{}" : parts.join(" ∪ ")
+      text = "#{text} \\ #{minus.map(&:to_s).join(' \\ ')}" unless minus.empty?
+      text = "(#{text}) ∩ #{within}" unless within == RealSet.reals
+      text
+    end
+    alias inspect to_s
+
+    def to_latex(wrap: nil) = to_s
+  end
+
   class Inequality
     OPS = { :< => "<", :<= => "<=", :> => ">", :>= => ">=", :!= => "!=" }.freeze
     FLIP = { :< => :>, :<= => :>=, :> => :<, :>= => :<=, :!= => :!= }.freeze
@@ -303,7 +365,7 @@ module RCAS
     def without_poles(set, raw, x)
       return set unless set.is_a?(RealSet) && !set.empty?
       points = Analysis.denominators(raw, x).flat_map do |d|
-        zeros = Solve.solve(d, x)
+        zeros = Solve.solve(d, x, domain: RR)
         raise RCAS::Unsupported, "the poles of #{raw} (the zeros of #{d}) are not a finite set of points" unless zeros.is_a?(Array) && zeros.none? { |z| z.is_a?(ImageSet) }
         zeros.select { |z| real?(z) }.map { |z| real_part(z) }
       end

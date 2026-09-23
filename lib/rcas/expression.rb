@@ -310,15 +310,22 @@ module RCAS
     # that could not be integrated stay as unevaluated Integral nodes.
     #
     #   (:x * RCAS.exp(:x)).integrate(:x)   # => -exp(x) + x*exp(x)
-    def integrate(var = nil, from = nil, to = nil, **range)
+    def integrate(var = nil, from = nil, to = nil, generic: false, **range)
       var, from, to = Functions.range_arguments(var, from, to, range, "integrate", discrete: false) if var.nil? || from
-      from.nil? ? Integrate.integrate(self, var) : Integrate.definite(self, var, from, to)
+      from.nil? ? Integrate.with_special_cases(self, var, generic: generic) : Integrate.definite(self, var, from, to)
     end
 
     # Numeric evaluation: every number becomes a Float so roots and function
     # values fold, then the bindings are applied.
     def evalf(digits = nil, **bindings)
       digits ||= bindings.delete(:digits)
+      # a Sum or Product with numeric bounds is evaluated before it is
+      # floated (its bounds as Floats were no bounds, and it stayed formal)
+      if each_node.any? { |n| n.is_a?(Sum) || n.is_a?(Product) }
+        target = bindings.empty? ? self : subs(bindings.to_h { |k, v| [k, Expression.lift(v)] })
+        done = target.evaluate
+        return done.evalf(digits) unless done == target
+      end
       return Precision.evalf(self, digits, bindings) if digits
       value = Expression.floatify_tree(self).call(**bindings.transform_values { |v| Expression.floatify(v) })
       folded = value.is_a?(Expression) && value.constant? ? refloat(value) : nil

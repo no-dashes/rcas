@@ -22,7 +22,11 @@ module RCAS
       when Mul then Add.new(Mul.new(diff(expr.left, var), expr.right), Mul.new(expr.left, diff(expr.right, var)))
       when Div then quotient(expr, var)
       when Pow then power(expr, var)
-      when Fn  then %i[re im conj].include?(expr.name) ? Fn.new(expr.name, [diff(expr.args.first, var)]) : chain(expr, var)
+      when Fn
+        if %i[re im conj].include?(expr.name) then Fn.new(expr.name, [diff(expr.args.first, var)])
+        elsif expr.name == :surd && expr.args.size == 2 then surd(expr, var)
+        else chain(expr, var)
+        end
       when Integral then integral(expr, var)
       when Derivative then expr.var == var ? Derivative.new(expr.expr, expr.var, expr.order + 1) : Num.new(0)
       when Piecewise then Piecewise.new(expr.branches.map { |cond, value| [cond, diff(value, var)] })
@@ -85,6 +89,12 @@ module RCAS
         # general case: u**v * (v' * log(u) + v * u' / u)
         Mul.new(expr, Add.new(Mul.new(diff(n, var), Fn.new(:log, [u])), Div.new(Mul.new(n, diff(u, var)), u)))
       end
+    end
+
+    # surd(u, n)**n = u, so surd(u, n)' = u'/(n*surd(u, n)**(n - 1)) where u != 0
+    def surd(expr, var)
+      u, n = expr.args
+      Div.new(diff(u, var), Mul.new(n, Pow.new(expr, Sub.new(n, Num.new(1)))))
     end
 
     def chain(expr, var)

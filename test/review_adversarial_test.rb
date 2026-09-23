@@ -23,14 +23,12 @@ class ThirdReviewAdversarialTest < Minitest::Test
     RCAS::Integral.new(inner,@t,n(0),@x)
   end
 
+  # Superseded by the fifth review's decision 2.2 (every subexpression
+  # real, so i*sqrt(x) has an empty real domain); the value reading this
+  # test asked for is solve(im(f) == 0, x). Kept as the new expectation.
   def test_real_locus_can_contain_negative_root_arguments
-    # Principal sqrt(-1)=i; i*sqrt(-1)=-1 is a real value.
-    begin
-      result = RCAS.real_domain(RCAS::I*RCAS.sqrt(@x),@x)
-    rescue NotImplementedError, RCAS::Unsupported
-      return assert true
-    end
-    assert result.include?(-1), 'The correct real locus is (-infinity,0].'
+    result = RCAS.real_domain(RCAS::I * RCAS.sqrt(@x), @x)
+    assert result.empty?, "real_domain(i*sqrt(x)) = #{result}"
   end
 
   def test_periodic_radius_has_positive_volume
