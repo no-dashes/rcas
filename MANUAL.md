@@ -77,6 +77,7 @@ checked - nothing in them is typed by hand.
     - [Trigonometric and logarithmic rewriting](#trigonometric-and-logarithmic-rewriting)
   - [1.4 Equations and solving](#14-equations-and-solving)
     - [Inequalities](#inequalities)
+    - [Linear optimization](#linear-optimization)
   - [1.5 Domains and assumptions](#15-domains-and-assumptions)
   - [1.6 Polynomial rings](#16-polynomial-rings)
     - [gcd and division of expressions](#gcd-and-division-of-expressions)
@@ -316,7 +317,8 @@ name the points where its pieces do not fit together. `discuss` answers
 the whole Kurvendiskussion in one report, and `steps` writes the working
 out: the rules of differentiation as they are used, the quadratic formula
 with its numbers in it, the questions of a curve discussion one at a
-time.
+time. Linear optimization, the best plan under linear constraints, is
+`maximize` and `minimize`, in whole numbers too.
 
 ```
 rcas> factor(x**2 - 5*x + 6)
@@ -335,9 +337,12 @@ rcas> sum(k, k: 1..100)
 => 5050
 rcas> Binomial(10, 1/2r).probability(x >= 8)
 => 7/128
+rcas> maximize(30*x + 20*y, [2*x + y <= 100, x + y <= 80], nonnegative: true)
+=> maximum 1800 at x = 20, y = 60
 ```
 
-Read on: 1.3 Calculus, 1.4 Equations and solving, 1.6 Polynomial rings,
+Read on: 1.3 Calculus, 1.4 Equations and solving (with linear
+optimization), 1.6 Polynomial rings,
 1.9 Geometry, 1.10 Statistics.
 
 ### College
@@ -2511,6 +2516,79 @@ derivative of `abs(x)` is `sign(x)`). Comparing two bare symbols keeps
 Ruby's meaning; write `x.to_expr < y` or `lt`-style code with an
 expression on the left for that case.
 
+#### Linear optimization
+
+A workshop makes tables (x) and chairs (y). A table earns 30 and a chair
+20. A table needs 2 units of wood and a chair 1, and there are 100. Each
+needs one hour of work, and there are 80. What should it make?
+
+`maximize(f, constraints)` answers questions like this: the largest value
+of a linear function on the points that satisfy linear inequalities and
+equations. `minimize` gives the smallest. `nonnegative: true` adds
+x >= 0 for every variable, which is almost always meant; without it a
+variable is free unless a constraint bounds it.
+
+```
+rcas> maximize(30*x + 20*y, [2*x + y <= 100, x + y <= 80], nonnegative: true)
+=> maximum 1800 at x = 20, y = 60
+rcas> profit, plan = maximize(30*x + 20*y, [2*x + y <= 100, x + y <= 80], nonnegative: true)
+rcas> [profit, plan[x], plan[y]]
+=> [1800, 20, 60]
+rcas> minimize(2*x + 3*y, [x + y >= 4, x + 3*y >= 6], nonnegative: true)
+=> minimum 9 at x = 3, y = 1
+```
+
+The answer spreads like an array, into the optimal value and the point
+where it is taken. The feasible points form a convex polygon (a polyhedron
+in more variables), and a linear function takes its optimum at a corner.
+The simplex method [Dan63] walks from corner to corner along edges that
+improve the objective until none does. Bland's rule picks each step
+[Bla77], which keeps the walk from cycling on degenerate problems [Chv83,
+ch. 3]. The arithmetic is exact, so every answer is exact. Constraints
+with `>=` need a first phase, which finds a first corner by minimizing a
+sum of artificial variables.
+
+There are three ways a problem can come out, and each is said as it is.
+An optimum along a whole edge is said too:
+
+```
+rcas> maximize(x + y, [x + y <= 4], nonnegative: true)
+=> maximum 4 at x = 4, y = 0 (one of infinitely many optimal points)
+rcas> maximize(x + y, [x - y <= 1], nonnegative: true)
+=> unbounded: x + y has no maximum on the feasible region
+rcas> maximize(x, [x + y <= 1, x + y >= 2], nonnegative: true)
+=> infeasible: no point satisfies the constraints
+rcas> maximize(x + y, [eq(x + 2*y, 4), x <= 3], nonnegative: true)
+=> maximum 7/2 at x = 3, y = 1/2
+rcas> minimize(x + y, [x - y <= 1, x >= 0])
+=> minimum -1 at x = 0, y = -1
+```
+
+An equation is written with `eq`, because `==` compares two expressions
+structurally. In the last line y has no sign constraint, and the minimum
+takes it negative.
+
+Whole numbers change the answer. A corner of the polygon need not have
+whole-number coordinates, and rounding the optimal corner can be
+infeasible or far from the best. `integer: true`, or a list of variables,
+asks for whole numbers and is answered by branch and bound [LD60]. A
+fractional value of x splits the problem in two, x <= floor and
+x >= ceil, and any branch that cannot beat the best whole-number point
+found so far is cut off:
+
+```
+rcas> maximize(5*x + 4*y, [6*x + 4*y <= 24, x + 2*y <= 6], nonnegative: true)
+=> maximum 21 at x = 3, y = 3/2
+rcas> maximize(5*x + 4*y, [6*x + 4*y <= 24, x + 2*y <= 6], nonnegative: true, integer: true)
+=> maximum 20 at x = 4, y = 0
+```
+
+A strict inequality is refused: a linear optimum lies on the boundary,
+and `x < 1` has no largest x. So is a non-linear objective or constraint,
+and a coefficient that is not a number. A decimal is read as it was
+written, so 0.1 is 1/10, and then the answer comes back in decimals. The
+dual problem and a sensitivity analysis are not implemented yet.
+
 ### 1.5 Domains and assumptions
 
 `NN ZZ QQ RR CC` are the number sets (NN includes 0). They answer
@@ -4504,6 +4582,7 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | line and surface integrals | `line_integral surface_integral flux enclosed_area green stokes divergence_theorem conservative? potential` |
 | algebra | `solve` (complete over the complex numbers; `domain: RR` for the real solutions, `principal: true` for one period), `eq factor groebner reduce interval` |
 | differential equations, recurrences | `D dsolve rsolve hyper laplace inverse_laplace` |
+| linear optimization | `maximize minimize` (`nonnegative: true`, `integer: true` or a list of variables) |
 | complex numbers | `re im conj arg` |
 | rounding | `floor ceil round mod` |
 | sequences | `bernoulli fibonacci harmonic` |
@@ -4545,6 +4624,8 @@ multivariate (holonomic) summation, formal power series whose
 coefficients are not hypergeometric (`tan`, `exp(x)/(1 - x)`), iterated
 integrals (a definite integral inside another one stays formal),
 lattice reduction of a dependent generating set (`lll` reduces a basis),
+the dual of a linear program and its sensitivity analysis, linear
+programs with parameters,
 convergence conditions on the parameters of a definite integral
 (`integrate(x**a, x, 0, 1)` is `1/(1 + a)` also where it diverges), the sign
 of an expression on a box of *several* parameter ranges that is not a
@@ -4717,6 +4798,7 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | analytic geometry: lines and circles, the shoelace area | geometry.rb | [Spi08, ch. 4]; [Bra86] |
 | Gram-Schmidt orthogonalization, least squares by the normal equations | linear_algebra.rb | [Str16, ch. 4] |
 | LLL lattice basis reduction, exact, with the incremental Gram-Schmidt update | lattice.rb | [LLL82]; [Coh93, §2.6]; [vzGG13, ch. 16] |
+| linear optimization: two-phase simplex with Bland's rule, exact; whole numbers by branch and bound | linear_program.rb | [Dan63]; [Chv83, ch. 2-5]; [Bla77]; [LD60]; [Sch86] |
 | Laplace transform from the table with the shift rules, inverse by partial fractions | laplace.rb | [BD12, ch. 6] |
 | systems of differential equations by eigenvalues, with Jordan chains when defective | ode.rb | [BD12, ch. 7] |
 | congruences, Legendre and Jacobi symbols, multiplicative order, continued fractions | number_theory.rb | [Coh93, §1.4]; [Knu98, §4.5.3]; [HW08, ch. 10] |
@@ -4727,6 +4809,8 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   Functions*, National Bureau of Standards 1964, ch. 7 (error function).
 - [BD12] W. E. Boyce, R. C. DiPrima, *Elementary Differential Equations and
   Boundary Value Problems*, 10th ed., Wiley 2012.
+- [Bla77] R. G. Bland, New finite pivoting rules for the simplex method,
+  *Math. Oper. Res.* 2 (1977), 103-107.
 - [BM80] R. P. Brent, E. M. McMillan, Some new algorithms for high-precision
   computation of Euler's constant, *Math. Comp.* 34 (1980), 305-312.
 - [Bra86] B. Braden, The surveyor's area formula, *College Mathematics
@@ -4741,12 +4825,16 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   Restklassenringes nach einem nulldimensionalen Polynomideal*, Dissertation,
   Universität Innsbruck 1965; English translation in *J. Symbolic Comput.*
   41 (2006), 475-511.
+- [Chv83] V. Chvátal, *Linear Programming*, W. H. Freeman, New York,
+  1983.
 - [CLO15] D. Cox, J. Little, D. O'Shea, *Ideals, Varieties, and
   Algorithms*, 4th ed., Springer 2015.
 - [Coh93] H. Cohen, *A Course in Computational Algebraic Number Theory*,
   GTM 138, Springer 1993.
 - [CZ81] D. G. Cantor, H. Zassenhaus, A new algorithm for factoring
   polynomials over finite fields, *Math. Comp.* 36 (1981), 587-592.
+- [Dan63] G. B. Dantzig, *Linear Programming and Extensions*, Princeton
+  University Press, 1963.
 - [FDO14] freedesktop.org, *Desktop Entry Specification*, version 1.1
   (2014), https://specifications.freedesktop.org/desktop-entry-spec/
 - [GCL92] K. O. Geddes, S. R. Czapor, G. Labahn, *Algorithms for Computer
@@ -4797,6 +4885,8 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   Springer 2014.
 - [Koo93] T. H. Koornwinder, On Zeilberger's algorithm and its q-analogue,
   *J. Comput. Appl. Math.* 48 (1993), 91-111.
+- [LD60] A. H. Land, A. G. Doig, An automatic method of solving discrete
+  programming problems, *Econometrica* 28 (1960), 497-520.
 - [LLL82] A. K. Lenstra, H. W. Lenstra, Jr., L. Lovász, Factoring
   polynomials with rational coefficients, *Math. Ann.* 261 (1982),
   515-534.
@@ -4859,6 +4949,8 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   Assoc.* 21 (1926), 65-66.
 - [Rud76] W. Rudin, *Principles of Mathematical Analysis*, 3rd ed.,
   McGraw-Hill 1976.
+- [Sch86] A. Schrijver, *Theory of Linear and Integer Programming*,
+  Wiley, Chichester, 1986.
 - [Spi08] M. Spivak, *Calculus*, 4th ed., Publish or Perish 2008.
 - [Spi65] M. Spivak, *Calculus on Manifolds*, W. A. Benjamin 1965.
 - [Sta99] R. P. Stanley, *Enumerative Combinatorics, vol. 2*, Cambridge

@@ -212,6 +212,16 @@ module RCAS
     # lll(basis, delta: 3/4r, transform: false): the LLL-reduced basis of a lattice (rows of a matrix, or a list of vectors)
     def lll(basis, delta: Lattice::DELTA, transform: false) = Lattice.lll(basis, delta: delta, transform: transform)
 
+    # maximize(f, [constraints], vars = nil, nonnegative: false, integer: nil): linear optimization by the simplex method, exact; integer: true or [x, y] for whole numbers
+    def maximize(objective, constraints, vars = nil, nonnegative: false, integer: nil)
+      LinearProgram.maximize(objective, constraints, vars, nonnegative: nonnegative, integer: integer)
+    end
+
+    # minimize(f, [constraints], vars = nil, nonnegative: false, integer: nil): the smallest value of a linear f under linear constraints
+    def minimize(objective, constraints, vars = nil, nonnegative: false, integer: nil)
+      LinearProgram.minimize(objective, constraints, vars, nonnegative: nonnegative, integer: integer)
+    end
+
     # lu(a) gives [l, u, p] with p*a = l*u; qr(a) gives [q, r] with a = q*r
     def lu(matrix) = Decompositions.lu(matrix)
     def qr(matrix) = Decompositions.qr(matrix)

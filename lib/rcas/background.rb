@@ -382,6 +382,11 @@ module RCAS
         method: "The normal equations A'*A*x = A'*b, solved exactly [Str16, ch. 4]."
       },
       orthogonal?: :project,
+      maximize: {
+        maths: "A linear program: the largest (or smallest) value of a linear function on the points that satisfy linear inequalities and equations. That set is a convex polyhedron, and a linear function takes its optimum, if it has one, at a corner - so the answer is a vertex, or there is no feasible point, or the function grows without bound. With integer: the points must have whole-number coordinates, which the corners of the polyhedron in general do not.",
+        method: "The simplex method in two phases [Dan63]: artificial variables find a first vertex, then the walk from vertex to vertex along improving edges, every pivot by Bland's rule so that it cannot cycle [Bla77], [Chv83]. Exact rational arithmetic, so optimal, infeasible and unbounded are decisions. Whole numbers by branch and bound [LD60]."
+      },
+      minimize: :maximize,
       lll: {
         maths: "A lattice is every integer combination of a basis, and it has many bases, most of them long and nearly parallel. A reduced basis is short and nearly orthogonal: each vector is size-reduced against the earlier ones (Gram-Schmidt coefficients at most 1/2), and Lovasz's condition keeps the orthogonalised lengths from dropping fast. The first vector is then at most 2**((n - 1)/2) times the shortest one, which is enough to find integer relations and minimal polynomials from decimals.",
         method: "The LLL algorithm [LLL82] in exact rational arithmetic, keeping the Gram-Schmidt coefficients and updating them on each size reduction and swap as in [Coh93, §2.6]; the transformation matrix is tracked on the side."
@@ -700,6 +705,8 @@ module RCAS
       gram_schmidt: ["Gram-Schmidt process", "Orthonormal basis"],
       project: ["Projection (linear algebra)", "Vector projection"],
       least_squares: ["Least squares", "Linear least squares"],
+      maximize: ["Linear programming", "Simplex algorithm", "Bland's rule", "Integer programming", "Branch and bound"],
+      minimize: ["Linear programming", "Simplex algorithm"],
       lll: ["Lenstra-Lenstra-Lovasz lattice basis reduction algorithm", "Lattice reduction", "Lattice (group)", "Integer relation algorithm"],
       laplace: ["Laplace transform"],
       inverse_laplace: ["Inverse Laplace transform"],

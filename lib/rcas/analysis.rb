@@ -960,7 +960,7 @@ module RCAS
         gs.each_with_index.reduce(f.diff(x)) { |acc, (g, i)| acc - multipliers[i] * g.diff(x) }.simplify
       end
       solutions = Solve.solve(equations + gs, xs + multipliers, principal: true)
-      solutions.map { |s| xs.to_h { |x| [x, s[x]] } }
+      solutions.map { |s| Assignment[xs.to_h { |x| [x, s[x]] }] }
     end
   end
 end

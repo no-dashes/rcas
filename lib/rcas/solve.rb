@@ -1,6 +1,23 @@
 # frozen_string_literal: true
 
 module RCAS
+  # A solution of several unknowns, {x => 2, y => 1}: a Hash keyed by the
+  # indeterminates, which prints and compares as one. In a session a bare
+  # name is a Symbol, so sol[x] asks with :x while the key is Var(:x) - it
+  # answered nil (found on 23 Sept 2026, writing the linear optimization
+  # section). A Symbol is looked up as the indeterminate it names.
+  class Assignment < Hash
+    def [](key) = super(Assignment.key_for(key))
+    def fetch(key, *rest, &block) = super(Assignment.key_for(key), *rest, &block)
+    def key?(key) = super(Assignment.key_for(key))
+    alias has_key? key?
+    alias include? key?
+    alias member? key?
+    def values_at(*keys) = super(*keys.map { |k| Assignment.key_for(k) })
+    def dig(key, *rest) = super(Assignment.key_for(key), *rest)
+    def self.key_for(key) = key.is_a?(Symbol) ? Var.new(key) : key
+  end
+
   # lhs = rhs. Build with eq(a, b) or a.eq(b); solve with solve(equation, x).
   class Equation
     attr_reader :lhs, :rhs
@@ -1841,7 +1858,7 @@ module RCAS
         else
           raise RCAS::Unsupported, "only linear systems and polynomial systems with rational coefficients are supported"
         end
-      restrict_system(solutions, unknowns, domain)
+      restrict_system(solutions, unknowns, domain).map { |sol| sol.is_a?(Hash) ? Assignment[sol] : sol }
     end
 
     # A solution of a system survives when every unknown in it does.

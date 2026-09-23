@@ -152,6 +152,7 @@ lib/rcas/discussion.rb      Discussion.discuss -> Report: the whole Kurvendiskus
 lib/rcas/geometry.rb        Geometry::{Point Line Circle} (a line is a*x + b*y + c = 0, normalized) and the constructions; exact coordinates
 lib/rcas/linear_algebra.rb  LinearAlgebra: gram_schmidt/project/least_squares, exact
 lib/rcas/decompositions.rb  Decompositions + Matrix#lu/qr/cholesky/diagonalize/jordan; the Jordan form from chains of generalized eigenvectors
+lib/rcas/linear_program.rb  LinearProgram.maximize/minimize -> Result (to_s "maximum 12 at x = 4, y = 0", spreads as [value, point], to_latex): two-phase simplex [Dan63] with Bland's rule [Bla77] in exact Rationals; a single-variable lower bound shifts the variable, no bound splits it into p - m; `unique` ignores edges that leave x unchanged (the split partner's) and says nil at a degenerate vertex; integer: by depth-first branch and bound [LD60] with MAX_NODES; strict inequalities refused, a Float read as the decimal written and answered in Floats
 lib/rcas/lattice.rb         Lattice.lll (+ Matrix#lll): exact LLL [LLL82] in Cohen's formulation [Coh93, §2.6] - the Gram-Schmidt mu and squared lengths are updated on size reduction and swap, never recomputed; the transformation is tracked beside it; `reduced?` is the property the tests check. Rows are the vectors; rational entries only; a dependent family is refused (MLLL is not there)
 lib/rcas/laplace.rb         Laplace.transform (table + first shift + multiplication by t) and .inverse (partial fractions)
 lib/rcas/hypothesis.rb      Hypothesis: ttest/ztest/chisquare_test/ftest/binomial_test (exact), confidence_interval, proportion_interval; TestResult prints one line
@@ -1450,6 +1451,10 @@ a hash.
 - **A sign test is never a product.** `value * other > 0` underflows to 0
   for two values near 1e-165 and reads as a sign change (nsolve called a
   root of order 41 a jump). Compare the signs (`Numerics.same_sign?`).
+- **A solution keyed by indeterminates is an `Assignment`** (solve's
+  systems, lagrange, a linear program's point): a bare name in a session is
+  a Symbol, and a plain Hash keyed by `Var` answered `sol[x]` with nil.
+  Return `Assignment[hash]` from anything new that hands such a Hash out.
 - **Hash#inspect changed in Ruby 3.4.** Never compare the `inspect` of a
   Hash against a literal without `TestSupport.hash_style` on both sides.
 - **Never evaluate a block that was handed over to be kept.** A
@@ -1625,7 +1630,7 @@ non-polynomial parts, number fields with more than two generators,
 polynomials over a non-commutative base (a matrix ring: `Domain#scalar?` is
 false for `MatrixSpace`/`VectorSpace` and `PolynomialRing` refuses them,
 since `Polynomial`'s coefficients are Expressions),
-infinite products, LLL of a dependent generating set (MLLL; `lll` wants a basis), formal power series whose
+infinite products, LLL of a dependent generating set (MLLL; `lll` wants a basis), the dual of a linear program, sensitivity analysis and parametric linear programs, formal power series whose
 coefficients are not hypergeometric (`tan`, `exp(x)/(1 - x)`, Fibonacci
 generating functions: `fps` refuses rather than guesses). Conway polynomials
 for GF(p^n) (we take the lexicographically smallest irreducible). Of
