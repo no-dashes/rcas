@@ -604,12 +604,23 @@ module RCAS
     # most one k. So {2*pi*k | k in ZZ} meets ZZ in 0 alone, and
     # {pi + 2*pi*k | k in ZZ} not at all. A family of any other shape stays
     # whole: "some member might qualify" is the honest answer there.
-    def restrict_family(set, wanted, sign)
+    def restrict_family(set, wanted, sign, reindexed: false)
       # a family off the real line has no member in RR: asin(2) + 2*pi*k
       # under domain: RR (third review, S19)
       return [] if wanted && wanted <= RR && set.nonreal?
       if wanted && wanted <= RR && (members = real_members(set))
         return members.reject { |m| Infer.excluded?(m, wanted) || (sign && wrong_sign?(m, sign)) }
+      end
+      if wanted && wanted <= RR && !reindexed && set.affine.nil? && !real_family?(set)
+        # {(4*log(2) + 8*pi*i*k)**(1/2)/2} was kept whole under domain: RR,
+        # and discuss drew asymptotes at its complex members (the sixth
+        # review's preflight): its real members, or a refusal
+        members = power_real_members(set) or
+          raise RCAS::Unsupported, "can't tell which members of #{set} are real"
+        return members.flat_map do |m|
+          next restrict_family(m, wanted, sign, reindexed: true) if m.is_a?(ImageSet)
+          Infer.excluded?(m, wanted) || (sign && wrong_sign?(m, sign)) ? [] : [m]
+        end
       end
       return [set] unless wanted && wanted <= QQ && set.parameters.size == 1
       k = set.parameters.first
@@ -655,10 +666,95 @@ module RCAS
       return [] unless k.is_a?(Integer) || (k.is_a?(Rational) && k.denominator == 1)
       return [] unless set.domain.include?(k.to_i)
       member = set.at(k.to_i)
-      [ComplexParts.re(member).simplify]
+      real = ComplexParts.re(member).simplify
+      # the real part of 2*log(2)/(i*pi + log(2)) + 2*i*pi/(i*pi + log(2))
+      # is 2, written over pi**2 + log(2)**2 twice
+      cancelled = cancel_constants(real)
+      [cancelled.each_node.count < real.each_node.count ? cancelled : real]
     rescue StandardError => rescued
       RCAS.guard!(rescued)
       nil
+    end
+
+    # Every member real: sqrt(pi*k) over NN, the kinks of |sin(x**2)|.
+    def real_family?(set)
+      bindings = set.parameters.to_h { |p| [p.name, set.domain] }
+      domain = RCAS.assume(**bindings) { Infer.domain(set.expr) }
+      !domain.nil? && domain <= RR
+    rescue StandardError, NotImplementedError, RCAS::Unsupported => rescued
+      RCAS.guard!(rescued, refused: true)
+      false
+    end
+
+    # c*A(k)**e with c real, A affine in k and e = +-1 or +-1/q: w**(1/q)
+    # real makes w = (w**(1/q))**q real, and a real w has a real principal
+    # root exactly when it is not negative; 1/w is real exactly with w.
+    # (Not so for other exponents: w**(3/2) is real at arg(w) = 2*pi/3.)
+    # A is real at one k or none (real_members). nil for any other shape.
+    def power_real_members(set)
+      return nil unless set.parameters.size == 1
+      k = set.parameters.first
+      coeff, factors = Simplify.factorize(set.expr)
+      constant, moving = factors.partition { |b, _| !b.variables.include?(k.name) }
+      return nil unless moving.size == 1 && coeff.is_a?(Numeric) && coeff.real?
+      scale = Simplify.rebuild_product(coeff, constant.to_h)
+      return nil unless ComplexParts.real_valued?(scale)
+      base, exp = moving.first
+      exp = exp.value if exp.is_a?(Num)
+      exp = exp.to_r if exp.is_a?(Integer)
+      return nil unless exp.is_a?(Rational) && exp.numerator.abs == 1
+      power = ->(b) { (scale * Simplify.power_node(b, exp.denominator == 1 ? exp.to_i : exp)).simplify }
+      inner = ImageSet.new(base, set.parameters, set.domain)
+      if (pair = inner.affine) && real_step?(pair)
+        # 1/(2*pi*k): a real power of a real family is real throughout
+        return exp.denominator == 1 ? [set] : non_negative_part(set, inner, k)
+      end
+      points = real_members(inner) or return nil
+      points.filter_map do |b|
+        next power.call(b) if exp.denominator == 1
+        case Decide.sign(b)
+        when :positive, :zero then power.call(b)
+        when :negative then nil
+        else return nil
+        end
+      end
+    end
+
+    def real_step?(pair)
+      pair.all? { |p| (im = ComplexParts.im(p).simplify).variables.empty? && Decide.zero?(im) == true }
+    end
+
+    # A real affine A(k) = b + s*k under a root: the members are real
+    # exactly where A(k) >= 0, which is k >= -b/s for s > 0 - the
+    # family again, counted from there over NN: {+-sqrt(pi*k) | k in NN}
+    # are the zeros of sin(x**2) on the real line.
+    def non_negative_part(set, inner, k)
+      b, step = inner.affine
+      ratio = (Neg.new(b) / step).simplify
+      direction = Decide.sign(step)
+      return nil unless rational?(ratio) && %i[positive negative].include?(direction)
+      r = ratio.value.to_r
+      if direction == :positive
+        start = r.ceil
+        start = [start, 0].max if set.domain == NN
+        return [ImageSet.new(set.expr.subs(k.name => Num.new(start) + k).simplify, [k], NN)]
+      end
+      last = r.floor
+      return (0..last).map { |i| set.at(i) } if set.domain == NN
+      [ImageSet.new(set.expr.subs(k.name => Num.new(last) - k).simplify, [k], NN)]
+    end
+
+    # cancel works in a polynomial ring, and pi and log(2) are no
+    # indeterminates of one: they stand in as fresh names while it runs.
+    def cancel_constants(e)
+      atoms = e.each_node.select { |n| n.is_a?(Const) || (n.is_a?(Fn) && n.variables.empty?) }.uniq
+      atoms = atoms.reject { |a| atoms.any? { |b| !b.equal?(a) && b != a && b.each_node.any? { |n| n == a } } }
+      return e if atoms.empty?
+      taken = e.variables
+      names = atoms.each_with_index.map { |_, i| Var.new(:"c#{i}") }
+      raise ArgumentError, "names taken" if names.any? { |v| taken.include?(v.name) }
+      forth = atoms.zip(names).to_h
+      e.subs(forth).cancel.subs(forth.invert).simplify
     end
 
     # a + b*k with a, b rational is an integer exactly on a residue class of
@@ -1045,6 +1141,30 @@ module RCAS
       n = coeffs.size - 1
       lead = coeffs.last.value.to_f
       a = coeffs.map { |c| c.value.to_f / lead }
+      zero = a.index { |c| !c.zero? } # x**m divides: those roots are exactly 0
+      a = a.drop(zero)
+      roots = durand_kerner(a) + [0.0] * zero
+      unit = [roots.map(&:abs).max, Float::MIN].max
+      k = scaled_size(a, unit)
+      roots = polished_clusters(roots, a, unit, k)
+      noise = 10 * Float::EPSILON * k * unit
+      paired = []
+      roots.each_with_index do |z, i|
+        next if paired.include?(i)
+        partner = roots.each_index.find { |j| j != i && !paired.include?(j) && (roots[j] - z.conj).abs <= 2 * noise && z.imaginary.abs > noise }
+        paired.push(i, partner) if partner
+      end
+      roots.each_with_index.map do |z, i|
+        # a real part at the level of rounding is none: the rotation's +-i
+        # came out as -2e-17 + i
+        z = Complex(z.real.abs <= noise ? 0.0 : z.real, z.imaginary) if paired.include?(i)
+        Num.new(paired.include?(i) ? z : z.real)
+      end.sort_by { |r| r.value.is_a?(Complex) ? [1, r.value.real, r.value.imaginary] : [0, r.value, 0] }
+    end
+
+    def durand_kerner(a)
+      n = a.size - 1
+      return [] if n < 1
       roots = (0...n).map { |k| Complex(0.4, 0.9)**k }
       value = ->(z) { a.each_with_index.reduce(0) { |acc, (c, k)| acc + c * z**k } }
       500.times do
@@ -1057,46 +1177,49 @@ module RCAS
         end
         break if moved < 1e-15
       end
-      scale = [roots.map(&:abs).max || 1.0, 1.0].max
-      roots = polished_clusters(roots, a, scale)
-      paired = []
-      roots.each_with_index do |z, i|
-        next if paired.include?(i)
-        partner = roots.each_index.find { |j| j != i && !paired.include?(j) && (roots[j] - z.conj).abs <= 1e-7 * scale && z.imaginary.abs > 1e-7 * scale }
-        paired.push(i, partner) if partner
-      end
-      roots.each_with_index.map do |z, i|
-        Num.new(paired.include?(i) ? z : z.real)
-      end.sort_by { |r| r.value.is_a?(Complex) ? [1, r.value.real, r.value.imaginary] : [0, r.value, 0] }
+      roots
     end
 
-    # Roots that coincide to the accuracy Durand-Kerner reaches at a
-    # multiple root (about eps**(1/m)) are one root of multiplicity m, and
-    # Newton's method for it, z - m*p(z)/p'(z), polishes their mean: a
-    # double eigenvalue 2 had come back as 2.0000000038 and 2.000000038,
-    # and neither had an eigenvector.
-    def polished_clusters(roots, a, scale)
-      value = ->(z) { a.each_with_index.reduce(0) { |acc, (c, k)| acc + c * z**k } }
-      slope = ->(z) { a.each_with_index.reduce(0) { |acc, (c, k)| k.zero? ? acc : acc + k * c * z**(k - 1) } }
-      clusters = []
-      roots.each do |z|
-        home = clusters.find { |c| (c.first - z).abs <= 1e-5 * scale }
-        home ? home << z : clusters << [z]
-      end
-      clusters.flat_map do |cluster|
-        m = cluster.size
-        z = cluster.sum / m
-        if m > 1
+    # The coefficients of the monic polynomial with its roots scaled into
+    # the unit disc: how large they are is how much rounding a root sees.
+    def scaled_size(a, unit)
+      n = a.size - 1
+      [a.each_with_index.map { |c, i| c.abs / unit**(n - i) }.max, 1.0].max
+    end
+
+    # A root of multiplicity m is found only to about (eps*k)**(1/m) of the
+    # scale, as m roots scattered round it: a triple eigenvalue 2 came
+    # back 2.5e-5 to 4.6e-5 apart. So m roots that lie within ten times
+    # that of each other are one root of multiplicity m, and Newton's
+    # method for it, z - m*p(z)/p'(z), polishes their mean; two roots
+    # 1e-6 apart are further apart than a double root can scatter, and
+    # stay two. Largest clusters first. The radius is relative to the
+    # roots, not to 1: eigenvalues 1e-8, 3e-8 and 5e-8 were one triple
+    # root (the sixth review's preflight).
+    def polished_clusters(roots, a, unit, k)
+      value = ->(z) { a.each_with_index.reduce(0) { |acc, (c, i)| acc + c * z**i } }
+      slope = ->(z) { a.each_with_index.reduce(0) { |acc, (c, i)| i.zero? ? acc : acc + i * c * z**(i - 1) } }
+      left = roots.dup
+      found = []
+      roots.size.downto(2) do |m|
+        radius = 10 * (Float::EPSILON * k)**(1.0 / m) * unit
+        loop do
+          cluster = left.lazy.map { |z| left.sort_by { |w| (w - z).abs }.first(m) }
+                        .find { |group| group.size == m && group.combination(2).all? { |p, q| (p - q).abs <= radius } }
+          break unless cluster
+          cluster.each { |z| left.delete_at(left.index(z)) }
+          z = cluster.sum / m
           30.times do
             d = slope.call(z)
             break if d.zero?
             step = m * value.call(z) / d
-            break if step.abs <= 1e-16 * scale
+            break if step.abs <= 1e-16 * unit
             z -= step
           end
+          found.concat([z] * m)
         end
-        [z] * m
       end
+      found + left
     end
 
     # The number of distinct real roots of a polynomial over QQ: the sign
@@ -1156,7 +1279,7 @@ module RCAS
       homogeneous = homogeneous_trig(f, x, depth, all: all)
       return homogeneous if homogeneous
 
-      radicals = radical_equation(f, x, depth)
+      radicals = radical_equation(f, x, depth, all: all)
       return radicals if radicals
 
       logs = logarithmic_equation(f, x, depth)
@@ -1280,7 +1403,7 @@ module RCAS
       end
     end
 
-    def radical_equation(f, x, depth)
+    def radical_equation(f, x, depth, all: false)
       constant, terms = Simplify.termize(f)
       with, without = terms.partition { |factors, _| root_index(factors, x) }
       return nil unless [1, 2].include?(with.size)
@@ -1303,9 +1426,42 @@ module RCAS
         remaining = Simplify.termize(g).last.count { |factors, _| root_index(factors, x) }
         return nil unless remaining < with.size
       end
-      defined_roots(f, x, verify(f, x, univariate(g, x, depth + 1)))
+      # all: goes down too - sqrt(exp(x)) = exp(x) squares to a family,
+      # and one period of it was [0] - and the families squaring brings
+      # are checked like the points
+      found = univariate(g, x, depth + 1, all: all)
+      families, points = found.partition { |r| !family_parameters(r, x, f).empty? }
+      defined_roots(f, x, verify(f, x, points) + verified_families(f, x, families))
     rescue NotImplementedError, RCAS::Unsupported
       nil
+    end
+
+    # Squaring can add a family as easily as a point: sqrt(exp(x)) =
+    # -exp(x) squares to the same equation as sqrt(exp(x)) = exp(x). A
+    # family is kept when its members at six indices all satisfy f,
+    # decided exactly, dropped when none does, and refused when some do
+    # and some do not - which members those are is not written here.
+    VERIFIED_INDICES = [0, 1, -1, 2, -2, 3].freeze
+
+    # Inside univariate a family is still a root in a name the equation
+    # does not have (`family` makes the ImageSet at the top), and that name
+    # runs over the integers.
+    def family_parameters(root, x, f) = root.is_a?(Expression) ? root.variables - f.variables - [x.name] : []
+
+    def verified_families(f, x, families)
+      families.select do |family|
+        names = family_parameters(family, x, f)
+        verdicts = VERIFIED_INDICES.map do |k|
+          member = family.subs(names.to_h { |name| [name, Num.new(k)] }).simplify
+          residual = f.subs(x => member).simplify
+          Integrate.defined_value?(residual) ? Decide.zero?(residual) : false
+        rescue ZeroDivisionError
+          false
+        end
+        next true if verdicts.all?(true) || verdicts.include?(nil)
+        next false if verdicts.none?(true)
+        raise RCAS::Unsupported, "squaring #{f} = 0 gives the family #{family}, of which only some members solve it"
+      end
     end
 
     # log(u) + log(v) = c: one logarithm instead of two, which the atom
@@ -1491,6 +1647,7 @@ module RCAS
         targets.flat_map { |w| univariate((arg - w).simplify, x, depth + 1, all: all) }
       when Pow
         if depends?(u.base, x) && !depends?(u.exponent, x)
+          return [] if principal_power_reaches?(u.exponent, v) == false
           univariate((u.base - v**(1 / u.exponent)).simplify, x, depth + 1, all: all)
         elsif !depends?(u.base, x)
           # b**u = exp(u*log(b)) = v: u*log(b) = log(v) + 2*pi*i*k, so
@@ -1505,6 +1662,28 @@ module RCAS
       else
         cannot_invert!(u, v)
       end
+    end
+
+    # w**e = exp(e*log(w)) with the principal log, whose imaginary part is
+    # in (-pi, pi]: for 0 < |e| < 1 the power reaches only the sector
+    # |arg| < |e|*pi, and one of its two edges. sqrt(exp(x)) = -1 has no
+    # solution, and inverting it as exp(x) = (-1)**2 found the family
+    # 2*pi*i*k - a family, so verify never saw it (the sixth review's
+    # preflight). true, false, or nil when it cannot be decided.
+    def principal_power_reaches?(e, v)
+      return true unless e.is_a?(Num) && e.value.is_a?(Rational) && e.value.abs < 1 && !e.value.zero?
+      return nil unless v.variables.empty?
+      return e.value.positive? if Decide.zero?(v) == true
+      arg = ComplexParts.arg(v).simplify
+      bound = Num.new(e.value.abs) * PI
+      case Decide.sign((bound - RCAS.abs(arg)).simplify)
+      when :positive then true
+      when :negative then false
+      when :zero then Decide.sign(arg) == (e.value.positive? ? :positive : :negative)
+      end
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
+      nil
     end
 
     # No inverse is known for u (x**x, erf, gamma, floor, an unknown
@@ -1554,6 +1733,7 @@ module RCAS
         next true unless r.is_a?(Expression)
         next false unless Integrate.defined_value?(r) # log(0) is no number, let alone a root
         next true unless r.variables.empty?
+        next float_residual_small?(f.subs(x => r)) if floaty?(f) || floaty?(r)
         residual = begin
           f.subs(x => r).simplify
         rescue ZeroDivisionError
@@ -1564,6 +1744,23 @@ module RCAS
         end
         Integrate.defined_value?(residual) && Decide.zero?(residual) != false
       end
+    end
+
+    # A Float root, or an equation with Float coefficients, is checked the
+    # way Equation#holds? checks one: against the running error bound of
+    # the substituted equation, not by Decide.zero? of a residual that is
+    # already a single Float - that was 1e-16 of noise decided "not zero",
+    # and solve(1.0*x**3 - 6.0*x**2 + 12.0*x - 8.0, x) answered [] (the
+    # sixth review's preflight). The root is itself a few ulp out, which
+    # the bound does not know, hence the slack; a residual whose error
+    # cannot be bounded keeps the root.
+    FLOAT_SLACK = 1e3
+
+    def floaty?(e) = e.each_node.any? { |n| n.is_a?(Num) && (n.value.is_a?(Float) || (n.value.is_a?(Complex) && n.value.real.is_a?(Float))) }
+
+    def float_residual_small?(difference)
+      found, error = Decide.float_with_error(difference)
+      found.nil? || found.abs <= FLOAT_SLACK * Decide::ERROR_MARGIN * error
     end
 
     # ---- systems ---------------------------------------------------------------------

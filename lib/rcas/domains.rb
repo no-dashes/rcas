@@ -503,7 +503,9 @@ module RCAS
         return nil if v.real? && v.negative? && !nonzero?(expr.base)
         return base.join(QQ) if v.is_a?(Integer)
         return CC unless v.real?
-        return RR if base <= NN || (base <= RR && positive_base?(expr.base))
+        # a zero base was sent away above for a negative exponent, so not
+        # negative is enough: sqrt(pi*k) for k in NN
+        return RR if base <= NN || (base <= RR && non_negative_base?(expr.base))
         return CC
       end
 
@@ -537,6 +539,12 @@ module RCAS
 
     # sqrt(pi) and sqrt(7 - 4*sqrt(3)) are real: the radicand is positive
     # (fourth review: x**2 < pi was refused as "cannot decide").
+    def non_negative_base?(b)
+      sign = RCAS.sign_of(b)
+      return %i[positive nonnegative zero].include?(sign) if sign || !b.variables.empty?
+      %i[positive zero].include?(Decide.sign(b))
+    end
+
     def positive_base?(b)
       sign = RCAS.sign_of(b)
       return sign == :positive if sign || !b.variables.empty?

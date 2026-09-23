@@ -86,6 +86,7 @@ module RCAS
       real, other = factors.partition { |base, exp| real_valued?(Simplify.power_node(base, exp)) }
       return nil unless other.size == 1
       base, exp = other.first
+      return reciprocal_parts(coeff, real, base, exp) if reciprocal?(base, exp)
       return nil unless exp == 1 && base.is_a?(Fn) && base.name == :log && base.args.size == 1 && constant?(base.args.first)
       u = base.args.first
       angle = arg(u)
@@ -95,6 +96,24 @@ module RCAS
     rescue StandardError => rescued
       RCAS.guard!(rescued)
       nil
+    end
+
+    # 1/w for a w whose own parts are known: conj(w)**n/|w|**(2*n). This is
+    # what splits the step of the family (-2)**x = 4 answers,
+    # 2*pi*i/(i*pi + log(2)), which domain: RR could not measure (the sixth
+    # review's preflight).
+    def reciprocal?(base, exp)
+      exp = exp.value if exp.is_a?(Num)
+      exp.is_a?(Integer) && exp.negative? && (base.is_a?(Add) || base.is_a?(Sub))
+    end
+
+    def reciprocal_parts(coeff, real, base, exp)
+      wr, wi = parts(base)
+      return nil unless [wr, wi].all? { |p| p.each_node.none? { |n| n.is_a?(Fn) && %i[re im].include?(n.name) } }
+      n = -(exp.is_a?(Num) ? exp.value : exp)
+      scale = Simplify.rebuild_product(coeff, real.to_h) / (wr**2 + wi**2)**n
+      cr, ci = parts(Expand.expand((wr - I * wi)**n))
+      [(scale * cr).simplify, (scale * ci).simplify]
     end
 
     def real_of(v) = v.is_a?(Complex) ? v.real : v

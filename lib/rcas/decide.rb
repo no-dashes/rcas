@@ -92,21 +92,28 @@ module RCAS
     end
 
     # An expression in indeterminates that no normal form reduces
-    # (gamma(1 - a)/gamma(-a) + a): true when it vanishes at several random
-    # rational points, each decided exactly; false as soon as one point
-    # shows it does not; nil when no point could be decided. A nonzero
-    # rational function vanishing at four random rational points is not a
-    # risk worth naming; a Float residue under 1e-9 was, and four copies of
-    # that test with their own seeds and tolerances were one of the third
-    # review's duplications (section 5).
+    # (gamma(1 - a)/gamma(-a) + a): true when it vanishes at every one of
+    # several random rational points, each decided exactly; false as soon
+    # as one point shows it does not; nil otherwise. A point that is a pole
+    # or cannot be decided is no evidence for zero, and a fresh one is
+    # drawn in its place. The denominators are primes above 100: with
+    # denominators 2..11, sin(30*pi*x) vanished at all four points, and one
+    # decided zero among poles was enough for a true (the sixth review's
+    # preflight). A nonzero rational function vanishing at four random
+    # rational points is not a risk worth naming; a Float residue under
+    # 1e-9 was, and four copies of that test with their own seeds and
+    # tolerances were one of the third review's duplications (section 5).
+    SAMPLE_DENOMINATORS = [101, 103, 107, 109, 113, 127, 131, 137, 139, 149].freeze
+
     def identically_zero?(expr, points: 4, seed: 20260922)
       e = Expression.lift(expr)
       return zero?(e) if e.variables.empty?
-      return true if Scalar.identically_zero?(e)
+      return false if Scalar.nonzero_somewhere?(e)
+      return true if Scalar.identically_zero?(e) || factorial_zero?(e)
       random = Random.new(seed)
       decided = 0
-      points.times do
-        point = e.variables.to_h { |name| [name, Num.new(Rational(random.rand(3..97), random.rand(2..11)))] }
+      (3 * points).times do
+        point = e.variables.to_h { |name| [name, Num.new(Rational(random.rand(3..997), SAMPLE_DENOMINATORS.sample(random: random)))] }
         value = begin
           e.subs(point).simplify
         rescue ZeroDivisionError
@@ -115,8 +122,9 @@ module RCAS
         verdict = zero?(value)
         return false if verdict == false
         decided += 1 if verdict
+        return true if decided == points
       end
-      decided.positive? ? true : nil
+      nil
     rescue StandardError, NotImplementedError, RCAS::Unsupported => rescued
       RCAS.guard!(rescued, refused: true) if rescued.is_a?(StandardError)
       nil
@@ -229,13 +237,39 @@ module RCAS
       begin
         Thread.current[:rcas_decide_symbolic] = true
         simplified = e.simplify
-        simplified.is_a?(Num) ? simplified.value == 0 : Scalar.identically_zero?(simplified)
+        return true if simplified.is_a?(Num) && simplified.value == 0
+        return true if factorial_zero?(e)
+        !simplified.is_a?(Num) && Scalar.identically_zero?(simplified)
       ensure
         Thread.current[:rcas_decide_symbolic] = nil
       end
     rescue StandardError => rescued
       RCAS.guard!(rescued)
       false
+    end
+
+    # gamma(u) is (u - 1)!, and simplify cancels factorials whose arguments
+    # differ by an integer: gamma(-42/5)/gamma(-47/5) + 47/5 is 0 that way
+    # and undecided every other way. A sum of factorials is divided by one
+    # of them first, which makes every term such a ratio: (1 + k)! - k! -
+    # k*k! over k! expands to 0. (It had been "shown" zero by the sampled
+    # points that happened to be integers, which was also what called
+    # sin(30*pi*x) zero.) A factorial has no zeros, so the quotient
+    # vanishes exactly where the sum does.
+    def factorial_zero?(e)
+      return false unless e.each_node.any? { |n| n.is_a?(Fn) && %i[gamma factorial].include?(n.name) }
+      rewritten = as_factorials(e)
+      return true if zero_number?(rewritten.simplify)
+      rewritten.each_node.select { |n| n.is_a?(Fn) && n.name == :factorial }.uniq.first(3).any? do |f|
+        zero_number?(Expand.expand(rewritten / f).simplify)
+      end
+    end
+
+    def zero_number?(v) = v.is_a?(Num) && v.value.is_a?(Numeric) && v.value.zero?
+
+    def as_factorials(e)
+      e = e.map_children { |c| as_factorials(c) }
+      e.is_a?(Fn) && e.name == :gamma && e.args.size == 1 ? Fn.new(:factorial, [(e.args.first - 1).simplify]) : e
     end
 
     def float_sign(e)
@@ -366,11 +400,50 @@ module RCAS
           room.positive? ? 1.0 / Math.sqrt(room) : nil
         else
           # re, im, gamma, ... by evalf: a slope we do not know is only
-          # harmless when the argument carries no error beyond an ulp
-          ea <= a.abs * 4 * EPS ? 1e3 * (v.abs + 1) : nil
+          # harmless when the argument carries no error beyond an ulp, and
+          # far from where the function is singular or jumps
+          ea <= a.abs * 4 * EPS ? unknown_slope(name, a, ea, v) : nil
         end
       return nil if slope.nil?
       [v, slope * ea + v.abs * 8 * EPS]
+    end
+
+    # The points where a function evaluated by evalf is not smooth: the
+    # poles of gamma at 0, -1, -2, ... and the rest. An ulp of error in the
+    # argument is a large relative error in the distance to a pole, and
+    # gamma(-1 + 10**-15) has a slope near 10**30, where 1e3*(|v| + 1) said
+    # 10**18 - an exact zero came out as -8e11 and "not zero" (the sixth
+    # review's preflight). Near such a point the bound grows like the
+    # slope of a simple pole, 1/d**2 over the distance d; within the error
+    # of the argument there is no bound at all.
+    SINGULAR = {
+      gamma: :nonpositive, digamma: :nonpositive, psi: :nonpositive,
+      factorial: :negative, harmonic: :negative,
+      zeta: [1.0], li: [1.0, 0.0], Ei: [0.0], Ci: [0.0],
+      floor: :integers, ceil: :integers, round: :half_integers
+    }.freeze
+    JUMPING = %i[floor ceil round].freeze
+
+    def unknown_slope(name, a, ea, v)
+      d = singular_distance(SINGULAR[name], a)
+      return 1e3 * (v.abs + 1) if d.nil?
+      return nil if d <= 2 * ea
+      return 0.0 if JUMPING.include?(name)
+      1e3 * (v.abs + 1) * (1 + 1 / d) + 1 / (d * d)
+    end
+
+    def singular_distance(points, a)
+      return nil if points.nil?
+      re = a.real.to_f
+      nearest =
+        case points
+        when Array then points.min_by { |p| (a - p).abs }
+        when :nonpositive then [re.round, 0].min
+        when :negative then [re.round, -1].min
+        when :integers then re.round
+        when :half_integers then re.floor + 0.5
+        end
+      (a - nearest).abs
     end
 
     def function_value(name, a)

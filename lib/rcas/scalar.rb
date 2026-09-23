@@ -113,14 +113,30 @@ module RCAS
     def trigonometric_zero?(e)
       return false unless e.each_node.any? { |n| n.is_a?(Fn) && Trigonometry::SQUARES.key?(n.name) }
       return true if pythagorean_zero?(e)
-      return false if e.each_node.count > 200
+      return false if e.each_node.count > 200 || large_multiple?(e)
       rewritten = Trigonometry.expand_trig(e).expand
+      return false if rewritten.each_node.count > 2000
       return true if rewritten.is_a?(Num) && rewritten.value.zero?
       reduced = Trigonometry.trigsimp(rewritten).simplify
       reduced.is_a?(Num) && reduced.value.zero?
     rescue StandardError => rescued
       RCAS.guard!(rescued)
       false
+    end
+
+    # expand_trig writes sin(n*u) as a polynomial of degree n in sin(u) and
+    # cos(u), and trigsimp is superlinear in it: sin(280*pi*x) took ten
+    # seconds, sin(27720*pi*x) did not come back (the sixth review's
+    # preflight). An identity that needs a multiple beyond this is not one
+    # this test will find anyway.
+    MAX_MULTIPLE = 12
+
+    def large_multiple?(e)
+      e.each_node.any? do |n|
+        next false unless n.is_a?(Fn) && Trigonometry::SQUARES.key?(n.name)
+        _, terms = Expand.table(n.args.first)
+        terms.values.any? { |c| c.is_a?(Numeric) && c.real? && c.abs > MAX_MULTIPLE }
+      end
     end
 
     # 1e-12 is not zero. exp(-100) is 3.7e-44, and a determinant built from

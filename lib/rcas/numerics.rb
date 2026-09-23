@@ -56,9 +56,19 @@ module RCAS
       exact = huge ? exact_caller(expr, name) : nil
       return tree if compiled.nil? && exact.nil?
       lambda do |value|
-        compiled&.call(value) || tree.call(value) || exact&.call(value)
+        fast = compiled&.call(value)
+        # a logarithm at 0 has no value, and the tree must not be asked:
+        # simplify absorbs 0*log(0) into 0, which made a pole of
+        # sign(x - 1)*log|x - 1| a root at 1
+        next nil if fast.equal?(POLE)
+        fast || tree.call(value) || exact&.call(value)
       end
     end
+
+    # What the compiled lambda answers where a logarithm meets 0: no value,
+    # and unlike a non-real one (asin(1.5), for |asin(x)|) none the tree can
+    # supply.
+    POLE = Object.new.freeze
 
     def beyond_floats?(expr)
       expr.each_node.any? do |n|
@@ -101,7 +111,7 @@ module RCAS
                  atan: Math.method(:atan), sinh: Math.method(:sinh), cosh: Math.method(:cosh), erf: Math.method(:erf),
                  erfc: Math.method(:erfc) }.freeze
     # real only inside their domain: nil outside, as the tree gives
-    GUARDED = { log: ->(v) { v.positive? ? Math.log(v) : nil },
+    GUARDED = { log: ->(v) { v.positive? ? Math.log(v) : (v.zero? ? throw(:pole, POLE) : nil) },
                 asin: ->(v) { v.abs <= 1 ? Math.asin(v) : nil },
                 acos: ->(v) { v.abs <= 1 ? Math.acos(v) : nil },
                 abs: ->(v) { v.abs }, sign: ->(v) { (v <=> 0).to_f },
@@ -112,7 +122,8 @@ module RCAS
     def compile(expr, name)
       body = compiled_node(expr, name) or return nil
       lambda do |value|
-        v = body.call(value.to_f)
+        v = catch(:pole) { body.call(value.to_f) }
+        next POLE if v.equal?(POLE)
         v.is_a?(Float) && v.finite? ? v : nil
       rescue ZeroDivisionError, Math::DomainError, FloatDomainError
         nil
@@ -208,27 +219,52 @@ module RCAS
     # 4e-6 an ulp away, which the old size test took for a jump), towards a
     # pole it grows, across a jump it stays put. :root, :pole or :jump; a
     # root when f is exactly 0 there or the sides disagree.
+    #
+    # Each side is read twice. Over the seven decades, a root of order a
+    # multiplies |f| by 10**(7*a) and a pole divides it; over the nearest
+    # decade alone, a jump changes |f| by next to nothing, however steep f
+    # is beside it - floor(x) - 1/2 + 10**7*(x - 1) grows seventeen
+    # hundredfold over the seven decades and by two parts in a million
+    # over the first, where a root of order 1/51 still gains 4.6%. So a
+    # side shrinks towards x when both readings say so, and is flat when
+    # the nearest decade moves by less than NEAR_DECADE.
     def crossing(g, x, from, to)
       value = g.call(x)
       return :root if value&.zero?
       low, high = [from, to.nil? ? from : to].minmax
       low, high = -Float::INFINITY, Float::INFINITY if to.nil?
       unit = 4 * Float::EPSILON * [x.abs, 1e-300].max
-      ratios = [-1, 1].filter_map do |side|
-        values = (1..8).filter_map do |j|
+      sides = [-1, 1].filter_map do |side|
+        values = (1..8).map do |j|
           t = x + side * unit * 10**j
-          next unless t >= low && t <= high
-          g.call(t)&.abs
+          t >= low && t <= high ? g.call(t)&.abs : nil
         end
-        next nil if values.size < 3
-        near, far = values.first, values.last
-        near.zero? ? Float::INFINITY : far / near
+        next nil if values.compact.size < 3
+        side_kind(values)
       end
-      return value.nil? ? :pole : :root if ratios.empty?
-      return :pole if ratios.all? { |r| r < 0.5 }
-      return :jump if ratios.all? { |r| r.between?(0.5, 2.0) }
-      return :pole if value.nil? && ratios.none? { |r| r > 2.0 }
+      return value.nil? ? :pole : :root if sides.empty?
+      return :pole if sides.all?(:grows)
+      return :jump if sides.all?(:flat)
+      return :pole if value.nil? && sides.none?(:shrinks)
       :root
+    end
+
+    NEAR_DECADE = 1e-3
+
+    # :shrinks (towards x), :grows or :flat, from |f| at the eight
+    # distances (nil where outside the range or undefined)
+    def side_kind(values)
+      near, far = values.compact.first, values.compact.last
+      return :shrinks if near.zero?
+      overall = far / near
+      first = values.index(near)
+      step = values[first + 1] && values[first + 1] / near
+      step = overall**(1.0 / 7) if step.nil? # the next decade is missing
+      if step > 1 + NEAR_DECADE && overall > 1 then :shrinks
+      elsif step < 1 - NEAR_DECADE && overall < 1 then :grows
+      elsif (step - 1).abs <= NEAR_DECADE then :flat
+      else overall > 2 ? :shrinks : (overall < 0.5 ? :grows : :flat)
+      end
     end
 
     # Converged when the bracket is a few units in the last place wide: a
@@ -264,6 +300,7 @@ module RCAS
       return hi if fhi.zero?
       raise ArgumentError, "nsolve: #{expr} has the same sign at #{lo} and #{hi}; give a range that brackets a root" if flo * fhi > 0
 
+      return 0.0 if crosses_at_zero?(g, lo, hi, flo)
       x = (lo + hi) / 2.0
       steps = 0
       until narrow?(lo, hi) || steps > 4 * MAX_STEPS
@@ -281,6 +318,19 @@ module RCAS
         value * flo > 0 ? (lo = x; flo = value) : (hi = x; fhi = value)
       end
       flo.abs <= fhi.abs ? lo : hi # the caller tells a root from a pole or a jump
+    end
+
+    # A bracket around 0 is never narrow relative to its ends, and where f
+    # has no value at 0 - x*log|x| - bisection could only halve towards it
+    # until the steps ran out, at 4e-165, where the samples of `crossing`
+    # are relative to a point that is not the crossing. The sign change is
+    # at 0 when it is there on either side of the smallest normal Float;
+    # `crossing` then says what kind it is.
+    def crosses_at_zero?(g, lo, hi, flo)
+      return false unless lo.negative? && hi.positive? && g.call(0.0).nil?
+      left = g.call(-Float::MIN)
+      right = g.call(Float::MIN)
+      !left.nil? && !right.nil? && left * flo > 0 && right * flo < 0
     end
 
     # The value at x, or at the nearest point inside the bracket where the

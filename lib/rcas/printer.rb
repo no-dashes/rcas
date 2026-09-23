@@ -51,7 +51,11 @@ module RCAS
     def condition(cond)
       case cond
       when Inequality then "#{print(cond.lhs)} #{Inequality::OPS[cond.op]} #{print(cond.rhs)}"
-      when Equation then "#{print(cond.lhs)}.eq(#{print(cond.rhs)})"
+      when Equation
+        # a method call binds tighter than any operator: (exp(a) - 1).eq(0)
+        lhs = print(cond.lhs)
+        bare = cond.lhs.is_a?(Var) || cond.lhs.is_a?(Fn) || cond.lhs.is_a?(Const) || (cond.lhs.is_a?(Num) && !lhs.start_with?("-"))
+        "#{bare ? lhs : "(#{lhs})"}.eq(#{print(cond.rhs)})"
       when Interval then interval(cond)
       when RealSet then cond.intervals.map { |i| interval(i) }.join(" | ")
       else cond.inspect

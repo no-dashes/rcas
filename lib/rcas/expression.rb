@@ -333,7 +333,17 @@ module RCAS
       value = Numerics.resolve(value) if value.is_a?(Expression) && value.each_node.any? { |n| n.is_a?(Integral) }
       value = value.value if value.is_a?(Num)
       return wide(bindings) || value if overflowed?(value)
-      cancelled?(value, bindings) ? (wide(bindings) || value) : value
+      return value unless cancelled?(value, bindings)
+      wide(bindings) || (digitless?(value) ? self : value)
+    end
+
+    # Not one digit survived: the error bound is larger than the value, and
+    # the Float is noise with a sign of its own. gamma(-1 + 10**-15) +
+    # 10**15 + 5*10**11 came out as -3e11 against a true 5e11; with no
+    # arbitrary precision for gamma there, the expression is the answer.
+    def digitless?(value)
+      _, error = Decide.float_with_error(self)
+      !error.nil? && error >= value.abs
     end
 
     # A Float that lost most of its digits to cancellation: the running

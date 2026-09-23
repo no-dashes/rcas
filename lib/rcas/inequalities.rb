@@ -196,18 +196,39 @@ module RCAS
     alias eql? ==
     def hash = [ScatteredSet, base, plus, minus, within].hash
 
-    def to_s
-      parts = []
-      parts << base.to_s unless base.empty?
-      parts.concat(plus.map(&:to_s))
-      text = parts.empty? ? "{}" : parts.join(" ∪ ")
-      text = "#{text} \\ #{minus.map(&:to_s).join(' \\ ')}" unless minus.empty?
-      text = "(#{text}) ∩ #{within}" unless within == RealSet.reals
-      text
-    end
+    # Brackets wherever a union meets \ or ∩: `A ∪ B \ C` and
+    # `{k | k in ZZ} ∩ (-oo, 0) ∪ (0, oo)` read two ways (the sixth
+    # review's preflight).
+    def to_s = written(->(set) { set.to_s }, " ∪ ", " \\ ", " ∩ ", "{}", "(", ")")
     alias inspect to_s
 
-    def to_latex(wrap: nil) = to_s
+    def to_latex(wrap: nil)
+      written(->(set) { LaTeX.of(set) }, " \\cup ", " \\setminus ", " \\cap ", "\\emptyset", "\\left(", "\\right)")
+    end
+
+    private
+
+    def written(show, cup, minus_sign, cap, empty, open, close)
+      pieces = []
+      pieces << show.call(base) unless base.empty?
+      pieces.concat(plus.map { |set| show.call(set) })
+      united = pieces.size > 1 || (pieces.size == 1 && !base.empty? && base.intervals.size > 1)
+      text = pieces.empty? ? empty : pieces.join(cup)
+      restricted = !minus.empty? || within != RealSet.reals
+      text = "#{open}#{text}#{close}" if united && restricted
+      unless minus.empty?
+        removed = minus.map { |set| show.call(set) }.join(cup)
+        text = "#{text}#{minus_sign}#{minus.size > 1 ? "#{open}#{removed}#{close}" : removed}"
+      end
+      unless within == RealSet.reals
+        bound = show.call(within)
+        bound = "#{open}#{bound}#{close}" if within.intervals.size > 1
+        text = "#{text}#{cap}#{bound}"
+      end
+      text
+    end
+
+    public
   end
 
   class Inequality

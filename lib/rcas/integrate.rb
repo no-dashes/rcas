@@ -78,15 +78,70 @@ module RCAS
       return found if generic || !complete?(found)
       parameters = (f.variables & found.variables) - [x.name]
       return found if parameters.empty?
-      branches = special_values(found, x, parameters).filter_map do |parameter, value|
-        at = integrate(f.subs(parameter => value).simplify, x)
+      branches = special_values(found, x, parameters).filter_map do |parameter, value, denominator|
+        next family_branch(f, x, parameter, value, denominator) if value.is_a?(ImageSet)
+        integrand = f.subs(parameter => value).simplify
+        # log(a*x) at a = 0 is log(0): no integrand, so no branch
+        next nil unless defined_value?(integrand)
+        at = integrate(integrand, x)
         complete?(at) ? [Equation.new(parameter, value), at] : nil
       end
       branches.empty? ? found : Piecewise.new(branches + [[Piecewise::OTHERWISE, found]])
     end
 
-    # [parameter, value] pairs at which a denominator of the antiderivative
-    # that is free of x vanishes, for one parameter at a time.
+    # Infinitely many special values - sin(a) = 0 for 1/(sin(a)*x + 1),
+    # where one period gave a = 0 and a = pi and a = 2*pi divided by zero
+    # (the sixth review's preflight) - are one branch, on the condition
+    # that the denominator vanishes. Its integrand is the one at a member
+    # with k an integer; when that still depends on k, the branch keeps
+    # the integral unevaluated rather than a wrong antiderivative.
+    def family_branch(f, x, parameter, family, denominator)
+      coeff, factors = Simplify.factorize(denominator)
+      condition = Equation.new(coeff.is_a?(Numeric) ? Simplify.rebuild_product(1, factors) : denominator, Num.new(0))
+      names = family.parameters.map(&:name)
+      integrand = atom_value(f, parameter, denominator)
+      unless integrand
+        bindings = family.parameters.to_h { |p| [p.name, family.domain] }
+        integrand = RCAS.assume(**bindings) { f.subs(parameter => family.expr).simplify }
+      end
+      # x/(exp(a) - 1) has no integrand where exp(a) = 1: no branch
+      return nil unless defined_value?(integrand)
+      at = integrate(integrand, x) if (integrand.variables & names).empty?
+      at = Integral.new(f, x) unless at && complete?(at) && (at.variables & names).empty?
+      [condition, at]
+    rescue ZeroDivisionError
+      nil
+    rescue StandardError, NotImplementedError, RCAS::Unsupported => rescued
+      RCAS.guard!(rescued, refused: true)
+      [condition || Equation.new(denominator, Num.new(0)), Integral.new(f, x)]
+    end
+
+    # The denominator is linear in one function of the parameter, cos(a) or
+    # exp(a): where it vanishes, that function has one value, and the
+    # integrand there is f with the function replaced by it - cos(a) = 0
+    # makes 1/(cos(a)*x + 1) the integrand 1, which no member pi/2 + pi*k
+    # shows as plainly. nil for any other denominator.
+    def atom_value(f, parameter, denominator)
+      atoms = denominator.each_node.select { |n| n.is_a?(Fn) && n.variables.include?(parameter.name) }.uniq
+      return nil unless atoms.size == 1
+      atom = atoms.first
+      t = Expression.fresh_variable(:t, denominator.variables | f.variables)
+      linear = denominator.subs(atom => t).simplify
+      return nil if linear.variables.include?(parameter.name)
+      values = Solve.solve(linear, t, principal: true)
+      return nil unless values.is_a?(Array) && values.size == 1 && values.first.is_a?(Expression) && values.first.variables.empty?
+      replaced = f.subs(atom => values.first).simplify
+      replaced.variables.include?(parameter.name) ? nil : replaced
+    rescue ZeroDivisionError
+      raise
+    rescue StandardError, NotImplementedError, RCAS::Unsupported => rescued
+      RCAS.guard!(rescued, refused: true)
+      nil
+    end
+
+    # [parameter, value, denominator] at which a denominator of the
+    # antiderivative that is free of x vanishes, for one parameter at a
+    # time; the value is a point or a family.
     def special_values(found, x, parameters)
       denominators = []
       found.each_node do |node|
@@ -99,15 +154,18 @@ module RCAS
         movers = d.variables & parameters
         next [] unless movers.size == 1
         parameter = Var.new(movers.first)
+        # complete: one period of sin(a) = 0 left a = 2*pi dividing by zero
         roots = begin
-          Solve.solve(d, parameter, principal: true)
+          Solve.solve(d, parameter)
         rescue ArgumentError, NotImplementedError, RCAS::Unsupported
           next []
         end
         next [] unless roots.is_a?(Array)
-        roots.select { |r| r.is_a?(Expression) && r.variables.empty? }.map { |r| [parameter, r.simplify] }
+        points = roots.select { |r| r.is_a?(Expression) && r.variables.empty? }.map { |r| [parameter, r.simplify, d] }
+        families = roots.select { |r| r.is_a?(ImageSet) }.map { |r| [parameter, r, d] }
+        points + families
       end
-      pairs.uniq
+      pairs.uniq { |p, v, _| [p, v] }
     end
 
     def integrate(expr, var)
@@ -147,11 +205,36 @@ module RCAS
       # the reals: log|u| is one too, on every interval that avoids u = 0,
       # and it is the one a real integral wants (the constant differs per
       # piece, which is exactly why the pieces are evaluated separately).
-      if real_integrand?(f) && (value.nil? || !real_valued?(value))
+      # Only where f is real on the whole range, though: 1/sqrt(x**2 - 1)
+      # over 0..1 is -i*pi/2, and log|u| made it 0. A range on which f is
+      # not real keeps its F(b) - F(a) only when that is not real either,
+      # and otherwise stays formal below - a principal antiderivative can
+      # cross its branch cut inside the range (asin(2) for
+      # 1/sqrt(1 - x**2) over 0..2 has the wrong sign of i).
+      if real_integrand?(f) && (value.nil? || !real_valued?(value)) && real_on_range?(f, x, bounds)
         value = between(real_logs(antiderivative), x, bounds)
       end
       return Integral.new(f, x, from, to) if value.nil? || (real_integrand?(f) && !real_valued?(value))
       value
+    end
+
+    # f is real inside each piece between the bounds: every condition of
+    # its real domain - a log's argument positive, a root's radicand not
+    # negative, asin's argument within [-1, 1] - is proved on the piece
+    # (Analysis.sign_on_interval, which is a proof and not a sample). The
+    # conditions "a denominator is not 0" are the poles, and the pieces
+    # already end there.
+    def real_on_range?(f, x, bounds)
+      conditions = Analysis.domain_conditions(f, x).reject { |c| c.op == :!= }
+      bounds.each_cons(2).all? do |p, q|
+        conditions.all? do |c|
+          sign = Analysis.sign_on_interval((c.lhs - c.rhs).simplify, x, p, q)
+          %i[> >=].include?(c.op) ? sign == :positive : sign == :negative
+        end
+      end
+    rescue StandardError, NotImplementedError, RCAS::Unsupported => rescued
+      RCAS.guard!(rescued, refused: true)
+      false
     end
 
     # abs(u) and sign(u) with a u that is not linear (the piecewise rule
@@ -460,6 +543,10 @@ module RCAS
           # log(log(1/2)) is not real either, and its argument is not a Num
           arg = node.args.first
           arg.variables.empty? && (value = real_number(arg)) && !value.positive?
+        elsif node.is_a?(Fn) && %i[asin acos].include?(node.name)
+          # asin(2) is pi/2 + i*acosh(2), and nothing in the node says i
+          arg = node.args.first
+          arg.variables.empty? && Decide.sign((Fn.new(:abs, [arg]) - 1).simplify) == :positive
         end
       end
     end
