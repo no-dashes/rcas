@@ -536,7 +536,11 @@ class ChatSessionTest < Minitest::Test
     out = StringIO.new
     assert_equal 0, RCAS::Chat.start(["--help"], input: StringIO.new, output: out)
     assert_includes out.string, "--resume"
-    assert_equal 1, RCAS::Chat.start(["--continue"], input: StringIO.new, output: StringIO.new), "nothing to continue yet"
+    # the refusal goes to stderr, as a command-line error does; captured, so
+    # that it is checked rather than printed into the test run
+    assert_output(nil, "no saved session to continue\n") do
+      assert_equal 1, RCAS::Chat.start(["--continue"], input: StringIO.new, output: StringIO.new), "nothing to continue yet"
+    end
   end
 end
 
