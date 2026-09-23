@@ -179,7 +179,7 @@ lib/rcas/matrix.rb          MatrixSpace (QQ**[2,3]), Matrix, Elimination (rref, 
 lib/rcas/poly_matrix.rb     PolyDet/RatDet/PolyLinearSolve/nullspace (Horn 2008 ch. 6): degree bound, rational evaluation, Newton interpolation; Matrix falls back to Elimination when it returns nil
 lib/rcas/scalar.rb          entry arithmetic with Num fast paths; zero? (exact via Algebraic, then Decide; a non-constant entry is zero when it expands, cancels or trigsimps to 0 - `identically_zero?`)
 lib/rcas/decide.rb          Decide.sign/zero?/identically_zero?: the one numeric decision procedure (exact, then precisions measured against an error bound, then a Float with a running error bound; a zero only by root separation or a normal form; nil = undecided)
-lib/rcas/hold.rb            hold { } via RubyVM::AbstractSyntaxTree; sets RubyVM.keep_script_lines = true; a qualified RCAS.integrate(...) call inside the block is treated like the bare one
+lib/rcas/hold.rb            hold { } via RubyVM::AbstractSyntaxTree; sets RubyVM.keep_script_lines = true; a qualified RCAS.integrate(...) call inside the block is treated like the bare one. A Prism-compiled block (Ruby >= 3.4) has no AST: `reparsed_body` cuts its source out by the iseq's code_location and parses that text; a block with no readable source is refused, never run
 lib/rcas/steps.rb           Step/Derivation and Steps: worked solutions (diff, integrate, solve, factor, apart, rref, gcd, discuss). Each narrator names the rule and asks the library for the piece, so the working cannot disagree with the answer; the fallback line says no textbook rule applies
 lib/rcas/functions.rb       the top-level functions (bare in irb, RCAS.x elsewhere); Functions.fold
 lib/rcas/core_ext.rb        Symbol/Numeric operators, Symbol#in/eq/< ...
@@ -199,7 +199,8 @@ lib/rcas/app/launcher.rb    --install/--uninstall: .app bundle (macOS), .desktop
 lib/rcas/app/public/        index.html, app.css, app.js: the worksheet
 bin/rcas, bin/rcas-chat, bin/rcas-app
 test/*_test.rb              minitest; test/manual_test.rb runs every `rcas>` transcript in MANUAL.md
-test/app_test.rb            the window front end: worksheet cells, the server (including the token, Host and traversal guards), the browser flags, the desktop entries
+test/app_test.rb            the window front end: worksheet cells, the server (including the token, Host and traversal guards), the browser flags, the desktop entries; runs test/js/app_race.js (plain Node, stub DOM, the real app.js) when node is installed
+test/test_helper.rb         TestSupport.hash_style (both Hash#inspect styles, applied to both sides) and TestSupport.anthropic? (the optional gem's tests skip without it)
 MANUAL.md                   the user manual (usage); README.md (setup only); assets/ (logo)
 ```
 
@@ -372,6 +373,9 @@ MANUAL.md                   the user manual (usage); README.md (setup only); ass
   asset is served `application/octet-stream` with `Content-Disposition:
   attachment`, so a link to one downloads - media elements ignore both
   headers and would have played it, but only if the tag survived.
+- **Run the suite under Ruby 4 too** before a review round:
+  `RCAS_STRICT=1 /opt/homebrew/opt/ruby@4/bin/ruby -Ilib -Itest -e 'Dir["test/**/*_test.rb"].sort.each { |f| require File.expand_path(f) }'`
+  (Homebrew's; its default parser is Prism and its Hash#inspect is the 3.4 one). Both were green on 23 Sept 2026: 1184 runs, 4 skips under Ruby 4 (the chat tests without the anthropic gem).
 - Smoke-test interactively with piped input:
   `printf 'x + 1\n' | ruby bin/rcas` (no `=> ` prefix without a tty) or
   `printf '/settings\n' | RCAS_HOME=/tmp/h ruby bin/rcas-chat`.
@@ -1376,8 +1380,79 @@ leftovers were fixed, with tests in `test/review6_closing_test.rb`:
   - `2**x = 3**x` (bases with no common root, the log route over CC).
   - Certifying the Newton path of `nsolve`.
 
+## The third external review (23 Sept 2026, evening)
+
+A project-wide review of `72c45e5`, run under Ruby 4.0.7 with Prism,
+brought ten findings. All of them reproduced and all are fixed, with tests
+in `test/review_peer3_test.rb`, `test/js/app_race.js` and
+`performance_test` (the reviewer's harness files never arrived; the
+reproducers were rebuilt from the text). What each fix teaches:
+
+- **Certified `Precision.evalf` gave 0 on numbers alone.** Two zeros at
+  the last guards, or a value that shrank twice, returned 0. That is also
+  what `exp(10**-1000) - 1` and `sin(pi + 10**-200)` look like. It now asks
+  `Decide.zero?` for a proof when the numbers look like a zero, keeps
+  raising the guard without one, and ends in `NoConvergence`, whose message
+  says "0 to N digits, not proved". *Exception:* an expression with a Float
+  leaf has no exact value to prove, and 0 is its honest value
+  (`proved_zero?`), or checking a solution at a Float sample point breaks.
+  An unprovable exact identity (`atan(1/2) + atan(1/3) - pi/4`) is refused
+  now; that is the policy, and the manual shows it.
+- **`nintegrate` compared the ends as Floats.** `10**20` and `10**20 + 1`
+  are one Float, and a width of `10**-400` underflows.
+  `exact_width`/`lost_width?` decide the width exactly and `rescaled`
+  integrates over 0..1 with the width as an exact factor.
+- **`least_squares` used the transpose**, not the adjoint. `(1, 2i)'` gave
+  -1/3 instead of 1/5. `dot` was Hermitian already, and the normal
+  equations were not.
+- **`diff(D(x*y, x), y)` was 0**: any other variable counted as constant.
+  `Differentiate.derivative` takes the inner derivative first, keeps a
+  formal mixed `D(D(f, x), y)` when it cannot, and still answers 0 for an
+  unknown function (`D(y, x)` is y(x)).
+- **`hold` ran its block under Ruby 4.** `RubyVM::AbstractSyntaxTree.of`
+  raises for a Prism-compiled block, and the fallback *evaluated* it.
+  Under `--parser=parse.y`, Ruby 4 also hands back the whole `ITER` rather
+  than the `SCOPE`. Now: the ITER is unwrapped; a Prism block is cut out of
+  its source by `RubyVM::InstructionSequence#to_a[4][:code_location]`
+  (from the file, or `script_lines` for eval'd code, trying each possible
+  start line because an eval's line number is not recorded) and re-parsed
+  with `AbstractSyntaxTree.parse`, which still works under Ruby 4; anything
+  else is refused. Code given to `ruby -e` has no readable source under
+  Prism, so the parser test writes a script file.
+- **`real_domain(x**0.5)` and `x**pi` were the whole line**: only a literal
+  Rational exponent counted. `fractional_exponent?` judges a Float by its
+  value and any other constant by `Infer.excluded?(e, ZZ)`, and refuses one
+  whose integrality it cannot decide.
+- **Distribution parameters were checked only as `Num`s.**
+  `Exponential(-sqrt(2))` and `Normal(0, i)` went through. Every constant
+  parameter now has to be real, and `requires` decides the conditions by
+  `Decide.sign`. An undecided constant is let through, like a symbol.
+- **`project` zipped vectors of different lengths.** `dot`/`add`/`subtract`
+  check `same_length!`.
+- **The worksheet's Enter read `input.value` after an await.** `submit`
+  takes the captured text, text typed meanwhile stays in the field, and
+  `enterCount` drops a stale answer.
+- **`ChiSquare(10**4).cdf(10**4)` took 60 s under Ruby 4** (1.3 s under
+  3.3): the per-term Rational gcds. `exponential_partial_sum` sums Integers
+  over one common denominator with exact small divisions, and takes 0.07 s.
+  **A Rational accumulated term by term is a cliff on a Ruby whose bignum
+  gcd is slow**; look for others (Poisson and binomial tails) if a review
+  times them.
+
+Ruby 3.4 and later print hashes as `{x => 1, a: 2}`. The manual keeps the
+3.3 spelling, and `manual_test` compares both sides through
+`TestSupport.hash_style`: exact about everything but the punctuation of
+a hash.
+
 ## Traps we have hit (so you do not hit them again)
 
+- **A sign test is never a product.** `value * other > 0` underflows to 0
+  for two values near 1e-165 and reads as a sign change (nsolve called a
+  root of order 41 a jump). Compare the signs (`Numerics.same_sign?`).
+- **Hash#inspect changed in Ruby 3.4.** Never compare the `inspect` of a
+  Hash against a literal without `TestSupport.hash_style` on both sides.
+- **Never evaluate a block that was handed over to be kept.** A
+  fallback that runs it answers `hold { 1 / 2 }` with 0.
 - `RCAS::IRB::AutoSymbol` turns an undefined `name(args)` with Expression,
   Numeric or Symbol arguments into `Fn.new(name, args)` (unknown function,
   for `rsolve`'s `u(n + 1)`); typos such as `sqr(2)` therefore print back
