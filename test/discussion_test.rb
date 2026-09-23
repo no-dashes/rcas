@@ -209,8 +209,10 @@ class DiscussionTest < Minitest::Test
     assert_nil report.domain, "the complement of a family is not a RealSet, and saying so is honest"
     assert_equal "pi", report.period.to_s
     assert_equal ["{pi/2 + pi*k | k in ZZ}"], report.asymptotes[:vertical].map(&:to_s)
-    assert_equal ["-pi/2", "pi/2"], report.gaps.map { |point, _kind, _l, _r| point.to_s }
-    assert_equal %i[pole pole], report.gaps.map { |_point, kind, _l, _r| kind }
+    # one period, [0, pi), as every other row (the fourth review: the zeros
+    # of a periodic f were those of one period of the inner argument)
+    assert_equal ["pi/2"], report.gaps.map { |point, _kind, _l, _r| point.to_s }
+    assert_equal %i[pole], report.gaps.map { |_point, kind, _l, _r| kind }
   end
 
   private

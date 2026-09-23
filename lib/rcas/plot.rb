@@ -703,7 +703,8 @@ module RCAS
       return nil unless v.is_a?(Numeric) && !v.is_a?(Complex)
       v = v.to_f
       v.finite? ? v : nil
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       nil
     end
 
@@ -711,7 +712,8 @@ module RCAS
       return nil if value.nil?
       v = value.is_a?(Numeric) ? value : Expression.lift(value).evalf
       v.is_a?(Numeric) && !v.is_a?(Complex) && v.finite? ? v.to_f : nil
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       nil
     end
 

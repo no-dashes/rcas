@@ -72,8 +72,12 @@ module RCAS
     def power(expr, var)
       u, n = expr.base, expr.exponent
       if !n.variables.include?(var.name)
-        # d(u**n) = n * u**(n-1) * u'
-        Mul.new(Mul.new(n, Pow.new(u, Sub.new(n, Num.new(1)))), diff(u, var))
+        # d(u**n) = n * u**(n-1) * u' - and 0 when u does not move: sqrt(x - x)
+        # is the zero function, and 0**(-1/2)*0 divided by zero (fourth review)
+        du = diff(u, var)
+        flat = du.is_a?(Num) ? du : du.simplify
+        return Num.new(0) if flat.is_a?(Num) && flat.value.is_a?(Numeric) && flat.value.zero?
+        Mul.new(Mul.new(n, Pow.new(u, Sub.new(n, Num.new(1)))), du)
       elsif !u.variables.include?(var.name)
         # d(a**v) = a**v * log(a) * v'
         Mul.new(Mul.new(expr, Fn.new(:log, [u])), diff(n, var))

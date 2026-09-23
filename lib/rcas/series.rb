@@ -153,6 +153,12 @@ module RCAS
       return Piecewises.limit(f, x, a, dir) if f.is_a?(Piecewise)
       known = IntegralFunctions.limit(f, x, a)
       return known if known
+      if infinite?(a) && (through = through_exponential(f, x, a))
+        return through
+      end
+      if (through = through_logarithm(f, x, a, dir))
+        return through
+      end
       g, = localize(f, x, a)
       side = infinite?(a) ? :right : (dir || :both)
       if side == :both
@@ -170,6 +176,54 @@ module RCAS
       # l'Hopital attempt talking, not an answer about the limit.
       raise unless e.message.start_with?(Integrate::NO_DERIVATIVE)
       Limit.new(f, x, a)
+    end
+
+    # f depends on x only through exp(a_i*x + b_i) with rational a_i: with
+    # u = exp(l*x), l the greatest common measure of the a_i, it is a
+    # function of u alone, and x -> +-oo is u -> oo or u -> 0+. The logistic
+    # exp(x)/(1 + exp(x)) tends to 1 that way; the series at infinity meets
+    # exp(1/t), which has none, and discuss reported "no asymptote" for a
+    # limit it had not taken (fourth review, S11). nil when f is not such a
+    # function or the limit in u is not taken either.
+    def through_exponential(f, x, a)
+      exps = f.each_node.select { |n| n.is_a?(Fn) && n.name == :exp && n.args.first.variables.include?(x.name) }.uniq
+      return nil if exps.empty?
+      slopes = exps.map do |e|
+        coefficients = Solve.polynomial_coefficients(e.args.first, x)
+        return nil unless coefficients&.size == 2 && coefficients.all? { |c| !c.variables.include?(x.name) }
+        slope = coefficients[1].simplify
+        return nil unless slope.is_a?(Num) && (slope.value.is_a?(Integer) || slope.value.is_a?(Rational))
+        [e, slope.value.to_r, coefficients[0]]
+      end
+      measure = slopes.map { |_, m, _| m.abs }.reduce { |g, m| Rational(g.numerator.gcd(m.numerator), g.denominator.lcm(m.denominator)) }
+      u = Var.new(:_u)
+      replaced = slopes.reduce(f) { |acc, (e, m, b)| acc.subs(e => Fn.new(:exp, [b]) * u**Num.new(m / measure)) }.simplify
+      return nil if replaced.variables.include?(x.name)
+      value = a == OO ? limit(replaced, u, OO) : limit(replaced, u, Num.new(0), :right)
+      value.is_a?(Limit) ? nil : value
+    rescue SeriesError, ZeroDivisionError, ArgumentError, NotImplementedError
+      nil
+    end
+
+    # f depends on x only through log(x): with u = log(x), x -> 0+ is
+    # u -> -oo and x -> oo is u -> oo. 1/log(x) tends to 0 at 0 from the
+    # right, which the series cannot say (1/log(t) is below every constant
+    # and above every power). Only from the right at 0: on the left log(x)
+    # is not real.
+    def through_logarithm(f, x, a, dir)
+      target = if a == OO then OO
+               elsif a.is_a?(Num) && a.value.zero? && dir == :right then Neg.new(OO).simplify
+               end
+      return nil if target.nil?
+      logs = f.each_node.select { |n| n.is_a?(Fn) && n.name == :log && n.args.first.variables.include?(x.name) }.uniq
+      return nil unless logs == [Fn.new(:log, [x])]
+      u = Var.new(:_v)
+      replaced = f.subs(logs.first => u)
+      return nil if replaced.variables.include?(x.name)
+      value = limit(replaced, u, target)
+      value.is_a?(Limit) ? nil : value
+    rescue SeriesError, ZeroDivisionError, ArgumentError, NotImplementedError
+      nil
     end
 
     # ---- helpers -----------------------------------------------------------
@@ -543,7 +597,8 @@ module RCAS
     # continuous there). nil where this does not apply.
     def one_sided_kink(name, s, order)
       return nil unless Thread.current[:rcas_one_sided] && %i[abs sign].include?(name)
-      return nil unless s.constant_term.is_a?(Num) && s.constant_term.value.zero?
+      # u -> 0 (the kink) or u -> oo (|1/t| at t -> 0+): the leading term decides
+      return nil unless s.min_exponent.negative? || (s.constant_term.is_a?(Num) && s.constant_term.value.zero?)
       lead = s.terms[s.min_exponent]
       return nil if lead.variables.include?(Series::LOG.name)
       sign = begin
@@ -612,11 +667,11 @@ module RCAS
         value = name == :erf ? (sign.negative? ? -1 : 1) : (sign.negative? ? 2 : 0)
         return Series.constant(Num.new(value), order)
       end
-      raise SeriesError, "#{f} has an essential singularity" if s.min_exponent.negative?
-      c = s.constant_term
       if (kink = one_sided_kink(name, s, order))
         return kink
       end
+      raise SeriesError, "#{f} has an essential singularity" if s.min_exponent.negative?
+      c = s.constant_term
       non_analytic!(f, c)
       s0 = s - Series.constant(c, order)
       w = Var.new(:_w)

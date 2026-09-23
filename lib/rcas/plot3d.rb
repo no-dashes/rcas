@@ -392,7 +392,8 @@ module RCAS
       return nil unless v.is_a?(Numeric) && !v.is_a?(Complex)
       v = v.to_f
       v.finite? ? v : nil
-    rescue StandardError
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       nil
     end
 

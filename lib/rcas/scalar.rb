@@ -47,6 +47,10 @@ module RCAS
     # assumption, which is about pivots that vanish only for special values.
     def identically_zero?(a)
       return false if a.each_node.any? { |n| n.is_a?(Integral) || n.is_a?(Derivative) || n.is_a?(Sum) || n.is_a?(Limit) }
+      # a value at one rational point is a proof of the opposite, and costs
+      # a walk where the normal forms below cost an expansion: a generic 4x4
+      # rank spent 1.5 s in them (fourth review)
+      return false if nonzero_somewhere?(a)
       expanded = a.expand
       return true if expanded.is_a?(Num) && expanded.value.zero?
       if expanded.each_node.any? { |n| n.is_a?(Div) || (n.is_a?(Pow) && n.exponent.is_a?(Num) && Simplify.negative?(n.exponent.value)) }
@@ -59,11 +63,52 @@ module RCAS
       false
     end
 
+    # cos(u)**2 is 1 - sin(u)**2 and cosh(u)**2 is 1 + sinh(u)**2: with every
+    # even power rewritten so, a sum of Pythagorean identities expands to 0
+    # in one linear pass - 25 of them were past the size where trigsimp
+    # runs, and a pivot that is zero stood as one (fourth review, L9).
+    def pythagorean_zero?(e)
+      rewritten = pythagorean(e)
+      return false if rewritten.equal?(e)
+      reduced = rewritten.expand
+      reduced.is_a?(Num) && reduced.value.is_a?(Numeric) && reduced.value.zero?
+    end
+
+    def pythagorean(e)
+      if e.is_a?(Pow) && e.base.is_a?(Fn) && %i[cos cosh].include?(e.base.name) && e.exponent.is_a?(Num) &&
+         e.exponent.value.is_a?(Integer) && e.exponent.value.positive? && e.exponent.value.even?
+        other = Fn.new(e.base.name == :cos ? :sin : :sinh, e.base.args)
+        square = e.base.name == :cos ? Num.new(1) - other**2 : Num.new(1) + other**2
+        return square**(e.exponent.value / 2)
+      end
+      return e if e.children.empty?
+      mapped = e.map_children { |c| pythagorean(c) }
+      mapped == e ? e : mapped
+    end
+
+    # True when the expression has an exact non-zero value at a rational
+    # point (a fixed one, so the answer does not depend on the run).
+    def nonzero_somewhere?(a)
+      names = a.variables
+      point = names.each_with_index.to_h { |name, i| [name, Num.new(Rational(PRIMES[i % PRIMES.size], 7 + i))] }
+      value = a.subs(point).simplify
+      return !value.value.zero? if value.is_a?(Num) && value.value.is_a?(Numeric)
+      value.variables.empty? && Decide.zero?(value) == false
+    rescue ZeroDivisionError
+      false
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
+      false
+    end
+
+    PRIMES = [3, 5, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61].freeze
+
     # sin(2*x) - 2*sin(x)*cos(x) and sin(x)**2 + cos(x)**2 - 1: zero by an
     # identity, which the addition formulas and trigsimp show. Only for
     # small expressions - this runs inside elimination.
     def trigonometric_zero?(e)
       return false unless e.each_node.any? { |n| n.is_a?(Fn) && Trigonometry::SQUARES.key?(n.name) }
+      return true if pythagorean_zero?(e)
       return false if e.each_node.count > 200
       rewritten = Trigonometry.expand_trig(e).expand
       return true if rewritten.is_a?(Num) && rewritten.value.zero?

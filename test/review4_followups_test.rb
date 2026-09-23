@@ -227,6 +227,49 @@ class Review4FollowupsTest < Minitest::Test
     assert refused { RCAS.nintegrate(RCAS.log(@x), x: -2..-1) }
   end
 
+  # ---- limits and asymptotes ------------------------------------------------------------
+
+  # The logistic function and its relatives, through u = exp(x); 1/log(x)
+  # through u = log(x).
+  def test_limits_through_an_exponential_or_a_logarithm
+    e = RCAS.exp(@x)
+    assert_equal n(1), RCAS.limit(e / (1 + e), @x, RCAS::OO)
+    assert_equal n(0), RCAS.limit(e / (1 + e), @x, -RCAS::OO)
+    assert_equal n(1), RCAS.limit(1 / (1 + RCAS.exp(-@x)), @x, RCAS::OO)
+    assert_equal RCAS::OO, RCAS.limit(RCAS.exp(@x / 2) / (RCAS.exp(@x / 3) + 1), @x, RCAS::OO)
+    assert_equal n(0), RCAS.limit(1 / RCAS.log(@x), @x, 0, :right)
+    assert_equal n(1), RCAS.limit(RCAS.log(@x) / (1 + RCAS.log(@x)), @x, RCAS::OO)
+  end
+
+  # An asymptote row is "not determined" rather than "none" when a limit
+  # is not taken; a periodic function has no horizontal asymptote at all.
+  def test_discuss_says_when_an_asymptote_is_not_determined
+    report = RCAS.discuss(RCAS.exp(@x) / (1 + RCAS.exp(@x)), @x)
+    assert_equal [n(0), n(1)].sort_by(&:to_s), report.asymptotes[:horizontal].sort_by(&:to_s)
+    report = RCAS.discuss(RCAS.tan(@x), @x)
+    assert_equal [], report.asymptotes[:horizontal]
+    assert_equal ["{pi/2 + pi*k | k in ZZ}"], report.asymptotes[:vertical].map(&:to_s)
+    assert_raises(NotImplementedError) { RCAS::Analysis.horizontal_asymptotes(RCAS.exp(@x) / (@x * (1 + RCAS.exp(@x))) + RCAS.sin(@x), @x) }
+  end
+
+  # ---- declared domains for families -----------------------------------------------------
+
+  # a + b*k meets ZZ on a residue class, and NN or a sign cut it to a side.
+  def test_a_rational_family_under_a_declared_domain
+    k = @k
+    assert_equal [RCAS::ZZ], RCAS::Solve.restrict([RCAS::ImageSet.new(k / 2, [k])], @x, RCAS::ZZ)
+    assert_equal [], RCAS::Solve.restrict([RCAS::ImageSet.new(n(1r / 2) + k, [k])], @x, RCAS::ZZ)
+    assert_equal ["{1 + 3*k | k in ZZ}"], RCAS::Solve.restrict([RCAS::ImageSet.new(1 + 3 * k / 2, [k])], @x, RCAS::ZZ).map(&:to_s)
+    assert_equal ["{1 + 3*k | k in NN}"], RCAS::Solve.restrict([RCAS::ImageSet.new(1 + 3 * k / 2, [k])], @x, RCAS::NN).map(&:to_s)
+    assert_equal [RCAS::NN], RCAS::Solve.restrict([RCAS::ImageSet.new(k / 2, [k])], @x, RCAS::NN)
+  end
+
+  # A removable pole cancels out of the sign chart without being sampled.
+  def test_a_sign_chart_across_a_removable_pole
+    assert_equal "[1, oo)", RCAS.solve((@x**2 - @x) / @x >= 0, @x).to_s
+    assert_equal "(-oo, -1)", RCAS.solve((@x**2 + @x) / @x < 0, @x).to_s
+  end
+
   # Poisson pmf in Floats keeps its digits too: e**-2 * 2**3/3!.
   def test_a_float_poisson_pmf_keeps_its_digits
     assert_in_delta Math.exp(-2) * 8 / 6, RCAS::Distributions::Poisson.new(2.0).pdf(3).value, 1e-17

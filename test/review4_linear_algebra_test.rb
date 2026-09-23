@@ -77,4 +77,65 @@ class Review2LinearAlgebraTest < Minitest::Test
     assert_equal 2, m.rank
     refute_equal n(0), m.det
   end
+
+  # Regression. [[e, e], [0, e]] with e = 1e-12 is a Jordan block: one
+  # eigenvector, not diagonalizable, at any scale (da72570: false). The
+  # Float kernel counts a pivot below max(|A|, 1)*1e-9 as zero, an
+  # absolute tolerance for a small matrix, and finds two eigenvectors; for
+  # diag(1e-12, 2e-12) it finds two per eigenvalue.
+  def test_a_tiny_float_jordan_block_is_not_diagonalizable
+    refute RCAS.matrix([[1e-12, 1e-12], [0.0, 1e-12]]).diagonalizable?
+    RCAS.matrix([[1e-12, 0.0], [0.0, 2e-12]]).eigenvectors.each do |l, _, vectors|
+      assert_equal 1, vectors.size, "eigenspace of #{l}"
+    end
+  end
+
+  # Partly fixed (L9). A pivot that is identically zero by sin**2 + cos**2 = 1
+  # is found for a small entry, but trigonometric_zero? gives up above 200
+  # nodes (scalar.rb) and the rank is 2 again. 25 copies of the identity
+  # are still zero, so the rank is 1.
+  def test_a_large_trigonometric_zero_pivot_is_still_zero
+    RCAS.assume(x: RCAS::RR) do
+      w = (1..25).map { |k| RCAS.sin(@x + k)**2 + RCAS.cos(@x + k)**2 - 1 }.reduce(:+)
+      assert_equal 1, RCAS.matrix([[1, 1], [1, 1 + w]]).rank
+    end
+  end
+
+  # Partly fixed (L10). The Float eigenvector kernel now counts a pivot at
+  # rounding level as zero, but rank does not: [[1, 3], [0.1, 0.3]] has
+  # proportional rows (det -5.6e-17 is rounding), so its rank is 1 - or
+  # rank refuses to decide - and an "inverse" with entries of 5e16 is noise.
+  def test_float_rank_uses_the_same_tolerance_as_float_eigenvectors
+    m = RCAS.matrix([[1.0, 3.0], [0.1, 0.3]])
+    begin
+      r = m.rank
+    rescue NotImplementedError, ArgumentError
+      return pass
+    end
+    assert_equal 1, r
+  end
+
+  # The reduced row echelon form of a rank-1 matrix has a zero second row.
+  # rref now finds the rank but prints the (2,2) entry uncancelled,
+  # -1/(1 + x) + 1 + x/(1 + x) + ..., which is 0 and reads as a pivot.
+  def test_the_reduced_row_echelon_form_shows_its_zero_rows
+    RCAS.assume(x: RCAS::QQ) do
+      r = RCAS.matrix([[@x + 1, @x - 1], [@x**2 - 1, (@x - 1)**2]]).rref
+      assert_equal n(0), r[1, 0]
+      assert_equal n(0), r[1, 1]
+    end
+  end
+
+  # Performance regression. rank of a generic 4x4 symbolic matrix took
+  # 0.29 s at da72570 and 2.2 s now (rref4 alike): identically_zero? expands
+  # and cancels every candidate pivot. 1 s is over three times the old time.
+  def test_performance_rank_of_a_generic_symbolic_matrix
+    syms = (1..16).map { |i| RCAS::Var.new(:"a#{i}") }
+    RCAS.assume(**syms.to_h { |s| [s.name, RCAS::QQ] }) do
+      m = RCAS.matrix(Array.new(4) { |i| Array.new(4) { |j| syms[4 * i + j] } })
+      assert_equal 4, Timeout.timeout(1.0) { m.rank }
+    end
+  rescue Timeout::Error
+    flunk 'rank of a generic 4x4 symbolic matrix took over 1 s (0.29 s at da72570)'
+  end
 end

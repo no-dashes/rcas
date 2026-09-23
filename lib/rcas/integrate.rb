@@ -17,6 +17,19 @@ module RCAS
     def bound_variable = definite? ? var : nil
     def children = definite? ? [integrand, var, from, to] : [integrand, var]
     def rebuild(integrand, var, from = nil, to = nil) = Integral.new(integrand, var, from, to)
+
+    # An indefinite integral at a point is its antiderivative there: the
+    # variable is taken first, as for a Derivative (integral(x**2, x) at
+    # x = 2 was integral(4, 2)). A definite one binds its variable and goes
+    # through the binder protocol.
+    def replace_with(table)
+      return super if definite? || table.key?(self)
+      pointwise = table.key?(var) || table.any? { |k, v| k != var && v.variables.include?(var.name) && integrand.variables.include?(k.name) }
+      return super unless pointwise
+      found = evaluate
+      raise NotImplementedError, "#{self} has no antiderivative rcas can find, so it cannot be evaluated at a point" if found.each_node.any? { |n| n.is_a?(Integral) }
+      found.replace_with(table)
+    end
     def to_sexp = [:integral, *children.map(&:to_sexp)]
   end
 

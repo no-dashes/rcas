@@ -52,7 +52,7 @@ module RCAS
         out << ["period", [[period]]] if period
         out << ["zeros", items(zeros) { |z| [z] }, nil, repeats(zeros)]
         out << ["y intercept", [["f(0) = ", intercept]]] if intercept
-        out << ["gaps", gaps.map { |point, kind, _left, _right| [point, " (#{kind})"] }] unless gaps.empty?
+        out << ["gaps", gaps.map { |point, kind, _left, _right| [point, " (#{kind})"] }, nil, repeats(gaps)] unless gaps.empty?
         out << ["at infinity", limits.map { |point, value| limit_item(point, value) }, "; "]
         lines = asymptote_items
         out << ["asymptotes", lines.empty? ? [["none"]] : lines]
@@ -86,8 +86,10 @@ module RCAS
       end
 
       def asymptote_items
+        return [["not determined"]] if asymptotes.values.all?(&:nil?)
         vertical = (asymptotes[:vertical] || []).map { |p| ["#{var} = ", p] }
-        vertical + ((asymptotes[:horizontal] || []) + (asymptotes[:oblique] || [])).map { |l| ["y = ", l] }
+        lines = vertical + ((asymptotes[:horizontal] || []) + (asymptotes[:oblique] || [])).map { |l| ["y = ", l] }
+        lines + asymptotes.select { |_, found| found.nil? }.map { |kind, _| ["#{kind} not determined"] }
       end
 
       def self.render(item) = item.map(&:to_s).join
@@ -129,6 +131,7 @@ module RCAS
       # the chart and the answer: sin(x)/x has zeros at every k*pi, k != 0,
       # and "pi" alone was a truncation (third review, S14)
       @principal = !cycle.nil?
+      @cycle = cycle
       first = derivative(f, x)
       second = first && derivative(first, x)
       holes = gaps(f, x)
@@ -255,13 +258,29 @@ module RCAS
     # is a place rather than a line, and may be a whole family of them
     # ({pi/2 + pi*k | k in ZZ} for the tangent), so that question is not
     # asked of it.
+    # Each kind on its own, nil where it is not determined - an undecided
+    # limit made every row "none" (fourth review, S11), and a vertical
+    # asymptote was lost with a horizontal one rcas could not take. A
+    # periodic function that is not constant has no limit at infinity, so
+    # neither a horizontal nor an oblique asymptote.
     def asymptotes(f, x, domain)
-      found = Analysis.asymptotes(f, x, at: ends(domain))
-      found.to_h do |kind, lines|
-        [kind, kind == :vertical ? lines : lines.reject { |line| same?(line, f) }]
+      ends = ends(domain)
+      found = { vertical: undecided_as_nil { Analysis.vertical_asymptotes(f, x) } }
+      if @cycle
+        found[:horizontal] = found[:oblique] = []
+      else
+        found[:horizontal] = undecided_as_nil { Analysis.horizontal_asymptotes(f, x, at: ends) }
+        found[:oblique] = undecided_as_nil { Analysis.oblique_asymptotes(f, x, at: ends) }
       end
+      found.to_h do |kind, lines|
+        [kind, kind == :vertical || lines.nil? ? lines : lines.reject { |line| same?(line, f) }]
+      end
+    end
+
+    def undecided_as_nil
+      yield
     rescue *UNDECIDED
-      { vertical: [], horizontal: [], oblique: [] }
+      nil
     end
 
     # The infinite ends the domain reaches: log(x) has no minus infinity to
@@ -298,12 +317,30 @@ module RCAS
       g = Expression.lift(g)
       return [] unless g.variables.include?(x.name)
       begin
-        found = Solve.solve(g, x, principal: @principal != false)
+        found = (@cycle && one_period(g, x)) || Solve.solve(g, x, principal: @principal != false)
         return nil unless found.is_a?(Array)
         found.select { |root| root.is_a?(ImageSet) ? !root.nonreal? : real?(root) }
       rescue NotImplementedError, ArgumentError, DomainError
         factor_solutions(g, x)
       end
+    end
+
+    # The solutions in [0, T) for the period T of f, counted out of the
+    # complete answer: the principal solutions of g are one period of g,
+    # which need not be f's - sin(2*x)/sin(x) has period 2*pi and its
+    # principal zeros were those of sin(2*x), one period of pi, so 3*pi/2
+    # was missing (fourth review). nil when the families cannot be counted.
+    def one_period(g, x)
+      found = Solve.solve(g, x)
+      return nil unless found.is_a?(Array)
+      top = Analysis.numeric(@cycle) or return nil
+      found.flat_map do |root|
+        next [root] unless root.is_a?(ImageSet)
+        members = root.between(0.0, top) or return nil
+        members.reject { |m| Inequalities.compare(m, @cycle) != -1 }
+      end
+    rescue *UNDECIDED
+      nil
     end
 
     # A product vanishes where one of its factors does, so a product solve
@@ -494,13 +531,18 @@ module RCAS
       nil
     end
 
+    # f(x + T) = f(x) as an identity, shown by the normal forms (the
+    # addition theorems drop the whole turns); four samples agreeing is not
+    # a period - sin(x) + g(x)/10**6 with g vanishing at those samples and
+    # their shifts tends to oo (fourth review).
     def periodic?(f, x, candidate)
       shifted = f.subs(x => (x + candidate).simplify)
-      [0.3, 1.1, 2.4, -0.7].all? do |point|
-        here = Analysis.numeric(f.subs(x => Num.new(point)))
-        there = Analysis.numeric(shifted.subs(x => Num.new(point)))
-        here && there && (here - there).abs < 1e-9 * [1.0, here.abs].max
-      end
+      difference = (shifted - f).simplify
+      return true if difference.is_a?(Num) && difference.value.zero?
+      Scalar.identically_zero?(difference) || Scalar.identically_zero?(Trigonometry.expand_trig(difference).simplify)
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
+      false
     end
   end
 end

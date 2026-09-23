@@ -1286,8 +1286,8 @@ curvature come from a sign chart: the line is cut at the zeros of `f'`
 points, three of them, so that a piece whose sign is not constant - a zero
 the solver missed - is left undecided rather than guessed.
 
-A periodic function is discussed over one period, and every row that
-repeats says so:
+A periodic function is discussed over one period, `[0, T)` for its
+period `T`, and every row that repeats says so:
 
 ```
 rcas> discuss(sin(x), x)
@@ -1299,7 +1299,7 @@ rcas> discuss(sin(x), x)
      y intercept  f(0) = 0
      at infinity  no limit as x -> -oo; no limit as x -> oo
      asymptotes   none
-     extrema      minimum at (-pi/2, -1); maximum at (pi/2, 1) (+ k*2*pi, k an integer)
+     extrema      maximum at (pi/2, 1); minimum at (3*pi/2, -1) (+ k*2*pi, k an integer)
      monotonic    increasing on (0, pi/2), decreasing on (pi/2, 3*pi/2), increasing on (3*pi/2, 2*pi) (+ k*2*pi, k an integer)
      inflections  (0, 0), (pi, 0) (+ k*2*pi, k an integer)
      curvature    concave on (0, pi), convex on (pi, 2*pi) (+ k*2*pi, k an integer)

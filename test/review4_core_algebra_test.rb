@@ -100,4 +100,56 @@ class Review2CoreAlgebraTest < Minitest::Test
       assert(r == :refused || r.is_a?(RCAS::Limit) || r == (-RCAS::OO).simplify, "limit(#{c}*x, x, oo) = #{r.inspect}")
     end
   end
+
+  # d/dx (x*y) = y, so (d/dx (x*y)) at y = x is x - the same as substituting
+  # after differentiating. Substituting y := x into the unevaluated D lets
+  # the new x be differentiated (2*x), and substituting x := 2 builds
+  # D(2**3, 2), whose doit raises; d/dx x**3 at 2 is 12. The indefinite
+  # integral has the same hole: integral(x**2, x) at x = 2 is 8/3 + C.
+  # (Derivative and the indefinite Integral were left out of the
+  # bound-variable protocol in expression.rb.)
+  def test_substitution_into_a_derivative_commutes_with_evaluation
+    d = RCAS.D(@x * @y, @x)
+    assert_equal d.doit.subs(y: @x).simplify, d.subs(y: @x).doit.simplify
+    r = begin
+      RCAS.D(@x**3, @x).subs(x: 2).doit
+    rescue NotImplementedError
+      :refused
+    end
+    assert(r == :refused || value(r) == 12, "D(x**3, x) at x = 2 gave #{r.inspect}")
+    r = begin
+      RCAS::Integral.new(@x**2, @x).subs(x: 2).doit
+    rescue NotImplementedError
+      :refused
+    end
+    assert(r == :refused || r.is_a?(RCAS::Expression), "integral(x**2, x) at x = 2 gave #{r.inspect}")
+  end
+
+  # (x - x)**(1/3) is the zero function, so its derivative is 0; the power
+  # rule builds 0**(-2/3) before anything simplifies (C11: the sqrt case was
+  # fixed, the cube root still raises ZeroDivisionError).
+  def test_derivative_of_the_cube_root_of_zero_is_zero
+    assert_equal n(0), RCAS.diff((@x - @x)**(1 / 3r), @x).simplify
+  end
+
+  # (1 + sqrt(2))**2 - 2*sqrt(2) = 1 + 2*sqrt(2) + 2 - 2*sqrt(2) = 3, an
+  # integer; in? simplifies but does not expand (domains.rb,
+  # expression_member?), so C13 holds only for inputs that simplify fold.
+  def test_membership_of_a_constant_that_expands_to_an_integer
+    assert ((1 + RCAS.sqrt(2))**2 - 2 * RCAS.sqrt(2)).in?(RCAS::ZZ)
+  end
+
+  # Performance regression, not correctness: the rank of a generic 4x4
+  # symbolic matrix took 0.28 s before the third review and takes 1.9 s now,
+  # 1.5 s of it in Scalar.identically_zero? (expand + cancel of every pivot
+  # candidate, scalar.rb). A generous bound.
+  def test_performance_symbolic_rank_is_not_slowed_by_the_zero_test
+    names = (1..4).flat_map { |i| (1..4).map { |j| :"a#{i}#{j}" } }
+    RCAS.assume(**names.to_h { |s| [s, RCAS::RR] }) do
+      m = RCAS.matrix((1..4).map { |i| (1..4).map { |j| RCAS::Var.new(:"a#{i}#{j}") } })
+      t = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      assert_equal 4, m.rank
+      assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - t, :<, 1.0
+    end
+  end
 end

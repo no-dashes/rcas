@@ -68,4 +68,46 @@ class Review2QualityTest < Minitest::Test
     assert_equal n(0), m.det
     assert_equal 1, m.rank
   end
+
+  # (a - 1)(a - 1 - 10**-12)*x > 0: for 1 < a < 1 + 10**-12 the coefficient
+  # is negative, so the solution is x < 0. The parametric solver merges
+  # critical values that agree to ten decimals (inequalities.rb:550,
+  # `uniq { |v| v.evalf.round(10) }`) and answers x > 0 there.
+  def test_parameter_values_closer_than_ten_digits_are_kept_apart
+    eps = n(Rational(1, 10**12))
+    cases = RCAS.solve((@a - 1) * (@a - 1 - eps) * @x > 0, @x)
+    set = cases.at(1 + Rational(1, 2 * 10**12))
+    assert set.include?(-1), "x = -1 solves it at a = 1 + 5e-13, got #{set}"
+    refute set.include?(1), "x = 1 does not solve it at a = 1 + 5e-13, got #{set}"
+  end
+
+  # Quality, not mathematics: the review recommended that strict mode
+  # re-raise TypeError as well as NoMethodError and NameError - `1 + nil`
+  # is a TypeError, and fault injection with TypeErrors under RCAS_STRICT=1
+  # still has 102 of 273 injected bugs in solve absorbed.
+  def test_strict_mode_reraises_a_type_error
+    old = ENV['RCAS_STRICT']
+    ENV['RCAS_STRICT'] = '1'
+    assert_raises(TypeError) { RCAS.guard!(TypeError.new('nil can\'t be coerced into Integer')) }
+  ensure
+    ENV['RCAS_STRICT'] = old
+  end
+
+  # Quality: Analysis.defined_at? rescues StandardError without guard! and
+  # answers true, so under strict mode a programming error in the realness
+  # test (here an injected NoMethodError) becomes "the point is defined".
+  def test_strict_mode_reaches_the_domain_test_of_analysis
+    old = ENV['RCAS_STRICT']
+    ENV['RCAS_STRICT'] = '1'
+    singleton = RCAS::Inequalities.singleton_class
+    singleton.alias_method(:__review_real, :real?)
+    singleton.define_method(:real?) { |*| raise NoMethodError, 'injected' }
+    assert_raises(NoMethodError) { RCAS::Analysis.defined_at?(RCAS.log(@x), @x, n(2)) }
+  ensure
+    if singleton.method_defined?(:__review_real)
+      singleton.alias_method(:real?, :__review_real)
+      singleton.remove_method(:__review_real)
+    end
+    ENV['RCAS_STRICT'] = old
+  end
 end

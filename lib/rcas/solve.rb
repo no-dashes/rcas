@@ -391,11 +391,19 @@ module RCAS
       kept = (0...modulus).reject { |r| progressions.any? { |res, n| r % n == res } }
       return [] if kept.empty?
       j = Var.new(k.name)
-      families = kept.map do |r|
-        ImageSet.new((offset + step * (r + modulus * j)).simplify, [j], ZZ)
+      singles = singles.uniq
+      kept.flat_map do |r|
+        # the indices t of this class, member offset + step*(r + modulus*t),
+        # that are poles: all of them go, however many fall in one class
+        # (sin(x)/(x**2 - pi**2) kept -pi after taking out pi: fourth review)
+        holes = singles.select { |i| i % modulus == r }.map { |i| (i - r) / modulus }.sort
+        at = ->(t) { (offset + step * (r + modulus * t)).simplify }
+        next [ImageSet.new(at.call(j), [j], ZZ)] if holes.empty?
+        between = (holes.first + 1...holes.last).reject { |t| holes.include?(t) }
+        next [set] if between.size > 1000
+        [ImageSet.new(at.call(holes.first - 1 - j), [j], NN), *between.map { |t| at.call(t) },
+         ImageSet.new(at.call(holes.last + 1 + j), [j], NN)]
       end
-      singles = singles.uniq.select { |i| kept.include?(i % modulus) }
-      singles.reduce(families) { |list, i| split_at(list, i, offset, step, modulus, j) }
     end
 
     # The residues r mod n of the indices k at which a + b*k is a member of
@@ -422,18 +430,6 @@ module RCAS
       shift = Rational(shift.value)
       q = ratio.denominator
       (0...q).select { |k| (shift + ratio * k).denominator == 1 }.map { |r| [r, q] }
-    end
-
-    # A family minus one member at index i (of the original a + b*k): the
-    # family containing it becomes two half-families running away from it.
-    def split_at(families, i, offset, step, modulus, j)
-      r = i % modulus
-      families.flat_map do |fam|
-        next [fam] unless fam.expr == (offset + step * (r + modulus * j)).simplify
-        up = (offset + step * (i + modulus + modulus * j)).simplify
-        down = (offset + step * (i - modulus - modulus * j)).simplify
-        [ImageSet.new(down, [j], NN), ImageSet.new(up, [j], NN)]
-      end
     end
 
     # An identity is an identity however it is written, and no rule in the
@@ -574,6 +570,10 @@ module RCAS
       return [set] if slope.nil?
       rest = (set.expr - slope * k).simplify
       return [set] if rest.variables.include?(k.name)
+      if rational?(slope) && rational?(rest)
+        return [set] if wanted == QQ
+        return rational_family(set, rest.value.to_r, slope.value.to_r, wanted, sign)
+      end
       step = Trig.pi_multiple(slope)
       offset = Scalar.zero?(rest) ? Rational(0) : Trig.pi_multiple(rest)
       return [set] if step.nil? || offset.nil? || step.zero?
@@ -581,6 +581,43 @@ module RCAS
       return [] unless turns.denominator == 1 && set.domain.include?(turns.numerator)
       member = set.at(turns.numerator)
       (wanted && Infer.excluded?(member, wanted)) || (sign && wrong_sign?(member, sign)) ? [] : [member]
+    end
+
+    def rational?(e) = e.is_a?(Num) && (e.value.is_a?(Integer) || e.value.is_a?(Rational))
+
+    # a + b*k with a, b rational is an integer exactly on a residue class of
+    # k: b*k + a in ZZ is s*p*k = -q*r (mod q*s) for b = p/q, a = r/s, a
+    # linear congruence. So {k/2 | k in ZZ} meets ZZ in every integer, and
+    # {1/2 + k | k in ZZ} nowhere (the family was kept whole, offering 1/2
+    # as an integer: fourth review). Over NN the members also start at 0.
+    def rational_family(set, a, b, wanted, sign)
+      return [set] unless set.domain == ZZ && wanted <= ZZ
+      p, q = b.numerator, b.denominator
+      r, s = a.numerator, a.denominator
+      modulus = q * s
+      coefficient = (s * p) % modulus
+      target = (-q * r) % modulus
+      g = coefficient.gcd(modulus)
+      return [] unless (target % g).zero?
+      period = modulus / g
+      k0 = period > 1 ? (target / g) * NumberTheory.invmod(coefficient / g, period) % period : 0
+      base = a + b * k0
+      step = (b * period).abs # the same progression either way round
+      j = Var.new(:k)
+      lower = { positive: 1, nonnegative: 0 }[sign] || (wanted == NN ? 0 : nil)
+      upper = { negative: -1, nonpositive: 0 }[sign]
+      return [] if lower && upper
+      if lower
+        start = base + step * ((lower - base) / step).ceil
+        return [NN] if start.zero? && step == 1
+        return [ImageSet.new((Num.new(start) + Num.new(step) * j).simplify, [j], NN)]
+      end
+      if upper
+        start = base + step * ((upper - base) / step).floor
+        return [ImageSet.new((Num.new(start) - Num.new(step) * j).simplify, [j], NN)]
+      end
+      return [ZZ] if base.denominator == 1 && step == 1
+      [ImageSet.new((Num.new(base) + Num.new(step) * j).simplify, [j], ZZ)]
     end
 
     # What each declared sign allows a root to be.
@@ -672,21 +709,35 @@ module RCAS
     # Every candidate goes back through verify, which drops the roots of a
     # branch that do not lie in it, so the answer is the case split a
     # student writes - and |x| - 1 = 0 no longer comes back empty.
+    # A branch that vanishes as a whole - |x| - x is zero on all of x >= 0 -
+    # contributes the set where its cases hold, and the answer is then a
+    # set: the points of the other branches with those sets (the answer was
+    # an ArgumentError naming the set: fourth review, S18).
     def case_split(f, x, nodes, depth, all: false)
       raise NotImplementedError, "can't solve #{f} = 0 for #{x}: too many cases" if nodes.size > MAX_CASES
-      roots = [1, -1].repeated_permutation(nodes.size).flat_map { |signs| branch_roots(f, x, nodes, signs, depth, all: all) }
+      sets = []
+      roots = [1, -1].repeated_permutation(nodes.size).flat_map { |signs| branch_roots(f, x, nodes, signs, depth, sets, all: all) }
       roots += nodes.select { |n| n.name == :sign }.flat_map { |n| univariate(n.args.first, x, depth + 1, all: all) }
-      verify(f, x, dedupe(roots.map(&:simplify)))
+      points = verify(f, x, dedupe(roots.map(&:simplify)))
+      return points if sets.empty?
+      real = points.select { |p| p.is_a?(Expression) && Analysis.numeric(p) }
+      raise Whole, sets.reduce(RealSet.new(real.map { |p| Interval.point(p) })) { |acc, set| acc | set }
     end
 
-    def branch_roots(f, x, nodes, signs, depth, all: false)
+    def branch_roots(f, x, nodes, signs, depth, sets = [], all: false)
       branch = nodes.zip(signs).map { |node, sign| [node, branch_value(node, sign)] }.to_h
       univariate(f.subs(branch), x, depth + 1, all: all)
     rescue ArgumentError => e
       raise unless e.message.start_with?("every value")
-      # A whole branch vanishes: |x| - x is zero on all of x >= 0, which is
-      # a set, and solve answers with points. Name the branch instead.
-      raise ArgumentError, "every #{x} with #{branch_conditions(nodes, signs).join(' and ')} solves #{f} = 0"
+      conditions = branch_conditions(nodes, signs)
+      set = begin
+        Inequalities.solve(conditions, x)
+      rescue NotImplementedError
+        nil
+      end
+      raise ArgumentError, "every #{x} with #{conditions.join(' and ')} solves #{f} = 0" unless set.is_a?(RealSet)
+      sets << set
+      []
     end
 
     def branch_value(node, sign)
@@ -714,7 +765,9 @@ module RCAS
           den_factors[base] = [den_factors[base] || 0, -exp].max
         end
       end
-      return [f, Num.new(1)] if den_factors.empty?
+      # no denominator left once expanded: (x**2 - x)/x is x - 1, and the
+      # unexpanded quotient has no value at 0 (fourth review, S17)
+      return [f.expand, Num.new(1)] if den_factors.empty?
       constant, table = Expand.table(f)
       cleared = {}
       cleared[den_factors.dup] = constant unless constant.zero?

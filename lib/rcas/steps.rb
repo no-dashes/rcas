@@ -195,6 +195,7 @@ module RCAS
       (lines[:vertical] || []).each { |p| line(out, 1, "the pole at #{p} makes #{x} = #{p} a vertical asymptote") }
       (lines[:horizontal] || []).each { |c| line(out, 1, "the limit #{c} makes y = #{c} a horizontal asymptote") }
       (lines[:oblique] || []).each { |l| line(out, 1, "f - (#{l}) -> 0, so y = #{l} is an oblique asymptote") }
+      lines.each { |kind, found| line(out, 1, "rcas cannot decide the #{kind} asymptotes") if found.nil? }
     end
 
     def discussion_derivatives(out, report)

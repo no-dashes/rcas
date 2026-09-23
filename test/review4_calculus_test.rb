@@ -94,4 +94,11 @@ class Review2CalculusTest < Minitest::Test
   rescue RCAS::SeriesError => e
     refute_match(/no Taylor series/, e.message)
   end
+
+  # C11/D15 covered expressions free of x; x - x is not free of x, and the
+  # power rule still divides by sqrt(0): d/dx sqrt(x - x) = d/dx 0 = 0.
+  def test_derivative_of_a_root_of_a_cancelling_difference
+    assert_equal n(0), RCAS.diff(RCAS.sqrt(@x - @x), @x).simplify
+    assert_equal n(0), RCAS.diff(RCAS.sqrt(@x**2 - @x**2), @x).simplify
+  end
 end

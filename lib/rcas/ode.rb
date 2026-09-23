@@ -15,6 +15,27 @@ module RCAS
 
     def children = [expr, var]
     def rebuild(expr, var) = Derivative.new(expr, var, order)
+
+    # d/dx names x twice: the variable differentiated and the point where
+    # the derivative is taken. Substituting x, or bringing x in through a
+    # parameter, is a statement about the derivative *at* a point - so the
+    # derivative is taken first: D(x**3, x) at x = 2 is 12, not D(8, 2), and
+    # D(x*y, x) at y = x is x, not 2*x (fourth review, C2). The derivative
+    # of an unknown function y has no value to take at a point; y itself
+    # stands for y(x), and dsolve substitutes a solution for it.
+    def replace_with(table)
+      return table[self] if table.key?(self)
+      pointwise = table.key?(var) ||
+                  (!expr.is_a?(Var) && table.any? { |k, v| k != var && v.variables.include?(var.name) && expr.variables.include?(k.name) })
+      return super unless pointwise
+      if expr.is_a?(Var)
+        return super unless table.key?(var)
+        raise NotImplementedError, "#{self} at #{var} = #{table[var]}: the derivative of an unknown function has no value to substitute into"
+      end
+      taken = evaluate
+      raise NotImplementedError, "#{self} could not be taken, so it cannot be evaluated at a point" if taken.each_node.any? { |n| n.is_a?(Derivative) }
+      taken.replace_with(table)
+    end
     def ==(other) = other.is_a?(Derivative) && other.order == order && other.children == children
     alias eql? ==
     def hash = [Derivative, order, expr, var].hash

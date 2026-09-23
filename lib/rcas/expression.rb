@@ -14,7 +14,8 @@ module RCAS
 
   def self.guard!(error)
     raise error if defined?(::Timeout::Error) && error.is_a?(::Timeout::Error)
-    raise error if strict? && error.is_a?(NameError) # NoMethodError too
+    # NoMethodError is a NameError; 1 + nil is a TypeError (fourth review)
+    raise error if strict? && (error.is_a?(NameError) || error.is_a?(TypeError))
   end
 
   # The value of an expression or number as a real Float, or nil when it
@@ -22,6 +23,7 @@ module RCAS
   # false). Six private copies of this read "Float or nil" slightly
   # differently (third review, section 5); they all delegate here now.
   def self.real_float(value, finite: true)
+    return nil unless value.is_a?(Numeric) || value.is_a?(Expression) || value.is_a?(Symbol) # a family, a set
     v = value.is_a?(Numeric) ? value : Expression.lift(value).evalf
     v = v.value if v.is_a?(Num)
     return nil unless v.is_a?(Numeric) && v.real?

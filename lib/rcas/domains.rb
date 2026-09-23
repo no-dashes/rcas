@@ -156,6 +156,9 @@ module RCAS
       return false unless obj.constant?
       reduced = obj.simplify
       return include?(reduced.value) if reduced.is_a?(Num)
+      # (1 + sqrt(2))**2 - 2*sqrt(2) is 3 once expanded (fourth review)
+      expanded = reduced.expand
+      return include?(expanded.value) if expanded.is_a?(Num)
       reduced != obj && (d2 = reduced.domain) ? d2.subset?(self) : false
     rescue StandardError => rescued
       RCAS.guard!(rescued)

@@ -370,7 +370,11 @@ module RCAS
       pieces = []
       regions(points).each do |region|
         t = sample(region)
-        sign = sign_of(f.subs(x => t)) or raise NotImplementedError, "cannot decide the sign of #{f} at #{t}"
+        # the sign of the quotient from its cancelled parts: the sample may
+        # be a pole that cancelled, (x**2 - x)/x at 0 (fourth review, S17)
+        signs = [num, den].map { |part| sign_of(part.subs(x => t)) }
+        raise NotImplementedError, "cannot decide the sign of #{f} at #{t}" if signs.include?(nil) || signs.last == :zero
+        sign = signs.first == :zero ? :zero : (signs.uniq.size == 1 ? :positive : :negative)
         pieces << region if sign == :negative || (sign == :zero && op == :<=)
       end
       unless op == :<
@@ -547,7 +551,9 @@ module RCAS
         # a coefficient that has no value there: x/a at a = 0
         coeffs.each { |c| Analysis.denominators(c, @a).each { |d| values.concat(parameter_roots(d)) } }
       end
-      values.uniq { |v| v.evalf.round(10) }.sort_by(&:evalf)
+      # distinct and ordered exactly: two values that agree to ten digits
+      # are still two (a - 1 and a - 1 - 10**-12 were merged: fourth review)
+      Inequalities.sort(Inequalities.distinct(values))
     end
 
     def parameter_roots(expr)
@@ -557,18 +563,12 @@ module RCAS
       []
     end
 
-    # A rational number strictly inside the region (exact arithmetic downstream).
+    # A rational number strictly inside the region (exact arithmetic
+    # downstream), chosen exactly: a Float midpoint of (1, 1 + 10**-12)
+    # need not be inside it.
     def sample_point(region)
-      lo, hi = region.low_value, region.high_value
-      value =
-        if lo == -Float::INFINITY && hi == Float::INFINITY then 0.0
-        elsif lo == -Float::INFINITY then hi - 1.0
-        elsif hi == Float::INFINITY then lo + 1.0
-        else (lo + hi) / 2.0
-        end
-      r = value.rationalize(Rational(1, 10**6))
-      r = value.to_r unless (lo < r && r < hi)
-      Num.new(r)
+      point = Inequalities.sample(region)
+      point.is_a?(Num) ? point : Num.new(Rational(point.evalf.to_f))
     end
 
     # Replace numeric endpoints by the symbolic roots that produced them.
@@ -582,11 +582,7 @@ module RCAS
 
     def symbolic_endpoint(value, roots, sample)
       return value if Limits.infinite?(value)
-      target = value.evalf
-      match = roots.find do |r|
-        v = r.evalf(@a.name => sample.value)
-        v.is_a?(Numeric) && v.real? && (v - target).abs <= 1e-9 * [1.0, target.abs].max
-      end
+      match = roots.find { |r| Inequalities.compare(r.subs(@a.name => sample).simplify, value)&.zero? }
       match || raise(NotImplementedError, "cannot express the endpoint #{value} through the roots")
     end
 

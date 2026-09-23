@@ -228,11 +228,11 @@ class SolveTest < Minitest::Test
                  strs(s(abs[RCAS.sin(:x)] - Rational(1, 2), :x, principal: true))
   end
 
+  # A whole branch of solutions is a set, and solve answers with it (the
+  # fourth review, S18: the set used to be named in an ArgumentError).
   def test_a_whole_branch_of_solutions_says_so
-    error = assert_raises(ArgumentError) { s(RCAS.abs(:x) - :x, :x) }
-    assert_equal "every x with x >= 0 solves abs(x) - x = 0", error.message
-    error = assert_raises(ArgumentError) { s(RCAS.sign(:x) - 1, :x) }
-    assert_equal "every x with x > 0 solves -1 + sign(x) = 0", error.message
+    assert_equal "[0, oo)", s(RCAS.abs(:x) - :x, :x).to_s
+    assert_equal "(0, oo)", s(RCAS.sign(:x) - 1, :x).to_s
   end
 
   # Two school-standard equations that used to raise NotImplementedError.

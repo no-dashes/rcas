@@ -180,7 +180,15 @@ module RCAS
     # Reduced row echelon form, over the fraction field of the base.
     def rref = space.over(base.fraction_field).unchecked(Elimination.rref(entries).first)
 
-    def rank = Elimination.rref(entries).last.size
+    # A Float matrix counts a pivot below its rounding as zero, the tolerance
+    # its eigenvectors use: [[1, 3], [0.1, 0.3]] has proportional rows, and
+    # the exact elimination found the -5.6e-17 left of 0.3 - 3*0.1 (fourth
+    # review, L10).
+    def rank
+      return Elimination.rref(entries).last.size unless floating?
+      rows = Matrix.float_rows(entries)
+      Matrix.float_eliminate(rows, Matrix.float_scale(rows) * FLOAT_TOLERANCE).last.size
+    end
 
     # Numeric: Gaussian elimination. Polynomial or rational-function entries
     # in one indeterminate: evaluation and interpolation (PolyMatrix).
@@ -298,7 +306,7 @@ module RCAS
       Solve.dedupe(values).map do |l|
         shifted = self - space.identity.scale(l)
         vectors = if floating?
-                    float_kernel(shifted)
+                    float_kernel(shifted, Matrix.float_scale(Matrix.float_rows(entries)))
                   else
                     shifted.kernel.map { |v| v.space.unchecked(v.entries.map { |e| e.rationalize }) }
                   end
@@ -311,15 +319,36 @@ module RCAS
     # The kernel of a Float matrix, by elimination with partial pivoting and
     # a pivot counted as zero below rounding relative to the matrix: A - l*I
     # at a Float eigenvalue is singular only up to its last digits, and the
-    # exact kernel of it was empty (third review, L10).
-    def float_kernel(m)
-      rows = m.entries.map { |row| row.map { |e| Complex(Expression.lift(e).evalf) } }
-      scale = [rows.flatten.map(&:abs).max || 0.0, 1.0].max
-      tolerance = scale * 1e-9
+    # exact kernel of it was empty (third review, L10). Relative to the
+    # matrix it came from, and to nothing else: max(|A|, 1) made the
+    # tolerance absolute for a small matrix, and a Jordan block of size
+    # 1e-12 was diagonalizable (fourth review).
+    def float_kernel(m, scale = nil)
+      rows = Matrix.float_rows(m.entries)
+      tolerance = (scale || Matrix.float_scale(rows)) * FLOAT_TOLERANCE
+      reduced, pivots = Matrix.float_eliminate(rows, tolerance)
       n = cols
+      free = (0...n).to_a - pivots
+      space_v = VectorSpace.new(base, n)
+      free.map do |f|
+        v = Array.new(n, Complex(0.0))
+        v[f] = Complex(1.0)
+        pivots.each_with_index { |c, i| v[c] = -reduced[i][f] }
+        space_v.unchecked(v.map { |z| Num.new(z.imaginary.abs <= tolerance ? z.real : z) })
+      end
+    end
+
+    FLOAT_TOLERANCE = 1e-9
+
+    def self.float_rows(entries) = entries.map { |row| row.map { |e| Complex(Expression.lift(e).evalf) } }
+    def self.float_scale(rows) = rows.flatten.map(&:abs).max || 0.0
+
+    # Gauss-Jordan with partial pivoting on Complex Floats; [rows, pivots].
+    def self.float_eliminate(rows, tolerance)
+      rows = rows.map(&:dup)
       pivots = []
       r = 0
-      (0...n).each do |c|
+      (0...(rows.first&.size || 0)).each do |c|
         break if r >= rows.size
         best = (r...rows.size).max_by { |i| rows[i][c].abs }
         next if rows[best][c].abs <= tolerance
@@ -334,14 +363,7 @@ module RCAS
         pivots << c
         r += 1
       end
-      free = (0...n).to_a - pivots
-      space_v = VectorSpace.new(base, n)
-      free.map do |f|
-        v = Array.new(n, Complex(0.0))
-        v[f] = Complex(1.0)
-        pivots.each_with_index { |c, i| v[c] = -rows[i][f] }
-        space_v.unchecked(v.map { |z| Num.new(z.imaginary.abs <= tolerance ? z.real : z) })
-      end
+      [rows, pivots]
     end
 
     def diagonalizable? = eigenvectors.sum { |_, _, vs| vs.size } == rows
@@ -421,6 +443,9 @@ module RCAS
         pivots << c
         r += 1
       end
+      # an entry that is zero but not written so reads as a pivot:
+      # (x - 1)**2 - (x - 1)*(x**2 - 1)/(x + 1) is 0 (fourth review)
+      rows = rows.map { |row| row.map { |v| !v.is_a?(Num) && v.is_a?(Expression) && Scalar.zero?(v) ? Num.new(0) : v } }
       [rows, pivots]
     end
 

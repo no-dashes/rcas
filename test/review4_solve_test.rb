@@ -96,4 +96,101 @@ class Review2SolveTest < Minitest::Test
     th.kill
     assert finished, 'revolution_surface(sin(2*pi*x), x: 0..1) took more than 2 s'
   end
+
+  # sin(x)/(x**2 - pi**2) vanishes at k*pi for every integer k except +-1,
+  # where the denominator vanishes too. The two isolated poles fall in the
+  # same residue class; the second split (solve.rb split_at) only matches a
+  # family over ZZ and leaves -pi inside a half-family over NN.
+  def test_every_isolated_pole_is_taken_out_of_a_family
+    [[RCAS.sin(@x) / (@x**2 - pi**2), [Math::PI, -Math::PI]],
+     [RCAS.sin(@x) / (@x**2 - 4 * pi**2), [2 * Math::PI, -2 * Math::PI]]].each do |f, poles|
+      got = members(RCAS.solve(f, @x)).compact
+      poles.each do |p|
+        refute got.any? { |m| (m - p).abs < 1e-9 }, "#{f}: the pole #{p} is listed as a zero"
+      end
+      assert got.any? { |m| m.abs < 1e-9 }, "#{f}: 0 is a zero"
+    end
+  end
+
+  # 1/abs(x) runs to oo at 0 and to 0 at both infinities; 1/log(x) tends to
+  # 0 as x -> oo. rcas cannot take those limits, and asymptotes reads the
+  # unevaluated Limit as "no asymptote" (analysis.rb horizontal_asymptotes,
+  # runs_away?) - the "cannot is not none" policy. Refusing is fine.
+  def test_an_undetermined_limit_is_not_reported_as_no_asymptote
+    [[1 / RCAS.abs(@x), :vertical, 0], [1 / RCAS.abs(@x), :horizontal, 0],
+     [1 / RCAS.log(@x), :horizontal, 0]].each do |f, kind, value|
+      got = begin
+        RCAS.asymptotes(f, @x)[kind]
+      rescue NotImplementedError
+        next
+      end
+      assert got.any? { |v| (real(v) || Float::NAN) == value }, "#{f}: #{kind} #{got.inspect} misses #{value}"
+    end
+  end
+
+  # |x| = x holds exactly for x >= 0. The case split knows it and says so -
+  # in the message of an ArgumentError, where a set was the answer.
+  def test_an_abs_identity_on_a_half_line_is_a_set
+    s = begin
+      RCAS.solve(eq(RCAS.abs(@x), @x), @x)
+    rescue NotImplementedError
+      return pass
+    end
+    assert s.include?(n(0)) && s.include?(n(5)), "#{s}"
+    refute s.include?(n(-1)), "#{s}"
+    s = RCAS.solve(eq(RCAS.abs(@x - 1) + RCAS.abs(@x + 1), 2), @x)
+    assert s.include?(n(0)) && !s.include?(n(2)), "#{s}"
+  end
+
+  # sin(2*pi*x) = 0 means x = k/2; over the integers that is every integer.
+  # The family {k/2} is kept whole, so 1/2 is offered as an integer solution.
+  def test_an_integer_domain_keeps_only_integers
+    s = begin
+      RCAS.solve(RCAS.sin(2 * pi * @x), @x, domain: RCAS::ZZ)
+    rescue NotImplementedError
+      return pass
+    end
+    return pass if s == RCAS::ZZ || s == [RCAS::ZZ]
+    members(s).compact.each { |m| assert_in_delta m.round, m, 1e-12, "#{s} offers the non-integer #{m}" }
+  end
+
+  # f = sin(x) + g(x)/10**6 with g vanishing at the four sample points and
+  # at their shifts by 2*pi: f(x + 2*pi) = f(x) at exactly those points,
+  # which is all Discussion.periodic? looks at. f -> oo at both ends, so it
+  # has no period at all.
+  def test_a_period_is_not_decided_by_four_samples
+    g = [Rational(3, 10), Rational(11, 10), Rational(12, 5), Rational(-7, 10)].map { |p| (@x - p) * (@x - p - 2 * pi) }.reduce(:*)
+    report = RCAS.discuss(RCAS.sin(@x) + g / 10**6, @x)
+    assert_nil report.period, "a function that tends to oo was given the period #{report.period}"
+  end
+
+  # |x| has a corner at 0: no tangent line. d/dx abs(x) at 0 is sign(0) = 0,
+  # and tangent answered y = 0. A refusal (as for a vertical tangent) is right.
+  def test_no_tangent_at_a_corner
+    t = begin
+      RCAS.tangent(RCAS.abs(@x), @x, 0)
+    rescue ArgumentError, NotImplementedError
+      return pass
+    end
+    flunk "tangent(abs(x), x, 0) = #{t}, but abs has a corner at 0"
+  end
+
+  # sin(2*x)/sin(x) is 2*cos(x) off the multiples of pi: period 2*pi, zeros
+  # pi/2 and 3*pi/2 in each period. discuss lists the zeros of one period
+  # and got them from solve(principal: true), whose period is the one of
+  # sin(2*x) (pi), not the function's - so 3*pi/2 is lost. Likewise
+  # sin(3*x)/sin(x) = 3 - 4*sin(x)**2 (period pi) loses 2*pi/3.
+  def test_discuss_lists_every_zero_of_its_period
+    [[RCAS.sin(2 * @x) / RCAS.sin(@x), [Math::PI / 2, 3 * Math::PI / 2]],
+     [RCAS.sin(3 * @x) / RCAS.sin(@x), [Math::PI / 3, 2 * Math::PI / 3]]].each do |f, wanted|
+      report = RCAS.discuss(f, @x)
+      period = real(report.period)
+      next if report.zeros.nil? || period.nil?
+      got = members(report.zeros).compact.map { |z| z % period }
+      wanted.each do |w|
+        assert got.any? { |z| (z - w % period).abs < 1e-9 || (z - w % period).abs > period - 1e-9 },
+               "discuss(#{f}): zeros #{report.zeros.inspect} (period #{report.period}) miss #{w}"
+      end
+    end
+  end
 end

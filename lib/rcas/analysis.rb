@@ -51,7 +51,10 @@ module RCAS
       real != false
     rescue ZeroDivisionError
       false
-    rescue NotImplementedError, StandardError
+    rescue NotImplementedError
+      true # realness undecided: the point is kept, and says so nowhere else
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       true
     end
 
@@ -242,12 +245,36 @@ module RCAS
     # A whole family of asymptotes is reported as the family: tan has one
     # at every odd multiple of pi/2, and a member of the set stands for all
     # of them when the limit is taken.
+    # Either side infinite is an asymptote, both finite is none, and a limit
+    # rcas cannot take is neither: a refusal (fourth review, S11). A side
+    # where f has no real values (left of 0 for 1/log(x)) does not count.
     def runs_away?(f, x, point)
       probe = point.is_a?(ImageSet) ? point.at(0) : point
-      Limits.infinite?(Limits.limit(f, x, probe, :right)) || Limits.infinite?(Limits.limit(f, x, probe, :left))
-    rescue StandardError => rescued
-      RCAS.guard!(rescued)
+      sides = %i[right left].map { |side| Limits.limit(f, x, probe, side) }
+      return true if sides.any? { |v| Limits.infinite?(v) }
+      sides = sides.zip([1, -1]).reject { |v, side| v.is_a?(Limit) && !real_beside?(f, x, probe, side) }.map(&:first)
+      return false if sides.none? { |v| v.is_a?(Limit) }
+      raise NotImplementedError, "vertical asymptotes of #{f}: the limit at #{probe} is not decided here"
+    rescue ZeroDivisionError
       false
+    end
+
+    # f has real values out towards an infinity: false only when that is
+    # decided at +-1000.
+    def real_toward?(f, x, point)
+      value = f.subs(x => Num.new(point == OO ? 1000 : -1000)).simplify
+      Inequalities.real?(value) != false
+    rescue ZeroDivisionError, NotImplementedError
+      true
+    end
+
+    # f has real values just to one side of the point: false only when that
+    # is decided at a point 1/1000 away.
+    def real_beside?(f, x, point, side)
+      value = f.subs(x => (Expression.lift(point) + Num.new(Rational(side, 1000))).simplify).simplify
+      Inequalities.real?(value) != false
+    rescue ZeroDivisionError, NotImplementedError
+      true
     end
 
     # The denominators f divides by: the one of its normal form, the ones it
@@ -273,7 +300,9 @@ module RCAS
     def horizontal_asymptotes(f, x, at: nil)
       (at || infinities).filter_map do |point|
         value = Limits.limit(f, x, point)
-        next nil if value.is_a?(Limit) || Limits.infinite?(value)
+        next nil if value.is_a?(Limit) && !real_toward?(f, x, point) # 1/log(x) towards -oo
+        raise NotImplementedError, "horizontal asymptotes of #{f}: the limit at #{point} is not decided here" if value.is_a?(Limit)
+        next nil if Limits.infinite?(value) || value == UNDEFINED
         value.simplify
       end.uniq
     end
@@ -281,10 +310,17 @@ module RCAS
     # y = m*x + c with m the limit of f/x and c the limit of f - m*x.
     def oblique_asymptotes(f, x, at: nil)
       (at || infinities).filter_map do |point|
+        # only a function that runs away has an oblique asymptote there
+        value = Limits.limit(f, x, point)
+        next nil if value.is_a?(Limit) && !real_toward?(f, x, point)
+        raise NotImplementedError, "oblique asymptotes of #{f}: the limit at #{point} is not decided here" if value.is_a?(Limit)
+        next nil unless Limits.infinite?(value)
         slope = Limits.limit((f / x).cancel, x, point)
-        next nil if slope.is_a?(Limit) || Limits.infinite?(slope) || Scalar.zero?(slope)
+        raise NotImplementedError, "oblique asymptotes of #{f}: the limit of f/x at #{point} is not decided here" if slope.is_a?(Limit)
+        next nil if Limits.infinite?(slope) || slope == UNDEFINED || Scalar.zero?(slope)
         offset = Limits.limit((f - slope * x).cancel, x, point)
-        next nil if offset.is_a?(Limit) || Limits.infinite?(offset)
+        raise NotImplementedError, "oblique asymptotes of #{f}: the limit of f - #{slope}*x at #{point} is not decided here" if offset.is_a?(Limit)
+        next nil if Limits.infinite?(offset) || offset == UNDEFINED
         (slope * x + offset).simplify
       end.uniq
     end
@@ -302,8 +338,29 @@ module RCAS
         raise ArgumentError, "tangent: #{f} has no finite slope at #{x} = #{a}; the tangent there is vertical or does not exist"
       end
       raise ArgumentError, "tangent: #{f} has no finite slope at #{x} = #{a}" if Limits.infinite?(slope) || slope == UNDEFINED
+      differentiable!(f, x, a, "tangent")
       value = f.subs(x => a).simplify
       (value + slope * (x - a)).simplify
+    end
+
+    # A kink of abs, sign, floor, ceil or round at the point: the formula
+    # for f' there says sign(0) = 0, and |x| got the tangent y = 0 at its
+    # corner (fourth review). The one-sided limits of f' decide - they have
+    # to exist and agree - and what they cannot decide is refused.
+    def differentiable!(f, x, a, name)
+      kinks = f.each_node.select { |n| n.is_a?(Fn) && Limits::KINKED.include?(n.name) && n.args.first.variables.include?(x.name) }
+      at_kink = kinks.any? do |n|
+        u = n.args.first.subs(x => a).simplify
+        case n.name
+        when :abs, :sign then Decide.zero?(u) != false
+        else Decide.zero?((u - Fn.new(:round, [u])).simplify) != false || n.name == :round
+        end
+      end
+      return unless at_kink
+      derivative = f.diff(x)
+      left, right = %i[left right].map { |side| Limits.limit(derivative, x, a, side) }
+      return if [left, right].none? { |v| v.is_a?(Limit) || Limits.infinite?(v) || v == UNDEFINED } && Scalar.zero?((left - right).simplify)
+      raise ArgumentError, "#{name}: #{f} has no tangent at #{x} = #{a}: the slopes from the left (#{left}) and the right (#{right}) differ there"
     end
 
     def normal(f, var = nil, at = nil)
@@ -311,6 +368,7 @@ module RCAS
       x = variable(f, var)
       a = Expression.lift(at)
       slope = f.diff(x).subs(x => a).simplify
+      differentiable!(f, x, a, "normal")
       raise ArgumentError, "normal: the tangent is horizontal at #{a}" if Scalar.zero?(slope)
       (f.subs(x => a) - (x - a) / slope).simplify
     end
@@ -377,7 +435,10 @@ module RCAS
 
     def nonreal_constant?(n)
       Inequalities.real?(n) == false
-    rescue NotImplementedError, StandardError
+    rescue NotImplementedError
+      false
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
       false
     end
 
