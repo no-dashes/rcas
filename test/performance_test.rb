@@ -100,6 +100,19 @@ class PerformanceTest < Minitest::Test
     timed(30, "factor(Poly.swinnerton_dyer(6, x))") { assert RCAS::ZZ[:x].(f).factor.irreducible? }
   end
 
+  # Two translated SD(5)s: 32 local factors, sixteen to each true factor.
+  # More than two minutes of subsets, under three seconds of lattice; the
+  # two factors have to be told apart after the handover, which SD(6),
+  # with one factor, does not ask.
+  def test_van_hoeij_groups_the_factors_of_translated_swinnerton_dyer_polynomials
+    x = RCAS::Var.new(:x)
+    sd = RCAS::Poly.swinnerton_dyer(5, x)
+    f = RCAS::ZZ[:x].(RCAS.expand(sd * sd.subs(x => x + 1)))
+    fact = timed(30, "factor(SD(5)*SD(5)(x + 1))") { f.factor }
+    assert_equal 2, fact.size
+    assert_equal f, fact.expand
+  end
+
   def test_the_third_reviews_cliffs_stay_flat
     x = RCAS::Var.new(:x)
     y = RCAS::Var.new(:y)

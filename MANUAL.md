@@ -2860,7 +2860,9 @@ left to the lattice, with the factors it has already lifted.
 comparing them. On this machine, three SD(4)s took 1.7 s by products, 0.9
 s by the lattice, and 1.0 s by the default. The Swinnerton-Dyer
 polynomial of degree 64 took 3 s by the lattice or the default, and had
-not finished after three minutes by products.
+not finished after three minutes by products. So did SD(5) times SD(5)
+translated by 1, whose two factors each need sixteen of the modular
+factors: 2.9 s by the default, more than two minutes by products.
 
 #### gcd and division of expressions
 
