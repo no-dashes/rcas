@@ -1239,6 +1239,38 @@ comparison). They are settled; do not reopen them without the user.
    constructors ask the other question - real where defined - through
    `Infer.where_defined { }`.
 
+Of the review's section 3 (its optional items), three landed in
+`fe9024a`, and each has a reason a later session should keep:
+
+- **Family normal form** (`Solve.normal_family`): over ZZ an affine
+  family is `base + step*k` with `step > 0` and, when `base/step` is
+  rational, the base in `[0, step)`. That is what makes
+  `solve(sin(2*x)/sin(x)) == solve(cos(x))` hold. Over NN only the
+  spelling changes, because the direction is part of the set; a complex
+  step keeps its base. It must never change the set, only how it is
+  written.
+- **Printing `x + 7/10`**: a negative number on the right of a sum or a
+  difference prints with the other sign (`Printer.negative_number?`). The
+  tree is unchanged, so this is printing only - `==` still sees
+  `x - (-7/10)`.
+- **Float eigenvalues** (`Solve.float_roots`, L10): a real Float
+  polynomial of degree > 2 goes through Durand-Kerner [Ker66]. Roots
+  within `1e-5` of the scale are one multiple root, polished by Newton for
+  multiplicity m (`polished_clusters`: a double eigenvalue 2 had come back
+  as two roots 4e-8 apart, and neither had an eigenvector). A root is real
+  when no other root is its conjugate within `1e-7` of the scale. Both
+  thresholds are heuristics and are allowed to be, because the input is a
+  Float and there is no exact answer to decide against - the one place
+  where that excuse holds. Exact coefficients never come here.
+
+Left open, with the reason: exclusion lists for ImageSet
+(`{pi*k | k in ZZ, k != 0}`) wait for the reviewer, because the round-3
+test `test_every_family_member_lies_in_the_domain` evaluates `at(k)` for
+every k of the family's domain; `nintegrate` split at non-linear kinks
+(D11); the `factor(expand((x+y+z)**6 - 1))` cliff (53 s); merging the
+linear solvers and the Newton interpolations, deferred until after the
+next verification round so that it does not move the code under it.
+
 ## Traps we have hit (so you do not hit them again)
 
 - `RCAS::IRB::AutoSymbol` turns an undefined `name(args)` with Expression,
