@@ -209,6 +209,9 @@ module RCAS
     def project(v, onto:) = LinearAlgebra.project(v, onto: onto)
     def orthogonal?(u, v) = LinearAlgebra.orthogonal?(u, v)
 
+    # lll(basis, delta: 3/4r, transform: false): the LLL-reduced basis of a lattice (rows of a matrix, or a list of vectors)
+    def lll(basis, delta: Lattice::DELTA, transform: false) = Lattice.lll(basis, delta: delta, transform: transform)
+
     # lu(a) gives [l, u, p] with p*a = l*u; qr(a) gives [q, r] with a = q*r
     def lu(matrix) = Decompositions.lu(matrix)
     def qr(matrix) = Decompositions.qr(matrix)

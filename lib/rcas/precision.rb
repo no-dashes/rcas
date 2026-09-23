@@ -61,7 +61,10 @@ module RCAS
     def imaginary = 0
     def abs = Decimal.new(value.abs, digits)
     def -@ = Decimal.new(-value, digits)
-    def round(n = 0) = Decimal.new(value.round(n), digits)
+    # Integer#round, Float#round and BigDecimal#round give an Integer
+    # unless digits after the point are asked for; so does this, or
+    # (evalf(a, 40)*10**20).round is no integer to build a lattice from
+    def round(n = 0) = n.positive? ? Decimal.new(value.round(n), digits) : value.round(n).to_i
     def truncate(n = 0) = value.truncate(n)
     def floor(n = 0) = value.floor(n)
     def ceil(n = 0) = value.ceil(n)

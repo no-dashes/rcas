@@ -382,6 +382,10 @@ module RCAS
         method: "The normal equations A'*A*x = A'*b, solved exactly [Str16, ch. 4]."
       },
       orthogonal?: :project,
+      lll: {
+        maths: "A lattice is every integer combination of a basis, and it has many bases, most of them long and nearly parallel. A reduced basis is short and nearly orthogonal: each vector is size-reduced against the earlier ones (Gram-Schmidt coefficients at most 1/2), and Lovasz's condition keeps the orthogonalised lengths from dropping fast. The first vector is then at most 2**((n - 1)/2) times the shortest one, which is enough to find integer relations and minimal polynomials from decimals.",
+        method: "The LLL algorithm [LLL82] in exact rational arithmetic, keeping the Gram-Schmidt coefficients and updating them on each size reduction and swap as in [Coh93, §2.6]; the transformation matrix is tracked on the side."
+      },
       laplace: {
         maths: "The transform that turns differentiation into multiplication by s, so a linear differential equation becomes an algebraic one. Initial values enter the transform, which is why it suits initial value problems.",
         method: "A table plus two rules: the first shift for exp(a*t)*f(t), and multiplication by t as differentiation in s [BD12, ch. 6]."
@@ -696,6 +700,7 @@ module RCAS
       gram_schmidt: ["Gram-Schmidt process", "Orthonormal basis"],
       project: ["Projection (linear algebra)", "Vector projection"],
       least_squares: ["Least squares", "Linear least squares"],
+      lll: ["Lenstra-Lenstra-Lovasz lattice basis reduction algorithm", "Lattice reduction", "Lattice (group)", "Integer relation algorithm"],
       laplace: ["Laplace transform"],
       inverse_laplace: ["Inverse Laplace transform"],
       congruence: ["Modular arithmetic", "Chinese remainder theorem"],

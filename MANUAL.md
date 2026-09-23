@@ -89,6 +89,7 @@ checked - nothing in them is typed by hand.
   - [1.7 Linear algebra](#17-linear-algebra)
     - [Factorizations](#factorizations)
     - [Orthogonality and least squares](#orthogonality-and-least-squares)
+    - [Lattices: LLL reduction](#lattices-lll-reduction)
   - [1.8 Differential equations and recurrences](#18-differential-equations-and-recurrences)
     - [Recurrences](#recurrences)
     - [Systems](#systems)
@@ -388,7 +389,7 @@ polynomial systems. Laplace transforms and systems of differential
 equations for the applied courses, several-variable calculus up to the
 line and surface integrals of a vector analysis course - `plot3d` draws
 the surface such an integral is taken over - and the number theory of a
-first course in it.
+first course in it, up to lattice reduction.
 
 ```
 rcas> QQ[x].(x**4 - 1).factor
@@ -397,6 +398,8 @@ rcas> groebner([x**2 + y**2 - 1, x - y], [x, y])
 => [x - y, -1/2 + y**2]
 rcas> minpoly(sqrt(2) + sqrt(3))
 => 1 - 10*x**2 + x**4
+rcas> lll([vector(5, 3), vector(8, 5)])
+=> [(-1, 0), (0, -1)]
 rcas> Poly.cyclotomic(12, x)
 => 1 - x**2 + x**4
 rcas> GF(9).elements.first(4)
@@ -415,7 +418,8 @@ rcas> stokes([-y, x, 0], [u*cos(v), u*sin(v), 0], u: 0..1, v: 0..2*pi)
 => 2*pi
 ```
 
-Read on: 1.5 Domains and assumptions, 1.6 Polynomial rings, 1.8
+Read on: 1.5 Domains and assumptions, 1.6 Polynomial rings, 1.7 Linear
+algebra (lattices and LLL), 1.8
 Differential equations and recurrences, 1.12 The q-analogues, and section
 4, Sources, for the algorithms and where they come from.
 
@@ -3339,6 +3343,78 @@ rcas> least_squares(matrix([[1], [2*I]]), vector(1, 0))
 => (1/5)
 ```
 
+#### Lattices: LLL reduction
+
+A *lattice* is the set of all integer combinations of some linearly
+independent vectors, which form its *basis*. Unlike a vector space, a
+lattice has no orthogonal basis in general. It does have many bases: any
+basis times a unimodular integer matrix (determinant ±1) spans the same
+lattice. Most of those bases are long and nearly parallel.
+`lll(basis)` finds a short, nearly orthogonal one, the Lenstra-Lenstra-Lovász
+reduced basis [LLL82]. The vectors are the rows of a matrix, or a list of
+vectors.
+
+```
+rcas> lat = matrix([[1, 1, 1], [-1, 0, 2], [3, 5, 6]])
+=> [ 1 1 1]
+   [-1 0 2]
+   [ 3 5 6]
+rcas> lll(lat)
+=> [ 0 1 0]
+   [ 1 0 1]
+   [-2 0 1]
+rcas> red, trans = lll(lat, transform: true)
+rcas> trans * lat == red
+=> true
+rcas> [trans.det, lat.det, red.det]
+=> [1, -3, -3]
+rcas> lll([vector(5, 3), vector(8, 5)])
+=> [(-1, 0), (0, -1)]
+```
+
+`transform: true` also returns the unimodular matrix that takes the old
+basis to the new one, and the determinants show the lattice is the same.
+(5, 3) and (8, 5) have determinant 1, so they span all of ZZ**2, and the
+reduction finds its standard basis, up to sign. Reduced means two things,
+both about the Gram-Schmidt process of the previous section:
+
+- every vector is *size-reduced*: its Gram-Schmidt coefficients against
+  the earlier ones are at most 1/2;
+- *Lovász's condition* holds between neighbours: an orthogonalised vector
+  is not much shorter than the one before it.
+
+The condition's constant is `delta`, 3/4 by default; any rational in
+(1/4, 1] can be passed with `delta:`. With 3/4 the first vector is at most
+2**((n - 1)/2) times the length of the shortest non-zero vector in the
+lattice. The factor is modest, and it is enough for LLL's best-known use:
+finding integer relations between real numbers.
+
+For example, to find the polynomial that sqrt(2) + sqrt(3) satisfies, put
+its powers, times 10**20 and rounded, next to an identity matrix. An
+integer combination that makes the last column small is a polynomial that
+nearly vanishes at the number, and the short vector finds it:
+
+```
+rcas> alpha = evalf(sqrt(2) + sqrt(3), 40)
+=> 3.146264369941972342329135065715570445512
+rcas> big = (0..4).map { |i| (alpha**i * 10**20).round }
+=> [100000000000000000000, 314626436994197234233, 989897948556635619639, 3114480645422394117857, 9798979485566356196395]
+rcas> lll((0..4).map { |i| [*Array.new(5) { |j| i == j ? 1 : 0 }, big[i]] }).first
+=> (1, 0, -10, 0, 1, 5)
+```
+
+The first five entries are the coefficients of 1 - 10*x**2 + x**4, and
+the last is how nearly that combination cancels (5 in 10**20). The answer
+is a guess backed by a short vector, not a proof. `minpoly` proves it:
+`minpoly(sqrt(2) + sqrt(3), x)` gives the same polynomial exactly.
+
+The arithmetic is exact, and the entries must be rational: a real lattice
+is scaled and rounded first, as above. A dependent family is refused,
+because LLL reduces a basis. Cohen's formulation [Coh93, §2.6] keeps the
+Gram-Schmidt coefficients and updates them on every step; [vzGG13,
+ch. 16] has the analysis and the polynomial factoring LLL was invented
+for.
+
 ### 1.8 Differential equations and recurrences
 
 `D(y, x, n)` is the n-th derivative of an unknown function `y`. `dsolve`
@@ -4439,7 +4515,7 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | geometry | `point line circle distance midpoint angle area perimeter collinear? centroid intersect circumcircle perpendicular_bisector parallel_through perpendicular_through` |
 | special functions | `erf erfc Ei Si Ci li` |
 | domains | `NN ZZ QQ RR CC` (also `ℕ ℤ ℚ ℝ ℂ`), `GF assume forget assumptions` |
-| linear algebra | `vector matrix gram_schmidt least_squares project orthogonal? lu qr cholesky diagonalize jordan` |
+| linear algebra | `vector matrix gram_schmidt least_squares project orthogonal? lu qr cholesky diagonalize jordan lll` |
 | holding | `hold evaluate` |
 | interchange | `openmath from_openmath popcorn from_popcorn` (Appendix D) |
 | worked solutions | `steps` (a block, or `:solve :factor :apart :rref :gcd :discuss`) |
@@ -4468,6 +4544,7 @@ Almkvist-Zeilberger algorithm for hyperexponential integrals,
 multivariate (holonomic) summation, formal power series whose
 coefficients are not hypergeometric (`tan`, `exp(x)/(1 - x)`), iterated
 integrals (a definite integral inside another one stays formal),
+lattice reduction of a dependent generating set (`lll` reduces a basis),
 convergence conditions on the parameters of a definite integral
 (`integrate(x**a, x, 0, 1)` is `1/(1 + a)` also where it diverges), the sign
 of an expression on a box of *several* parameter ranges that is not a
@@ -4639,6 +4716,7 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | several variables: gradient, Hessian, Jacobian, Lagrange multipliers | analysis.rb | [Rud76, ch. 9]; [Spi08, ch. 17] |
 | analytic geometry: lines and circles, the shoelace area | geometry.rb | [Spi08, ch. 4]; [Bra86] |
 | Gram-Schmidt orthogonalization, least squares by the normal equations | linear_algebra.rb | [Str16, ch. 4] |
+| LLL lattice basis reduction, exact, with the incremental Gram-Schmidt update | lattice.rb | [LLL82]; [Coh93, §2.6]; [vzGG13, ch. 16] |
 | Laplace transform from the table with the shift rules, inverse by partial fractions | laplace.rb | [BD12, ch. 6] |
 | systems of differential equations by eigenvalues, with Jordan chains when defective | ode.rb | [BD12, ch. 7] |
 | congruences, Legendre and Jacobi symbols, multiplicative order, continued fractions | number_theory.rb | [Coh93, §1.4]; [Knu98, §4.5.3]; [HW08, ch. 10] |
@@ -4719,6 +4797,9 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   Springer 2014.
 - [Koo93] T. H. Koornwinder, On Zeilberger's algorithm and its q-analogue,
   *J. Comput. Appl. Math.* 48 (1993), 91-111.
+- [LLL82] A. K. Lenstra, H. W. Lenstra, Jr., L. Lovász, Factoring
+  polynomials with rational coefficients, *Math. Ann.* 261 (1982),
+  515-534.
 - [Loo83] R. Loos, Computing in algebraic extensions, in: B. Buchberger,
   G. E. Collins, R. Loos (eds.), *Computer Algebra: Symbolic and Algebraic
   Computation*, 2nd ed., Springer 1983, 173-187.
