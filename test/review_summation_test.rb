@@ -56,7 +56,7 @@ class ReviewSummationTest < Minitest::Test
       from = i == 1 ? 0 : 1
       result = begin
         RCAS.sum(term, @k, from, RCAS::OO)
-      rescue ArgumentError, NotImplementedError
+      rescue ArgumentError, NotImplementedError, RCAS::Unsupported
         next
       end
       refute finite_number?(result), "divergent #{term} summed to #{result}"
@@ -97,7 +97,7 @@ class ReviewSummationTest < Minitest::Test
     [[1 / (@k * (@k + 1)), -1, 3], [1 / ((@k - 3) * (@k - 2)), 1, RCAS::OO]].each do |term, from, to|
       result = begin
         RCAS.sum(term, @k, from, to)
-      rescue ZeroDivisionError, ArgumentError, NotImplementedError
+      rescue ZeroDivisionError, ArgumentError, NotImplementedError, RCAS::Unsupported
         next
       end
       assert declined?(result), "sum over a pole of #{term} came back as #{result}"
@@ -113,7 +113,7 @@ class ReviewSummationTest < Minitest::Test
     (3..6).each { |m| j = m - 3; seq << (2 * j + 7) * seq[m - 1] - (j + 2) * (j + 5) * seq[m - 2] + (j + 1) * (j + 2) * seq[m - 3] }
     begin
       result = RCAS.rsolve(eqn, :u, @n, init: { 0 => 0, 1 => 0, 2 => 1 })
-    rescue NotImplementedError
+    rescue NotImplementedError, RCAS::Unsupported
       return assert true
     end
     (0..6).each { |m| assert_equal seq[m], value(result.rhs, n: m), "u(#{m})" }
@@ -127,7 +127,7 @@ class ReviewSummationTest < Minitest::Test
     (1..6).each { |m| seq << (m - 4) * seq[m - 1] }
     begin
       result = RCAS.rsolve(eqn, :u, @n, init: { 0 => 1 })
-    rescue NotImplementedError, ArgumentError
+    rescue NotImplementedError, RCAS::Unsupported, ArgumentError
       return assert true
     end
     (0..6).each { |m| assert_equal seq[m], value(result.rhs, n: m), "u(#{m})" }
@@ -139,7 +139,7 @@ class ReviewSummationTest < Minitest::Test
     coefficient = (1..7).reduce(n(1)) { |acc, i| acc * (@n + i) }
     begin
       found = RCAS.hyper(RCAS.eq(u(@n + 1), coefficient * u(@n)), :u, @n)
-    rescue NotImplementedError
+    rescue NotImplementedError, RCAS::Unsupported
       return assert true
     end
     refute_empty found
@@ -176,7 +176,7 @@ class ReviewSummationTest < Minitest::Test
     # non-integer bound (5.625) is no sum at all.
     begin
       result = RCAS.sum(@k, @k, 1.5, 3)
-    rescue ArgumentError, NotImplementedError
+    rescue ArgumentError, NotImplementedError, RCAS::Unsupported
       return assert true
     end
     assert(result.is_a?(RCAS::Sum) || result == n(4.0), "got #{result}")

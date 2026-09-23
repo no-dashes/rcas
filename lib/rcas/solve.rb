@@ -83,7 +83,7 @@ module RCAS
       pair = affine or return false
       base, step = pair
       Inequalities.real?(step) && !Inequalities.real?(base)
-    rescue NotImplementedError
+    rescue NotImplementedError, RCAS::Unsupported
       false
     rescue StandardError => rescued
       RCAS.guard!(rescued)
@@ -162,7 +162,7 @@ module RCAS
       points.each { |t| found << [t.floor, t.ceil] if inside.call(t) }
       return [1, 0] if found.empty?
       [found.map(&:first).min, found.map(&:last).max]
-    rescue NotImplementedError, ArgumentError, ZeroDivisionError
+    rescue NotImplementedError, RCAS::Unsupported, ArgumentError, ZeroDivisionError
       nil
     end
 
@@ -274,7 +274,7 @@ module RCAS
         rescue Whole => e
           # squaring gave an identity, and the answer is a set (S18)
           return e.set
-        rescue NotImplementedError
+        rescue NotImplementedError, RCAS::Unsupported
           constant = trig_constant(f)
           raise if constant.nil?
           return Scalar.zero?(constant) ? everywhere(x, domain, poles, original) : []
@@ -325,23 +325,23 @@ module RCAS
       declared = domain || RCAS.assumption(x.name)
       points = poles.flat_map do |d|
         found = Solve.solve(d, x)
-        raise NotImplementedError, "every #{x} where #{d} != 0 is a solution; that set is not a finite union of intervals" unless found.is_a?(Array)
+        raise RCAS::Unsupported, "every #{x} where #{d} != 0 is a solution; that set is not a finite union of intervals" unless found.is_a?(Array)
         found
       end
       if points.any? { |p| p.is_a?(ImageSet) }
-        raise NotImplementedError, "every #{x} off the zeros of #{poles.join(', ')} is a solution; that set is not a finite union of intervals"
+        raise RCAS::Unsupported, "every #{x} off the zeros of #{poles.join(', ')} is a solution; that set is not a finite union of intervals"
       end
       if declared && declared != RR
         inside = points.reject { |p| Infer.excluded?(p, declared) }
         return declared if inside.empty?
-        raise NotImplementedError, "every #{x} in #{declared} except #{inside.map(&:to_s).join(', ')} is a solution; rcas has no set to write that with"
+        raise RCAS::Unsupported, "every #{x} in #{declared} except #{inside.map(&:to_s).join(', ')} is a solution; rcas has no set to write that with"
       end
       real = points.select { |p| Analysis.numeric(p) }
       set = real.empty? ? RealSet.reals : RealSet.reals - RealSet.new(real.map { |p| Interval.point(p) })
       return set if original.nil?
       defined = begin
         Analysis.real_domain(original, x)
-      rescue NotImplementedError, ArgumentError
+      rescue NotImplementedError, RCAS::Unsupported, ArgumentError
         nil
       end
       defined.is_a?(RealSet) ? set - (RealSet.reals - defined) : set
@@ -397,7 +397,7 @@ module RCAS
       poles.each do |d|
         zeros = begin
           Solve.solve(d, x)
-        rescue NotImplementedError, ArgumentError
+        rescue NotImplementedError, RCAS::Unsupported, ArgumentError
           next
         end
         next unless zeros.is_a?(Array)
@@ -738,7 +738,7 @@ module RCAS
     # set: the points of the other branches with those sets (the answer was
     # an ArgumentError naming the set: fourth review, S18).
     def case_split(f, x, nodes, depth, all: false)
-      raise NotImplementedError, "can't solve #{f} = 0 for #{x}: too many cases" if nodes.size > MAX_CASES
+      raise RCAS::Unsupported, "can't solve #{f} = 0 for #{x}: too many cases" if nodes.size > MAX_CASES
       sets = []
       roots = [1, -1].repeated_permutation(nodes.size).flat_map { |signs| branch_roots(f, x, nodes, signs, depth, sets, all: all) }
       roots += nodes.select { |n| n.name == :sign }.flat_map { |n| univariate(n.args.first, x, depth + 1, all: all) }
@@ -756,7 +756,7 @@ module RCAS
       conditions = branch_conditions(nodes, signs)
       set = begin
         Inequalities.solve(conditions, x)
-      rescue NotImplementedError
+      rescue NotImplementedError, RCAS::Unsupported
         nil
       end
       raise ArgumentError, "every #{x} with #{conditions.join(' and ')} solves #{f} = 0" unless set.is_a?(RealSet)
@@ -845,7 +845,7 @@ module RCAS
       case n
       when 1 then [(-coeffs[0] / coeffs[1]).cancel]
       when 2 then quadratic(coeffs[2], coeffs[1], coeffs[0])
-      else raise NotImplementedError, "can't solve a degree #{n} polynomial with symbolic coefficients exactly"
+      else raise RCAS::Unsupported, "can't solve a degree #{n} polynomial with symbolic coefficients exactly"
       end
     end
 
@@ -865,7 +865,7 @@ module RCAS
         case cs.size - 1
         when 1 then [(-cs[0] / cs[1]).cancel]
         when 2 then quadratic(cs[2], cs[1], cs[0])
-        else raise NotImplementedError, "can't solve a degree #{cs.size - 1} factor with symbolic coefficients exactly"
+        else raise RCAS::Unsupported, "can't solve a degree #{cs.size - 1} factor with symbolic coefficients exactly"
         end
       end
     rescue DomainError
@@ -912,7 +912,7 @@ module RCAS
       return RCAS.sqrt(d) unless fact.factors.all? { |_, m| m.even? } && unit.positive?
       root = fact.factors.reduce(RCAS.sqrt(Num.new(unit))) { |acc, (g, m)| acc * g.to_expr**(m / 2) }
       root.simplify
-    rescue DomainError, NotImplementedError
+    rescue DomainError, NotImplementedError, RCAS::Unsupported
       RCAS.sqrt(d)
     end
 
@@ -1016,7 +1016,7 @@ module RCAS
         next if g.nil? || depends?(g, x)
         inverted = begin
           univariate(g, t, depth + 1).flat_map { |v| invert(u, v, x, depth, all: all) }
-        rescue NotImplementedError, ArgumentError
+        rescue NotImplementedError, RCAS::Unsupported, ArgumentError
           next # another atom, or one of the rules below, may do better
         end
         return inverted
@@ -1044,7 +1044,7 @@ module RCAS
       logs = logarithmic_equation(f, x, depth)
       return logs if logs
 
-      raise NotImplementedError, "can't solve #{f} = 0 for #{x}; nsolve(#{f}, #{x}: a..b) finds a root numerically"
+      raise RCAS::Unsupported, "can't solve #{f} = 0 for #{x}; nsolve(#{f}, #{x}: a..b) finds a root numerically"
     end
 
     # A product vanishes where one of its factors does, so a product no
@@ -1073,7 +1073,7 @@ module RCAS
       # A root of one factor is a root of the product only where the rest of
       # the product is defined: log(x)*(x**2 - 4) does not vanish at -2.
       defined_roots(f, x, pieces.flat_map { |piece| univariate(piece, x, depth + 1, all: all) })
-    rescue NotImplementedError
+    rescue NotImplementedError, RCAS::Unsupported
       nil # one factor rcas cannot solve: the product is no easier
     end
 
@@ -1117,7 +1117,7 @@ module RCAS
       answers += univariate(cosine, x, depth + 1, all: all) if Coefficients.coeff(polynomial.simplify, t, degrees.first).nil? ||
                                                                Scalar.zero?(Coefficients.coeff(polynomial.simplify, t, degrees.first))
       answers
-    rescue NotImplementedError
+    rescue NotImplementedError, RCAS::Unsupported
       nil
     end
 
@@ -1177,7 +1177,7 @@ module RCAS
         # root is the non-negative one, so the equation holds exactly where
         # the other side is not negative - that set, or a refusal below the
         # top (an "every value" verdict about the square was wrong: S18)
-        raise NotImplementedError, "squaring #{f} = 0 gives an identity" unless q.even? && depth.zero? && with.size == 1 && side_is_root?(side, x)
+        raise RCAS::Unsupported, "squaring #{f} = 0 gives an identity" unless q.even? && depth.zero? && with.size == 1 && side_is_root?(side, x)
         raise Whole, Inequalities.solve(Inequality.new(rest, :>=, 0), x)
       end
       if root_denominator(g, x) > 1 || g.each_node.any? { |n| root_index_of(n, x) }
@@ -1186,7 +1186,7 @@ module RCAS
         return nil unless remaining < with.size
       end
       defined_roots(f, x, verify(f, x, univariate(g, x, depth + 1)))
-    rescue NotImplementedError
+    rescue NotImplementedError, RCAS::Unsupported
       nil
     end
 
@@ -1198,7 +1198,7 @@ module RCAS
       combined = Trigonometry.logcombine(f).simplify
       return nil if combined == f
       defined_roots(f, x, univariate(combined, x, depth + 1))
-    rescue NotImplementedError
+    rescue NotImplementedError, RCAS::Unsupported
       nil
     end
 
@@ -1363,7 +1363,7 @@ module RCAS
     # function): that is "can't", never "no solution" - x**x = 4 has the
     # root 2.
     def cannot_invert!(u, v)
-      raise NotImplementedError, "can't solve #{u} = #{v}: rcas knows no inverse of #{u.is_a?(Fn) ? u.name : u}"
+      raise RCAS::Unsupported, "can't solve #{u} = #{v}: rcas knows no inverse of #{u.is_a?(Fn) ? u.name : u}"
     end
 
     # Largest order of a root of unity we look for: (-1)**x is the one that
@@ -1430,7 +1430,7 @@ module RCAS
         elsif fs.size == 2 && unknowns.size == 2
           polynomial_pair(fs, unknowns)
         else
-          raise NotImplementedError, "only linear systems and polynomial systems with rational coefficients are supported"
+          raise RCAS::Unsupported, "only linear systems and polynomial systems with rational coefficients are supported"
         end
       restrict_system(solutions, unknowns, domain)
     end
@@ -1459,7 +1459,7 @@ module RCAS
       basis = Groebner.basis(polys, :lex)
       return [] if basis.size == 1 && basis.first.constant?
       unless Groebner.zero_dimensional?(basis, :lex)
-        raise NotImplementedError, "the system has infinitely many solutions; its Gröbner basis is #{basis.map(&:to_s).join(', ')}"
+        raise RCAS::Unsupported, "the system has infinitely many solutions; its Gröbner basis is #{basis.map(&:to_s).join(', ')}"
       end
       triangular(basis.map(&:to_expr), unknowns, {}).map { |sol| unknowns.to_h { |u| [u, sol[u]] } }
     end
@@ -1471,9 +1471,9 @@ module RCAS
       substituted = basis.map { |g| g.subs(known).simplify }.reject { |g| Scalar.zero?(g) }
       univariate = substituted.select { |g| (g.variables & rest).empty? }
       return [] if univariate.any? { |g| g.variables.empty? } # a non-zero constant: no solution on this branch
-      raise NotImplementedError, "no univariate polynomial in #{x} after substituting #{known}" if univariate.empty?
+      raise RCAS::Unsupported, "no univariate polynomial in #{x} after substituting #{known}" if univariate.empty?
       pivot = univariate.min_by { |g| polynomial_coefficients(g, x)&.size || Float::INFINITY }
-      coeffs = polynomial_coefficients(pivot, x) or raise NotImplementedError, "#{pivot} is not a polynomial in #{x}"
+      coeffs = polynomial_coefficients(pivot, x) or raise RCAS::Unsupported, "#{pivot} is not a polynomial in #{x}"
       roots = dedupe(polynomial_roots(coeffs).map(&:simplify))
       roots = roots.select { |r| univariate.all? { |g| Scalar.zero?(g.subs(x => r).simplify) } }
       roots.flat_map { |r| triangular(basis, unknowns[0...-1], known.merge(x => r)) }
@@ -1536,10 +1536,10 @@ module RCAS
       f, g = fs.map do |e|
         ring.call(e)
       rescue DomainError
-        raise NotImplementedError, "polynomial systems need rational coefficients: #{e}"
+        raise RCAS::Unsupported, "polynomial systems need rational coefficients: #{e}"
       end
       res = f.resultant(g, x.name)
-      raise NotImplementedError, "the equations share a common factor" if res.zero?
+      raise RCAS::Unsupported, "the equations share a common factor" if res.zero?
       ys = polynomial_roots((0..res.degree(y.name)).map { |k| ring_constant(res.coefficient_in(y.name, k)) })
       dedupe(ys).flat_map do |y0|
         xs = univariate(fs[0].subs(y => y0), x, 1)

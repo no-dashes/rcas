@@ -46,8 +46,8 @@ module RCAS
     def precise_float(e)
       v = Precision.evalf(e, 20).to_f
       v.finite? ? v : nil
-    rescue StandardError, NotImplementedError => rescued
-      RCAS.guard!(rescued)
+    rescue StandardError, NotImplementedError, RCAS::Unsupported => rescued
+      RCAS.guard!(rescued, refused: true)
       v = e.evalf
       v.is_a?(Numeric) && !v.is_a?(Complex) ? v.to_f : nil
     end

@@ -134,7 +134,7 @@ class Review2SummationTest < Minitest::Test
     [[1 / ((@k - 3) * (@k - 2)), 0, 5], [1 / (@k * (@k + 1)), -5, 2], [1 / (@k * (@k + 1)), 0, 3]].each do |term, lo, m|
       result = begin
         RCAS.sum(term, @k, lo, @n)
-      rescue NotImplementedError, ArgumentError
+      rescue NotImplementedError, RCAS::Unsupported, ArgumentError
         next
       end
       next if declined?(result) || result.is_a?(RCAS::Piecewise)
@@ -151,7 +151,7 @@ class Review2SummationTest < Minitest::Test
     [1 / (2 * @k + 1), 1 / (@k + Rational(1, 2))].each do |term|
       result = begin
         RCAS.sum(term, @k, 0, RCAS::OO)
-      rescue ArgumentError, NotImplementedError
+      rescue ArgumentError, NotImplementedError, RCAS::Unsupported
         next
       end
       assert declined?(result), "sum(#{term}, k, 0, oo) = #{result}, but the terms behave like 1/(2k) and the series diverges"

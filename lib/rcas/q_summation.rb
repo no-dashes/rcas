@@ -139,7 +139,7 @@ module RCAS
       # and not when it only spreads it out: keep the shorter form.
       antidifference = tidied.to_s.length <= plain.to_s.length ? tidied : plain
       telescopes?(antidifference, f, k, q) ? antidifference : nil
-    rescue DomainError, NotImplementedError, ZeroDivisionError
+    rescue DomainError, NotImplementedError, RCAS::Unsupported, ZeroDivisionError
       nil
     end
 
@@ -279,7 +279,7 @@ module RCAS
       return [] if resultant.zero?
       bound = [resultant.degree(q.name), a.degree(var.name) + b.degree(var.name)].max
       (0..bound).select { |h| !a.gcd(shift(b, q, h, var)).constant? }
-    rescue DomainError, NotImplementedError
+    rescue DomainError, NotImplementedError, RCAS::Unsupported
       (0..(a.degree(var.name) + b.degree(var.name))).select { |h| !a.gcd(shift(b, q, h, var)).constant? }
     end
 

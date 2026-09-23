@@ -112,7 +112,7 @@ class AnalysisTest < Minitest::Test
   def test_a_domain_condition_that_cannot_be_solved_says_so
     x = RCAS::Var.new(:x)
     [RCAS.log(RCAS.sin(x)), RCAS.tan(x)].each do |f|
-      e = assert_raises(NotImplementedError) { RCAS.real_domain(f, x) }
+      e = assert_raises(NotImplementedError, RCAS::Unsupported) { RCAS.real_domain(f, x) }
       assert_match(/real_domain/, e.message)
     end
     assert_equal "(-oo, 0) ∪ (0, oo)", RCAS.real_domain(1 / x, x).to_s
@@ -275,7 +275,7 @@ class AnalysisTest < Minitest::Test
   def test_an_undecided_curvature_is_refused_not_denied
     x = RCAS::Var.new(:x)
     c = RCAS::Var.new(:c)
-    e = assert_raises(NotImplementedError) { RCAS::Analysis.inflection_at?(RCAS::Num.new(0), x, c, []) }
+    e = assert_raises(NotImplementedError, RCAS::Unsupported) { RCAS::Analysis.inflection_at?(RCAS::Num.new(0), x, c, []) }
     assert_match(/not decided/, e.message)
     assert_nil RCAS::Analysis.vanishing_order(RCAS::Num.new(0), x, c)
     assert_nil RCAS::Analysis.sign_change(RCAS::Num.new(0), x, c)
@@ -299,9 +299,9 @@ class AnalysisTest < Minitest::Test
       assert_equal RCAS::RealSet.reals, RCAS.real_domain(RCAS.log(a) + x, x)
       assert_equal "(0, oo)", RCAS.real_domain(RCAS.log(a) + RCAS.log(x), x).to_s
     end
-    e = assert_raises(NotImplementedError) { RCAS.real_domain(RCAS.log(a) + x, x) }
+    e = assert_raises(NotImplementedError, RCAS::Unsupported) { RCAS.real_domain(RCAS.log(a) + x, x) }
     assert_match(/depends on a/, e.message)
-    assert_raises(NotImplementedError) { RCAS.real_domain(RCAS.sqrt(a) + x, x) }
+    assert_raises(NotImplementedError, RCAS::Unsupported) { RCAS.real_domain(RCAS.sqrt(a) + x, x) }
   end
 
   # An expression carrying i is real only where its imaginary part vanishes.

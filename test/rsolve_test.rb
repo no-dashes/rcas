@@ -75,13 +75,13 @@ class RsolveTest < Minitest::Test
   end
 
   def test_unsupported
-    assert_raises(NotImplementedError) { rsolve(u(N + 1), u(N)**2) }
+    assert_raises(NotImplementedError, RCAS::Unsupported) { rsolve(u(N + 1), u(N)**2) }
     assert_raises(ArgumentError) { rsolve(u(N), 3) }
-    assert_raises(NotImplementedError) { rsolve(u(2 * N), u(N)) }
+    assert_raises(NotImplementedError, RCAS::Unsupported) { rsolve(u(2 * N), u(N)) }
     # one hypergeometric solution of two: the general solution is not ours to write
-    error = assert_raises(NotImplementedError) { rsolve((N + 2) * u(N + 2), (2 * N + 3) * u(N + 1) - (N + 1) * u(N)) }
+    error = assert_raises(NotImplementedError, RCAS::Unsupported) { rsolve((N + 2) * u(N + 2), (2 * N + 3) * u(N + 1) - (N + 1) * u(N)) }
     assert_match(/only 1 of 2/, error.message)
     # polynomial coefficients and a forcing term
-    assert_raises(NotImplementedError) { rsolve(u(N + 1), N * u(N) + 1) }
+    assert_raises(NotImplementedError, RCAS::Unsupported) { rsolve(u(N + 1), N * u(N) + 1) }
   end
 end

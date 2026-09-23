@@ -134,10 +134,10 @@ class OdeTest < Minitest::Test
   end
 
   def test_unsupported_cases_raise
-    assert_raises(NotImplementedError) { dsolve(d(2) + Y * d) }
-    assert_raises(NotImplementedError) { dsolve(d(2) + X * Y) }
-    assert_raises(NotImplementedError) { dsolve(RCAS::Equation.new(d(3) + Y, 1 / X)) }
-    assert_raises(NotImplementedError) { dsolve(d - RCAS.sin(X * Y)) }
+    assert_raises(NotImplementedError, RCAS::Unsupported) { dsolve(d(2) + Y * d) }
+    assert_raises(NotImplementedError, RCAS::Unsupported) { dsolve(d(2) + X * Y) }
+    assert_raises(NotImplementedError, RCAS::Unsupported) { dsolve(RCAS::Equation.new(d(3) + Y, 1 / X)) }
+    assert_raises(NotImplementedError, RCAS::Unsupported) { dsolve(d - RCAS.sin(X * Y)) }
     assert_raises(ArgumentError) { dsolve(Y - X) }
     assert_equal "D(y, x, 2)", d(2).to_s
     assert_equal d(3), d(2).diff(:x)

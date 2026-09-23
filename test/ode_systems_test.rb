@@ -53,8 +53,8 @@ class OdeSystemsTest < Minitest::Test
   end
 
   def test_what_is_not_supported
-    assert_raises(NotImplementedError) { solve([RCAS::Equation.new(d(X), T * X), RCAS::Equation.new(d(Y), Y)]) }
-    assert_raises(NotImplementedError) { solve([RCAS::Equation.new(d(X), RCAS.exp(T)), RCAS::Equation.new(d(Y), Y)]) }
+    assert_raises(NotImplementedError, RCAS::Unsupported) { solve([RCAS::Equation.new(d(X), T * X), RCAS::Equation.new(d(Y), Y)]) }
+    assert_raises(NotImplementedError, RCAS::Unsupported) { solve([RCAS::Equation.new(d(X), RCAS.exp(T)), RCAS::Equation.new(d(Y), Y)]) }
     assert_raises(ArgumentError) { RCAS.dsolve([RCAS::Equation.new(d(X), Y)], [X, Y], T) }
   end
 end

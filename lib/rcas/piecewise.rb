@@ -226,7 +226,7 @@ module RCAS
       taken = RealSet.empty
       pw.branches.filter_map do |cond, value|
         set = set_of(cond, x)
-        raise NotImplementedError, "piecewise: can't locate #{cond}" if set.nil?
+        raise RCAS::Unsupported, "piecewise: can't locate #{cond}" if set.nil?
         set -= taken
         taken |= set
         set.empty? ? nil : [cond, set, value]
@@ -261,7 +261,7 @@ module RCAS
         value.is_a?(Piecewise) ? located(value, x).map { |_, inner, v| [set & inner, v] } : [[set, value]]
       end
       Piecewise.new(branches.reject { |set, _| set.empty? })
-    rescue ArgumentError, NotImplementedError
+    rescue ArgumentError, NotImplementedError, RCAS::Unsupported
       pw
     end
 
@@ -440,7 +440,7 @@ module RCAS
       end
       roots = roots.uniq.sort_by { |r| Expression.lift(r).evalf }
       return roots + families if everywhere.empty?
-      raise NotImplementedError, "piecewise: a whole piece and infinitely many points do not make one set" unless families.empty?
+      raise RCAS::Unsupported, "piecewise: a whole piece and infinitely many points do not make one set" unless families.empty?
       everywhere.reduce(RealSet.new(roots.map { |r| Interval.point(Expression.lift(r)) })) { |a, b| a | b }
     end
 
@@ -462,7 +462,7 @@ module RCAS
       b = (family.at(1) - a).simplify
       av = Analysis.numeric(a)
       bv = Analysis.numeric(b)
-      raise NotImplementedError, "piecewise: can't place #{family} in #{set}" if av.nil? || bv.nil? || bv.zero?
+      raise RCAS::Unsupported, "piecewise: can't place #{family} in #{set}" if av.nil? || bv.nil? || bv.zero?
       set.intervals.flat_map do |interval|
         lo, hi = interval.low_value, interval.high_value
         first = lo.infinite? ? nil : ((lo - av) / bv)
@@ -471,7 +471,7 @@ module RCAS
         low_k = first && (first.ceil - 1)
         high_k = last && (last.floor + 1)
         if low_k && high_k
-          raise NotImplementedError, "piecewise: too many solutions in #{interval}" if high_k - low_k > MAX_POINTS
+          raise RCAS::Unsupported, "piecewise: too many solutions in #{interval}" if high_k - low_k > MAX_POINTS
           (low_k..high_k).map { |i| family.at(i) }.select { |m| interval.include?(m) }
         elsif low_k
           start = (low_k..low_k + 3).find { |i| interval.include?(family.at(i)) }

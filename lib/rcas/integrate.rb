@@ -27,7 +27,7 @@ module RCAS
       pointwise = table.key?(var) || table.any? { |k, v| k != var && v.variables.include?(var.name) && integrand.variables.include?(k.name) }
       return super unless pointwise
       found = evaluate
-      raise NotImplementedError, "#{self} has no antiderivative rcas can find, so it cannot be evaluated at a point" if found.each_node.any? { |n| n.is_a?(Integral) }
+      raise RCAS::Unsupported, "#{self} has no antiderivative rcas can find, so it cannot be evaluated at a point" if found.each_node.any? { |n| n.is_a?(Integral) }
       found.replace_with(table)
     end
     def to_sexp = [:integral, *children.map(&:to_sexp)]
@@ -129,8 +129,8 @@ module RCAS
       kinks.each do |kink|
         roots = begin
           Solve.solve(kink.args.first, x)
-        rescue StandardError, NotImplementedError => rescued
-          RCAS.guard!(rescued)
+        rescue StandardError, NotImplementedError, RCAS::Unsupported => rescued
+          RCAS.guard!(rescued, refused: true)
           return nil
         end
         return nil unless roots.is_a?(Array)
@@ -205,8 +205,8 @@ module RCAS
       candidates.uniq.each do |d|
         roots = begin
           Solve.solve(d, x)
-        rescue StandardError, NotImplementedError => rescued
-          RCAS.guard!(rescued)
+        rescue StandardError, NotImplementedError, RCAS::Unsupported => rescued
+          RCAS.guard!(rescued, refused: true)
           nil
         end
         roots = nil unless roots.nil? || roots.is_a?(Array)
@@ -244,7 +244,7 @@ module RCAS
     def possibly_inside?(m, lo, hi)
       real = begin
         Inequalities.real?(m)
-      rescue NotImplementedError
+      rescue NotImplementedError, RCAS::Unsupported
         nil
       end
       return false if real == false
@@ -292,8 +292,8 @@ module RCAS
       candidates.uniq.each do |d|
         roots = begin
           Solve.solve(d, x, all: true)
-        rescue StandardError, NotImplementedError => rescued
-          RCAS.guard!(rescued)
+        rescue StandardError, NotImplementedError, RCAS::Unsupported => rescued
+          RCAS.guard!(rescued, refused: true)
           nil
         end
         # Unsolvable: a break only matters if it is in there, and a cos
@@ -1097,7 +1097,7 @@ module RCAS
 
     def heurisch(f, x)
       Heurisch.new(f, x).run
-    rescue DomainError, ZeroDivisionError, NotImplementedError
+    rescue DomainError, ZeroDivisionError, NotImplementedError, RCAS::Unsupported
       nil
     end
 

@@ -423,7 +423,7 @@ module RCAS
     protected
 
     def univariate!
-      raise NotImplementedError, "this operation needs a univariate ring, got #{ring}" unless ring.univariate?
+      raise RCAS::Unsupported, "this operation needs a univariate ring, got #{ring}" unless ring.univariate?
     end
 
     private

@@ -85,7 +85,7 @@ module RCAS
     def generator_real?
       return generator.real? if generator.is_a?(RootOf)
       Inequalities.real?(generator)
-    rescue NotImplementedError
+    rescue NotImplementedError, RCAS::Unsupported
       false
     end
 
@@ -317,13 +317,13 @@ module RCAS
     # polynomial for each part, combined - P(x) for u + v is
     # res_y(P_u(y), P_v(x - y)) - and the factor that vanishes at the value
     # kept. pi and e are transcendental and say so; anything else it cannot
-    # take apart is NotImplementedError, never "not algebraic".
+    # take apart is a refusal (RCAS::Unsupported), never "not algebraic".
     def resultant_minpoly(expr, var)
       x = Var.new(var)
       poly = annihilator(expr, x)
       ring = QQ[var]
       value = expr.evalf
-      raise NotImplementedError, "minpoly: #{expr} has no numeric value to choose a factor by" unless value.is_a?(Numeric)
+      raise RCAS::Unsupported, "minpoly: #{expr} has no numeric value to choose a factor by" unless value.is_a?(Numeric)
       ring.call(poly).factor.factors.map(&:first).min_by { |f| (f.to_expr.evalf(var => value)).abs }.monic
     end
 
@@ -336,16 +336,16 @@ module RCAS
         if v.is_a?(Complex) && [v.real, v.imaginary].all? { |c| c.is_a?(Integer) || c.is_a?(Rational) }
           return ((x - Num.new(v.real))**2 + Num.new(v.imaginary)**2).expand
         end
-        raise NotImplementedError, "minpoly: #{e} is not exact"
+        raise RCAS::Unsupported, "minpoly: #{e} is not exact"
       when Const
         raise ArgumentError, "not an algebraic number: #{e} is transcendental" if %i[pi e].include?(e.name) || e == E
-        raise NotImplementedError, "minpoly: #{e}"
+        raise RCAS::Unsupported, "minpoly: #{e}"
       when Neg then annihilator(e.arg, x).subs(x => Neg.new(x)).expand
       when Add, Sub, Mul, Div then combine(e, x, y)
       when Pow then power_annihilator(e, x, y)
       else
         raise ArgumentError, "not an algebraic number: #{e} is transcendental" if e == E || (e.is_a?(Fn) && e.name == :exp && e.args.first == Num.new(1))
-        raise NotImplementedError, "minpoly: #{e} is beyond the radicals rcas takes apart"
+        raise RCAS::Unsupported, "minpoly: #{e} is beyond the radicals rcas takes apart"
       end
     end
 
@@ -371,7 +371,7 @@ module RCAS
 
     def power_annihilator(e, x, y)
       exponent = e.exponent
-      raise NotImplementedError, "minpoly: #{e} has a non-rational exponent" unless exponent.is_a?(Num) && (exponent.value.is_a?(Integer) || exponent.value.is_a?(Rational))
+      raise RCAS::Unsupported, "minpoly: #{e} has a non-rational exponent" unless exponent.is_a?(Num) && (exponent.value.is_a?(Integer) || exponent.value.is_a?(Rational))
       r = Rational(exponent.value)
       base = annihilator(e.base, x)
       base = scaled(base, x, 1 / x, x) if r.negative? # the reciprocal

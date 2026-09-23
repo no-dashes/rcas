@@ -65,7 +65,7 @@ class InequalitiesTest < Minitest::Test
     assert_equal "[-1 + a, 1 + a]", RCAS.solve(X**2 - 2 * a * X + a**2 - 1 <= 0, X).to_s, "no case split when the structure is uniform"
     assert_equal "(-oo, oo)", RCAS.solve(X**2 + a**2 + 1 > 0, X).to_s
     assert_match(/\\begin\{cases\}.*\\text\{if \} a \\le 0/, c.to_latex)
-    assert_raises(NotImplementedError) { RCAS.solve(X**2 - a * RCAS::Var.new(:b) >= 0, X) }
+    assert_raises(NotImplementedError, RCAS::Unsupported) { RCAS.solve(X**2 - a * RCAS::Var.new(:b) >= 0, X) }
     assert_equal [1, "a"], RCAS.solve((X - a) * (X - 1), X).map(&:to_s).map { |s| s == "1" ? 1 : s }
     assert_equal "2*a**(1/2)", RCAS.sqrt(4 * a).simplify.to_s
     assert_equal "a**(1/2)/2", RCAS.sqrt(a / 4).simplify.to_s
@@ -78,6 +78,6 @@ class InequalitiesTest < Minitest::Test
     assert set.include?(0)
     refute set.include?(2)
     assert_equal "\\left(-\\infty, -2\\right] \\cup \\left[2, \\infty\\right)", RCAS.solve(X**2 >= 4, X).to_latex
-    assert_raises(NotImplementedError) { RCAS.solve(RCAS.sin(X) > 0, X) }
+    assert_raises(NotImplementedError, RCAS::Unsupported) { RCAS.solve(RCAS.sin(X) > 0, X) }
   end
 end

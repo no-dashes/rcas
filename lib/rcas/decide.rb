@@ -117,8 +117,8 @@ module RCAS
         decided += 1 if verdict
       end
       decided.positive? ? true : nil
-    rescue StandardError, NotImplementedError => rescued
-      RCAS.guard!(rescued) if rescued.is_a?(StandardError)
+    rescue StandardError, NotImplementedError, RCAS::Unsupported => rescued
+      RCAS.guard!(rescued, refused: true) if rescued.is_a?(StandardError)
       nil
     end
 
@@ -171,8 +171,8 @@ module RCAS
           Precision.evalf_with_scale(e, digits)
         rescue ZeroDivisionError
           return nil
-        rescue StandardError, NotImplementedError => rescued
-          RCAS.guard!(rescued)
+        rescue StandardError, NotImplementedError, RCAS::Unsupported => rescued
+          RCAS.guard!(rescued, refused: true)
           return :unsupported
         end
         return :unsupported if keep < digits
@@ -214,8 +214,8 @@ module RCAS
       return nil if m.nil?
       return :nonzero if m.zero?
       coefficients.drop(m).map { |c| c.value.abs }
-    rescue StandardError, NotImplementedError => rescued
-      RCAS.guard!(rescued) if rescued.is_a?(StandardError)
+    rescue StandardError, NotImplementedError, RCAS::Unsupported => rescued
+      RCAS.guard!(rescued, refused: true) if rescued.is_a?(StandardError)
       nil
     end
 

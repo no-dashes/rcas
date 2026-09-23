@@ -83,7 +83,7 @@ class RationalFunctionTest < Minitest::Test
     assert_equal "0", rem(:x**2 + :y, :x, :y).to_s
     assert_equal [3, 1], divmod(10, 3)
     assert_equal ["1 + x + x**2", "0"], (:x**3 - 1).divmod(:x - 1).map(&:to_s)
-    assert_raises(NotImplementedError) { quo(:x**2 + :y, :x + 1) } # several indeterminates, no x named
+    assert_raises(NotImplementedError, RCAS::Unsupported) { quo(:x**2 + :y, :x + 1) } # several indeterminates, no x named
   end
 
   def test_functional_forms

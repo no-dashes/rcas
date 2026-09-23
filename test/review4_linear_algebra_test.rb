@@ -109,7 +109,7 @@ class Review2LinearAlgebraTest < Minitest::Test
     m = RCAS.matrix([[1.0, 3.0], [0.1, 0.3]])
     begin
       r = m.rank
-    rescue NotImplementedError, ArgumentError
+    rescue NotImplementedError, RCAS::Unsupported, ArgumentError
       return pass
     end
     assert_equal 1, r

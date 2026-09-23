@@ -91,7 +91,7 @@ class GroebnerTest < Minitest::Test
     end
     assert_equal [], RCAS.solve([X**2 + Y**2 - 1, X + Y - 3, X - Y], [X, Y])
     assert_equal "[{x=>0, y=>0}]", RCAS.solve([X * Y, X + Y], [X, Y]).inspect
-    e = assert_raises(NotImplementedError) { RCAS.solve([X * Y - 1], [X, Y]) }
+    e = assert_raises(NotImplementedError, RCAS::Unsupported) { RCAS.solve([X * Y - 1], [X, Y]) }
     assert_match(/infinitely many solutions/, e.message)
   end
 

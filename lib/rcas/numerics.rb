@@ -479,8 +479,8 @@ module RCAS
       end
       poles = begin
         Integrate.singular_points(f, var, Num.new(Rational(a)), Num.new(Rational(b)))
-      rescue StandardError, NotImplementedError => rescued
-        RCAS.guard!(rescued)
+      rescue StandardError, NotImplementedError, RCAS::Unsupported => rescued
+        RCAS.guard!(rescued, refused: true)
         nil
       end
       found.concat(poles) if poles
@@ -499,8 +499,8 @@ module RCAS
       roots = Solve.solve(u, var)
       return [] unless roots.is_a?(Array)
       roots.flat_map { |r| r.is_a?(ImageSet) ? (r.between(a, b, limit: MAX_BREAKPOINTS) || []) : [r] }
-    rescue StandardError, NotImplementedError => rescued
-      RCAS.guard!(rescued)
+    rescue StandardError, NotImplementedError, RCAS::Unsupported => rescued
+      RCAS.guard!(rescued, refused: true)
       []
     end
 

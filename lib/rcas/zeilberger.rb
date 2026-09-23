@@ -55,9 +55,9 @@ module RCAS
       n = index_of(s)
       k = Expression.lift(k)
       found = certificate(term, n, k, max_order: max_order)
-      raise NotImplementedError, "sumrecursion: no recurrence of order #{max_order} or less for #{term}" if found.nil?
+      raise RCAS::Unsupported, "sumrecursion: no recurrence of order #{max_order} or less for #{term}" if found.nil?
       if boundary_terms?(found, n, k)
-        raise NotImplementedError, "sumrecursion: the telescoping identity holds for #{term}, but its " \
+        raise RCAS::Unsupported, "sumrecursion: the telescoping identity holds for #{term}, but its " \
                                    "boundary terms do not vanish, so the sum itself does not obey the recurrence"
       end
       Equation.new(found.recurrence(s.name), Num.new(0))
@@ -112,7 +112,7 @@ module RCAS
       n = index_of(s)
       k = Expression.lift(k)
       found = certificate(term, n, k, max_order: max_order)
-      raise NotImplementedError, "sumcertificate: no recurrence of order #{max_order} or less for #{term}" if found.nil?
+      raise RCAS::Unsupported, "sumcertificate: no recurrence of order #{max_order} or less for #{term}" if found.nil?
       found.rational
     end
 
@@ -155,7 +155,7 @@ module RCAS
       closed = Recurrence.rsolve(equation, :_S, n, init: init).rhs
       return nil if closed.variables.any? { |v| v.to_s.start_with?("C") } # constants left unfixed
       confirmed?(closed, term, n, k, from, to, order) ? closed.simplify : nil
-    rescue NotImplementedError, ArgumentError, DomainError, ZeroDivisionError
+    rescue NotImplementedError, RCAS::Unsupported, ArgumentError, DomainError, ZeroDivisionError
       nil
     end
 
@@ -223,7 +223,7 @@ module RCAS
       rational = certificate_of(values, xs, factor, bm, c0, denominator, k, ring)
       found = Certificate.new(coefficients, rational, order, term, n, k)
       verify(found, in_k, shifted) ? found : nil
-    rescue DomainError, NotImplementedError, ZeroDivisionError
+    rescue DomainError, NotImplementedError, RCAS::Unsupported, ZeroDivisionError
       nil
     end
 
@@ -304,7 +304,7 @@ module RCAS
         factor = -factor
       end
       [polynomials.map(&:to_expr), factor.to_expr]
-    rescue DomainError, NotImplementedError, ZeroDivisionError
+    rescue DomainError, NotImplementedError, RCAS::Unsupported, ZeroDivisionError
       [coefficients, Num.new(1)]
     end
 

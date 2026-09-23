@@ -38,7 +38,7 @@ module RCAS
       f = Expression.lift(f)
       x = variable(f, var)
       found = Solve.solve(f.diff(x), x, principal: true)
-      raise NotImplementedError, "critical points of #{f}: the derivative vanishes on a whole interval" unless found.is_a?(Array)
+      raise RCAS::Unsupported, "critical points of #{f}: the derivative vanishes on a whole interval" unless found.is_a?(Array)
       sort_points(found.select { |p| real_point?(p) && defined_at?(f, x, p) })
     end
 
@@ -51,7 +51,7 @@ module RCAS
       real != false
     rescue ZeroDivisionError
       false
-    rescue NotImplementedError
+    rescue NotImplementedError, RCAS::Unsupported
       true # realness undecided: the point is kept, and says so nowhere else
     rescue StandardError => rescued
       RCAS.guard!(rescued)
@@ -73,7 +73,7 @@ module RCAS
     def real_point?(point)
       return true if point.is_a?(ImageSet)
       Inequalities.real?(point)
-    rescue NotImplementedError
+    rescue NotImplementedError, RCAS::Unsupported
       true # not knowing is not knowing it is complex
     rescue StandardError => rescued
       RCAS.guard!(rescued)
@@ -128,7 +128,7 @@ module RCAS
         end
         next if Scalar.zero?(value)
         # 6*a at 0 for a*x**3 + x**4: whether it vanishes depends on a
-        raise NotImplementedError, "whether #{value} is zero decides the shape at #{point}; assume something about #{value.variables.join(', ')}"
+        raise RCAS::Unsupported, "whether #{value} is zero decides the shape at #{point}; assume something about #{value.variables.join(', ')}"
       end
       nil
     rescue ArgumentError
@@ -166,7 +166,7 @@ module RCAS
       x = variable(f, var)
       second = f.diff(x, 2)
       candidates = points || Solve.solve(second, x, principal: true)
-      raise NotImplementedError, "inflections of #{f}: f'' vanishes on a whole interval" unless candidates.is_a?(Array)
+      raise RCAS::Unsupported, "inflections of #{f}: f'' vanishes on a whole interval" unless candidates.is_a?(Array)
       real = candidates.select { |p| real_point?(p) && defined_at?(f, x, p) }
       sort_points(real.select { |point| inflection_at?(second, x, point, real) })
     end
@@ -198,7 +198,7 @@ module RCAS
     def inflection_at?(second, x, point, others)
       found = begin
         vanishing(second, x, point)
-      rescue NotImplementedError
+      rescue NotImplementedError, RCAS::Unsupported
         # a parameter decides the order, but maybe not its parity: f'' =
         # 6*a*x + 20*x**3 vanishes to order 1 for a != 0 and 3 for a = 0,
         # an inflection either way (the review's S22 had "6*a decides")
@@ -209,7 +209,7 @@ module RCAS
       return found.first.odd? if found
       change = sign_change(second, x, point, step: safe_step(point, others))
       return change != :saddle if change
-      raise NotImplementedError, "inflections: whether the curvature changes at #{point} is not decided here"
+      raise RCAS::Unsupported, "inflections: whether the curvature changes at #{point} is not decided here"
     end
 
     # The orders g could vanish to at the point, over the parameters: each
@@ -265,7 +265,7 @@ module RCAS
       f.each_node { |n| edges << n.args.first if n.is_a?(Fn) && n.name == :log && n.args.first.variables.include?(x.name) }
       poles = (denominators(f, x) + edges).uniq.flat_map do |g|
         found = Solve.solve(g, x)
-        raise NotImplementedError, "vertical asymptotes of #{f}: #{g} = 0 vanishes on a whole interval" unless found.is_a?(Array)
+        raise RCAS::Unsupported, "vertical asymptotes of #{f}: #{g} = 0 vanishes on a whole interval" unless found.is_a?(Array)
         found
       end
       sort_points(poles.uniq.select { |p| real_point?(p) && runs_away?(f, x, p) })
@@ -283,7 +283,7 @@ module RCAS
       return true if sides.any? { |v| Limits.infinite?(v) }
       sides = sides.zip([1, -1]).reject { |v, side| v.is_a?(Limit) && !real_beside?(f, x, probe, side) }.map(&:first)
       return false if sides.none? { |v| v.is_a?(Limit) }
-      raise NotImplementedError, "vertical asymptotes of #{f}: the limit at #{probe} is not decided here"
+      raise RCAS::Unsupported, "vertical asymptotes of #{f}: the limit at #{probe} is not decided here"
     rescue ZeroDivisionError
       false
     end
@@ -293,7 +293,7 @@ module RCAS
     def real_toward?(f, x, point)
       value = f.subs(x => Num.new(point == OO ? 1000 : -1000)).simplify
       Inequalities.real?(value) != false
-    rescue ZeroDivisionError, NotImplementedError
+    rescue ZeroDivisionError, NotImplementedError, RCAS::Unsupported
       true
     end
 
@@ -302,7 +302,7 @@ module RCAS
     def real_beside?(f, x, point, side)
       value = f.subs(x => (Expression.lift(point) + Num.new(Rational(side, 1000))).simplify).simplify
       Inequalities.real?(value) != false
-    rescue ZeroDivisionError, NotImplementedError
+    rescue ZeroDivisionError, NotImplementedError, RCAS::Unsupported
       true
     end
 
@@ -330,7 +330,7 @@ module RCAS
       (at || infinities).filter_map do |point|
         value = Limits.limit(f, x, point)
         next nil if value.is_a?(Limit) && !real_toward?(f, x, point) # 1/log(x) towards -oo
-        raise NotImplementedError, "horizontal asymptotes of #{f}: the limit at #{point} is not decided here" if value.is_a?(Limit)
+        raise RCAS::Unsupported, "horizontal asymptotes of #{f}: the limit at #{point} is not decided here" if value.is_a?(Limit)
         next nil if Limits.infinite?(value) || value == UNDEFINED
         value.simplify
       end.uniq
@@ -342,13 +342,13 @@ module RCAS
         # only a function that runs away has an oblique asymptote there
         value = Limits.limit(f, x, point)
         next nil if value.is_a?(Limit) && !real_toward?(f, x, point)
-        raise NotImplementedError, "oblique asymptotes of #{f}: the limit at #{point} is not decided here" if value.is_a?(Limit)
+        raise RCAS::Unsupported, "oblique asymptotes of #{f}: the limit at #{point} is not decided here" if value.is_a?(Limit)
         next nil unless Limits.infinite?(value)
         slope = Limits.limit((f / x).cancel, x, point)
-        raise NotImplementedError, "oblique asymptotes of #{f}: the limit of f/x at #{point} is not decided here" if slope.is_a?(Limit)
+        raise RCAS::Unsupported, "oblique asymptotes of #{f}: the limit of f/x at #{point} is not decided here" if slope.is_a?(Limit)
         next nil if Limits.infinite?(slope) || slope == UNDEFINED || Scalar.zero?(slope)
         offset = Limits.limit((f - slope * x).cancel, x, point)
-        raise NotImplementedError, "oblique asymptotes of #{f}: the limit of f - #{slope}*x at #{point} is not decided here" if offset.is_a?(Limit)
+        raise RCAS::Unsupported, "oblique asymptotes of #{f}: the limit of f - #{slope}*x at #{point} is not decided here" if offset.is_a?(Limit)
         next nil if Limits.infinite?(offset) || offset == UNDEFINED
         (slope * x + offset).simplify
       end.uniq
@@ -410,7 +410,7 @@ module RCAS
       parameters, conditions = domain_conditions(f, x).partition { |c| parameter_condition?(c, x) }
       parameters.each do |c|
         decided = decide_without_x(c)
-        raise NotImplementedError, "real_domain: whether #{c} holds depends on #{c.lhs.variables.join(', ')}; assume a sign for it" if decided.nil?
+        raise RCAS::Unsupported, "real_domain: whether #{c} holds depends on #{c.lhs.variables.join(', ')}; assume a sign for it" if decided.nil?
         return RealSet.empty unless decided
       end
       set = conditions.empty? ? RealSet.reals : conditions.map { |c| solved_condition(c, x) }.reduce(:&)
@@ -458,13 +458,13 @@ module RCAS
       imaginary = RCAS.assume(x.name => RR) { ComplexParts.im(f) }
       return nil if Scalar.zero?(imaginary)
       return RealSet.empty if imaginary.variables.empty? # a constant that is not 0
-      raise NotImplementedError, "real_domain: where #{f} is real is not decided here (its imaginary part is #{imaginary})" unless imaginary.variables == [x.name]
+      raise RCAS::Unsupported, "real_domain: where #{f} is real is not decided here (its imaginary part is #{imaginary})" unless imaginary.variables == [x.name]
       points_of(imaginary, x)
     end
 
     def nonreal_constant?(n)
       Inequalities.real?(n) == false
-    rescue NotImplementedError
+    rescue NotImplementedError, RCAS::Unsupported
       false
     rescue StandardError => rescued
       RCAS.guard!(rescued)
@@ -481,13 +481,13 @@ module RCAS
         # (gamma(x) at -1 is no number): the complement is not a finite
         # union either (S15)
         if n.is_a?(Fn) && %i[gamma factorial].include?(n.name) && n.args.first.variables.include?(x.name)
-          raise NotImplementedError, "real_domain: #{n} has a pole at every point where its argument is a non-positive integer"
+          raise RCAS::Unsupported, "real_domain: #{n} has a pole at every point where its argument is a non-positive integer"
         end
         next unless n.is_a?(Pow) && n.exponent.variables.include?(x.name)
         base = n.base
         sign = base.variables.empty? ? Decide.sign(base) : RCAS.assume(x.name => RR) { RCAS.sign_of(base) }
         next if sign == :positive
-        raise NotImplementedError, "real_domain: #{n} is real only on a scattered set of points where its base is negative"
+        raise RCAS::Unsupported, "real_domain: #{n} is real only on a scattered set of points where its base is negative"
       end
     end
 
@@ -500,29 +500,29 @@ module RCAS
       return nil unless zeros.is_a?(Array) && zeros.all? { |z| z.is_a?(Expression) && z.variables.empty? }
       real = zeros.select { |z| Inequalities.real?(z) }.map { |z| Inequalities.real_part(z) }
       real.empty? ? RealSet.reals : RealSet.reals - RealSet.new(real.map { |z| Interval.point(z) })
-    rescue NotImplementedError, ArgumentError
+    rescue NotImplementedError, RCAS::Unsupported, ArgumentError
       nil
     end
 
     def solved_condition(condition, x)
       Inequalities.solve(condition, x)
-    rescue NotImplementedError => e
+    rescue NotImplementedError, RCAS::Unsupported => e
       # d != 0 is the line less the zeros of d, which solve names for more
       # than polynomials (log(x) != 0 is every x but 1)
       if condition.op == :!= && (off = off_zeros(condition.lhs - condition.rhs, x))
         return off
       end
       # cause: nil, or irb prints this backtrace and the one underneath it
-      raise NotImplementedError, "real_domain: where #{condition} holds is not decided here (#{e.message})", cause: nil
+      raise RCAS::Unsupported, "real_domain: where #{condition} holds is not decided here (#{e.message})", cause: nil
     end
 
     # The zeros of g as a set of single points: the one condition that is an
     # equation rather than an inequality.
     def points_of(g, x)
-      roots = Solve.solve(g, x) or raise NotImplementedError, "the zeros of #{g}"
+      roots = Solve.solve(g, x) or raise RCAS::Unsupported, "the zeros of #{g}"
       RealSet.new(roots.select { |r| real_point?(r) }.map { |r| Interval.point(r) })
     rescue ArgumentError => e
-      raise NotImplementedError, "real_domain: the zeros of #{g} are not named here (#{e.message})", cause: nil
+      raise RCAS::Unsupported, "real_domain: the zeros of #{g} are not named here (#{e.message})", cause: nil
     end
 
     # The inverse functions whose real argument has to stay in [-1, 1].
@@ -784,8 +784,8 @@ module RCAS
       return false unless g.variables.include?(var.name)
       roots = begin
         Solve.solve(g, var)
-      rescue StandardError, NotImplementedError => rescued
-        RCAS.guard!(rescued)
+      rescue StandardError, NotImplementedError, RCAS::Unsupported => rescued
+        RCAS.guard!(rescued, refused: true)
         return nil
       end
       return nil unless roots.is_a?(Array) # an identity or a set: no single sign to read
@@ -811,7 +811,7 @@ module RCAS
     def strictly_between?(m, lo, hi)
       real = begin
         Inequalities.real?(m)
-      rescue NotImplementedError
+      rescue NotImplementedError, RCAS::Unsupported
         return nil
       end
       return false unless real

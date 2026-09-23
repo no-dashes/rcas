@@ -135,7 +135,7 @@ module RCAS
       return nil if depends?(lead, k) || Scalar.zero?(lead)
       r = (coefficients.first / lead).cancel
       ((lead**count) * RCAS.gamma((to + r + 1).simplify) / RCAS.gamma((from + r).simplify)).simplify
-    rescue DomainError, NotImplementedError, ZeroDivisionError
+    rescue DomainError, NotImplementedError, RCAS::Unsupported, ZeroDivisionError
       nil
     end
 

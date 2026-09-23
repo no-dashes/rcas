@@ -87,7 +87,7 @@ module RCAS
       (1..max_order).each do |order|
         begin
           derivatives << derivatives.last.diff(x).simplify
-        rescue ArgumentError, NotImplementedError
+        rescue ArgumentError, NotImplementedError, RCAS::Unsupported
           return nil
         end
         rows << parts(derivatives.last, x)
@@ -177,7 +177,7 @@ module RCAS
       pieces.map do |j, terms|
         [j, terms.reduce(Num.new(0)) { |acc, (numerator, denominator)| acc + numerator * quotients[denominator] }]
       end
-    rescue DomainError, NotImplementedError, ZeroDivisionError
+    rescue DomainError, NotImplementedError, RCAS::Unsupported, ZeroDivisionError
       structural(pairs)
     end
 
@@ -326,7 +326,7 @@ module RCAS
       return nil if known > MAX_START
       taylor = begin
         Limits.taylor(f, x, 0, known + 1)
-      rescue SeriesError, ZeroDivisionError, NotImplementedError
+      rescue SeriesError, ZeroDivisionError, NotImplementedError, RCAS::Unsupported
         return nil
       end
 
@@ -390,7 +390,7 @@ module RCAS
         difference = (opened(value) - Coefficients.coeff(taylor, x, m * t + residue)).expand
         Scalar.zero?(difference) || Scalar.zero?(difference.cancel) || Decide.identically_zero?(difference) == true
       end
-    rescue ZeroDivisionError, NotImplementedError, DomainError
+    rescue ZeroDivisionError, NotImplementedError, RCAS::Unsupported, DomainError
       false
     end
 
@@ -420,7 +420,7 @@ module RCAS
     def lead_polynomial(expr, k)
       return nil unless expr.variables.include?(k.name)
       Polynomial.from_expr(QQ[k.name, *(expr.variables - [k.name])], expr)
-    rescue DomainError, NotImplementedError, ArgumentError
+    rescue DomainError, NotImplementedError, RCAS::Unsupported, ArgumentError
       nil
     end
 
@@ -432,7 +432,7 @@ module RCAS
       Solve.polynomial_roots(coefficients).map(&:simplify)
            .select { |root| root.is_a?(Num) && root.value.is_a?(Integer) && !root.value.negative? }
            .map(&:value)
-    rescue NotImplementedError, DomainError, ZeroDivisionError
+    rescue NotImplementedError, RCAS::Unsupported, DomainError, ZeroDivisionError
       nil
     end
 

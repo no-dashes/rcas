@@ -80,7 +80,7 @@ class Review2StatisticsTest < Minitest::Test
     cases.each do |e, bindings, truth|
       begin
         v = e.evalf(20, **bindings)
-      rescue RCAS::Precision::Unsupported, NotImplementedError
+      rescue RCAS::Precision::Unsupported, NotImplementedError, RCAS::Unsupported
         next
       end
       assert_relative truth, v.to_f, 1e-12, "#{e} at #{bindings}:"
@@ -174,7 +174,7 @@ class Review2StatisticsTest < Minitest::Test
     begin
       q = N::Exponential.new(1).quantile(1)
       assert_equal RCAS::OO, q
-    rescue ArgumentError, NotImplementedError
+    rescue ArgumentError, NotImplementedError, RCAS::Unsupported
       pass
     end
     assert_raises(ArgumentError) { N::Uniform.new(0, 1).quantile(2 * RCAS.sqrt(2)) }

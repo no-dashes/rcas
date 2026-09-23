@@ -98,7 +98,7 @@ module RCAS
            .filter_map { |r| r.simplify }
            .select { |r| r.is_a?(Num) && r.value.is_a?(Integer) && !r.value.negative? }
            .map(&:value).uniq
-    rescue NotImplementedError, DomainError
+    rescue NotImplementedError, RCAS::Unsupported, DomainError
       []
     end
 

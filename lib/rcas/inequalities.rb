@@ -285,7 +285,7 @@ module RCAS
       if params.size == 1
         return Parametric.new(f, op, x, Var.new(params.first)).solve
       elsif params.size > 1
-        raise NotImplementedError, "inequalities with several parameters (#{params.join(', ')}) are not supported"
+        raise RCAS::Unsupported, "inequalities with several parameters (#{params.join(', ')}) are not supported"
       end
       f = Num.new(0) if f.variables.include?(x.name) && Solve.rational_identity?(f, x)
       without_poles(solved(f, op, x), raw, x)
@@ -304,7 +304,7 @@ module RCAS
       return set unless set.is_a?(RealSet) && !set.empty?
       points = Analysis.denominators(raw, x).flat_map do |d|
         zeros = Solve.solve(d, x)
-        raise NotImplementedError, "the poles of #{raw} (the zeros of #{d}) are not a finite set of points" unless zeros.is_a?(Array) && zeros.none? { |z| z.is_a?(ImageSet) }
+        raise RCAS::Unsupported, "the poles of #{raw} (the zeros of #{d}) are not a finite set of points" unless zeros.is_a?(Array) && zeros.none? { |z| z.is_a?(ImageSet) }
         zeros.select { |z| real?(z) }.map { |z| real_part(z) }
       end
       return set if points.empty?
@@ -316,14 +316,14 @@ module RCAS
       return (Scalar.zero?(f) ? RealSet.empty : RealSet.reals) unless f.variables.include?(x.name)
       num, den = Solve.numerator_denominator(f, x)
       unless Solve.polynomial_coefficients(num, x) && Solve.polynomial_coefficients(den, x)
-        raise NotImplementedError, "only polynomial and rational inequalities are supported: #{f}"
+        raise RCAS::Unsupported, "only polynomial and rational inequalities are supported: #{f}"
       end
       RealSet.new(regions(real_roots(num, x) + real_roots(den, x)))
     end
 
     def constant_case(f, op)
       sign = sign_of(f)
-      raise NotImplementedError, "cannot decide the sign of #{f}" if sign.nil?
+      raise RCAS::Unsupported, "cannot decide the sign of #{f}" if sign.nil?
       holds = case op
               when :< then sign == :negative
               when :<= then sign != :positive
@@ -339,7 +339,7 @@ module RCAS
         t = sample(region)
         replaced = absolutes.reduce(f) do |acc, a|
           u = a.args.first
-          sign = sign_of(u.subs(x => t)) or raise NotImplementedError, "cannot decide the sign of #{u} at #{t}"
+          sign = sign_of(u.subs(x => t)) or raise RCAS::Unsupported, "cannot decide the sign of #{u} at #{t}"
           acc.subs(a => (sign == :negative ? -u : u))
         end
         RealSet.new([region]) & single(Inequality.new(replaced, op, 0), x)
@@ -362,7 +362,7 @@ module RCAS
     def sign_chart(f, op, x)
       num, den = Solve.numerator_denominator(f, x)
       unless Solve.polynomial_coefficients(num, x) && Solve.polynomial_coefficients(den, x)
-        raise NotImplementedError, "only polynomial and rational inequalities are supported: #{f}"
+        raise RCAS::Unsupported, "only polynomial and rational inequalities are supported: #{f}"
       end
       zeros = real_roots(num, x)
       poles = real_roots(den, x)
@@ -373,7 +373,7 @@ module RCAS
         # the sign of the quotient from its cancelled parts: the sample may
         # be a pole that cancelled, (x**2 - x)/x at 0 (fourth review, S17)
         signs = [num, den].map { |part| sign_of(part.subs(x => t)) }
-        raise NotImplementedError, "cannot decide the sign of #{f} at #{t}" if signs.include?(nil) || signs.last == :zero
+        raise RCAS::Unsupported, "cannot decide the sign of #{f} at #{t}" if signs.include?(nil) || signs.last == :zero
         sign = signs.first == :zero ? :zero : (signs.uniq.size == 1 ? :positive : :negative)
         pieces << region if sign == :negative || (sign == :zero && op == :<=)
       end
@@ -391,9 +391,9 @@ module RCAS
       roots = Solve.univariate(f, x, 0)
       sort(distinct(roots.select { |r| real?(r) }.map { |r| real_part(r) }))
     rescue ArgumentError
-      raise NotImplementedError, "cannot find the real roots of #{f}"
-    rescue NotImplementedError => e
-      raise NotImplementedError, "cannot find the real roots of #{f}: #{e.message}"
+      raise RCAS::Unsupported, "cannot find the real roots of #{f}"
+    rescue NotImplementedError, RCAS::Unsupported => e
+      raise RCAS::Unsupported, "cannot find the real roots of #{f}: #{e.message}"
     end
 
     # true when r is shown to be real, false when shown not to be; a root
@@ -406,7 +406,7 @@ module RCAS
       decided = Decide.zero?(imaginary)
       # a parameter with a declared sign: i*a is not real for a > 0
       decided = false if decided.nil? && %i[positive negative].include?(RCAS.sign_of(imaginary))
-      raise NotImplementedError, "cannot decide whether #{r} is real" if decided.nil?
+      raise RCAS::Unsupported, "cannot decide whether #{r} is real" if decided.nil?
       decided
     end
 
@@ -472,7 +472,7 @@ module RCAS
     # compare, or a refusal: an order the exact routes cannot settle is not
     # read off Floats.
     def order!(a, b)
-      compare(a, b) or raise NotImplementedError, "cannot decide whether #{a} or #{b} is the larger"
+      compare(a, b) or raise RCAS::Unsupported, "cannot decide whether #{a} or #{b} is the larger"
     end
 
     def infinity_rank(e)
@@ -504,7 +504,7 @@ module RCAS
     def solve
       num, den = Solve.numerator_denominator(@f, @x)
       unless Solve.polynomial_coefficients(num, @x) && Solve.polynomial_coefficients(den, @x)
-        raise NotImplementedError, "only polynomial and rational inequalities are supported: #{@f}"
+        raise RCAS::Unsupported, "only polynomial and rational inequalities are supported: #{@f}"
       end
       roots = symbolic_roots(num) + symbolic_roots(den)
       points = critical_values(roots, num, den)
@@ -534,8 +534,8 @@ module RCAS
     def symbolic_roots(poly)
       return [] unless poly.variables.include?(@x.name)
       Solve.univariate(poly, @x, 0)
-    rescue NotImplementedError, ArgumentError
-      raise NotImplementedError, "cannot solve #{poly} = 0 for #{@x} with the parameter #{@a}"
+    rescue NotImplementedError, RCAS::Unsupported, ArgumentError
+      raise RCAS::Unsupported, "cannot solve #{poly} = 0 for #{@x} with the parameter #{@a}"
     end
 
     # Parameter values where roots become real, coincide, or the degree drops.
@@ -563,7 +563,7 @@ module RCAS
     def parameter_roots(expr)
       return [] unless expr.variables.include?(@a.name)
       Inequalities.real_roots(expr, @a)
-    rescue NotImplementedError
+    rescue NotImplementedError, RCAS::Unsupported
       []
     end
 
@@ -587,7 +587,7 @@ module RCAS
     def symbolic_endpoint(value, roots, sample)
       return value if Limits.infinite?(value)
       match = roots.find { |r| Inequalities.compare(r.subs(@a.name => sample).simplify, value)&.zero? }
-      match || raise(NotImplementedError, "cannot express the endpoint #{value} through the roots")
+      match || raise(RCAS::Unsupported, "cannot express the endpoint #{value} through the roots")
     end
 
     # Adjacent pieces with the same solution share one condition.

@@ -190,7 +190,7 @@ module RCAS
 
     def squarefree?(f)
       f.squarefree_decomposition.all? { |_, multiplicity| multiplicity == 1 }
-    rescue DomainError, NotImplementedError
+    rescue DomainError, NotImplementedError, RCAS::Unsupported
       false
     end
 

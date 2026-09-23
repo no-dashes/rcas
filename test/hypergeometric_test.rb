@@ -79,7 +79,7 @@ class PetkovsekTest < Minitest::Test
     assert_equal "u(n) = n!", rsolve(u(N + 1), (N + 1) * u(N), init: { 1 => 1 }).to_s
     assert_equal "u(n) = C1*(-1 + n)!", rsolve(u(N + 1), N * u(N)).to_s
     # one of two solutions is not enough for the general one
-    error = assert_raises(NotImplementedError) do
+    error = assert_raises(NotImplementedError, RCAS::Unsupported) do
       rsolve((N + 2) * u(N + 2), (2 * N + 3) * u(N + 1) - (N + 1) * u(N))
     end
     assert_match(/only 1 of 2/, error.message)
@@ -149,12 +149,12 @@ class ZeilbergerTest < Minitest::Test
   # The identity holds under the summation sign, but 1/(k + 1) has a pole at
   # k = -1, so the sum does not obey the recurrence and we say so.
   def test_boundary_terms_that_do_not_vanish_are_refused
-    error = assert_raises(NotImplementedError) { recursion(binomial(N, K) / (K + 1)) }
+    error = assert_raises(NotImplementedError, RCAS::Unsupported) { recursion(binomial(N, K) / (K + 1)) }
     assert_match(/boundary terms/, error.message)
   end
 
   def test_no_recurrence_at_all
-    assert_raises(NotImplementedError) { recursion(1 / (K**2 + 1) + N) }
+    assert_raises(NotImplementedError, RCAS::Unsupported) { recursion(1 / (K**2 + 1) + N) }
   end
 
   # sum() reaches for creative telescoping when nothing else works.

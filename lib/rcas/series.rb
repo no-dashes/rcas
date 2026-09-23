@@ -176,7 +176,7 @@ module RCAS
         return Limit.new(f, x, a)
       end
       one_sided(g, side)
-    rescue SeriesError, ZeroDivisionError, NotImplementedError
+    rescue SeriesError, ZeroDivisionError, NotImplementedError, RCAS::Unsupported
       Limit.new(f, x, a)
     rescue ArgumentError => e
       # An integrand rcas cannot differentiate reaches here through the
@@ -209,7 +209,7 @@ module RCAS
       return nil if replaced.variables.include?(x.name)
       value = a == OO ? limit(replaced, u, OO) : limit(replaced, u, Num.new(0), :right)
       value.is_a?(Limit) ? nil : value
-    rescue SeriesError, ZeroDivisionError, ArgumentError, NotImplementedError
+    rescue SeriesError, ZeroDivisionError, ArgumentError, NotImplementedError, RCAS::Unsupported
       nil
     end
 
@@ -230,7 +230,7 @@ module RCAS
       return nil if replaced.variables.include?(x.name)
       value = limit(replaced, u, target)
       value.is_a?(Limit) ? nil : value
-    rescue SeriesError, ZeroDivisionError, ArgumentError, NotImplementedError
+    rescue SeriesError, ZeroDivisionError, ArgumentError, NotImplementedError, RCAS::Unsupported
       nil
     end
 
@@ -621,7 +621,7 @@ module RCAS
       value = Limits.limit(derivative, w, c)
       return nil if value.is_a?(Limit) || infinite?(value) || value == UNDEFINED || !value.variables.empty? && value.variables != c.variables
       value
-    rescue SeriesError, ZeroDivisionError, NotImplementedError
+    rescue SeriesError, ZeroDivisionError, NotImplementedError, RCAS::Unsupported
       nil
     end
 

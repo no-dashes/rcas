@@ -45,7 +45,7 @@ class ReviewSolveTest < Minitest::Test
 
   def refused_or
     yield
-  rescue NotImplementedError
+  rescue NotImplementedError, RCAS::Unsupported
     assert true
   end
 
@@ -196,7 +196,7 @@ class ReviewSolveTest < Minitest::Test
   # cannot write: refusing with a message is right, ZeroDivisionError is not.
   def test_a_vertical_tangent_is_refused_with_a_message
     RCAS.tangent(RCAS.sqrt(@x), @x, 0)
-  rescue ArgumentError, NotImplementedError
+  rescue ArgumentError, NotImplementedError, RCAS::Unsupported
     assert true
   end
 

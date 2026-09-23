@@ -48,7 +48,7 @@ module RCAS
           nil
         end
         if specific.nil? || (!early.empty? && !propagates?(specific, coeffs, init, n))
-          raise NotImplementedError, "rsolve: the closed form holds from #{n} = #{@start} on, so it cannot take the initial value at #{early.map(&:to_s).join(', ')}"
+          raise RCAS::Unsupported, "rsolve: the closed form holds from #{n} = #{@start} on, so it cannot take the initial value at #{early.map(&:to_s).join(', ')}"
         end
         general = specific
       end
@@ -61,7 +61,7 @@ module RCAS
     # recurrence, as terms, without the constants rsolve puts in front.
     def hyper(equation, u, n)
       _, n, coeffs, forcing = normalize(equation, u, n)
-      raise NotImplementedError, "hyper: #{equation} is not homogeneous" unless Scalar.zero?(forcing)
+      raise RCAS::Unsupported, "hyper: #{equation} is not homogeneous" unless Scalar.zero?(forcing)
       Petkovsek.solutions(coeffs, n)
     end
 
@@ -84,7 +84,7 @@ module RCAS
 
       ds = (0..order).map { |k| Var.new(:"_s#{k}") }
       g = f.subs(shifts.to_h { |t, k| [t, ds[k]] })
-      raise NotImplementedError, "only linear recurrences are supported" unless Solve.linear_in?(g, ds)
+      raise RCAS::Unsupported, "only linear recurrences are supported" unless Solve.linear_in?(g, ds)
       coeffs = ds.map { |d| Solve.polynomial_coefficients(g, d)[1] || Num.new(0) }
       forcing = Simplify.negate(g.subs(ds.to_h { |d| [d, Num.new(0)] })).simplify
       coeffs, forcing = clear_denominators(coeffs, forcing, n)
@@ -107,7 +107,7 @@ module RCAS
       return [coeffs, forcing] if common.constant?
       factor = common.to_expr
       [coeffs.map { |c| (c * factor).cancel.expand }, (forcing * factor).cancel.expand]
-    rescue DomainError, NotImplementedError, ZeroDivisionError
+    rescue DomainError, NotImplementedError, RCAS::Unsupported, ZeroDivisionError
       [coeffs, forcing]
     end
 
@@ -116,7 +116,7 @@ module RCAS
     def constant_coefficient_solution(coeffs, forcing, n, constants)
       roots = Solve.polynomial_roots(coeffs).map(&:simplify)
       homogeneous = homogeneous_solution(roots, n, constants)
-      particular = Scalar.zero?(forcing) ? Num.new(0) : (undetermined_coefficients(coeffs, forcing, roots, n) || raise(NotImplementedError, "no method for the forcing term #{forcing}"))
+      particular = Scalar.zero?(forcing) ? Num.new(0) : (undetermined_coefficients(coeffs, forcing, roots, n) || raise(RCAS::Unsupported, "no method for the forcing term #{forcing}"))
       (homogeneous + particular).simplify
     end
 
@@ -127,21 +127,21 @@ module RCAS
     # say so rather than pass off a part of it as the whole.
     def hypergeometric_solution(coeffs, forcing, n, constants)
       unless Scalar.zero?(forcing)
-        raise NotImplementedError, "rsolve: polynomial coefficients with the forcing term #{forcing} are not supported"
+        raise RCAS::Unsupported, "rsolve: polynomial coefficients with the forcing term #{forcing} are not supported"
       end
       order = coeffs.size - 1
       ratios = Petkovsek.ratios(coeffs, n)
       found = ratios.map { |ratio| Petkovsek.term(ratio, n) }
       @start = ratios.map { |ratio| Petkovsek.start_index(ratio, n) }.max
-      raise NotImplementedError, "rsolve: no hypergeometric solutions (see hyper)" if found.empty?
+      raise RCAS::Unsupported, "rsolve: no hypergeometric solutions (see hyper)" if found.empty?
       if found.size < order
-        raise NotImplementedError, "rsolve: only #{found.size} of #{order} solutions are hypergeometric: " \
+        raise RCAS::Unsupported, "rsolve: only #{found.size} of #{order} solutions are hypergeometric: " \
                                    "#{found.map(&:to_s).join(', ')} (see hyper)"
       end
       # as many solutions as the order is not yet a basis: they have to be
       # independent, which their Casoratian says (third review, S5)
       unless independent?(found, n, order, @start || 0)
-        raise NotImplementedError, "rsolve: the hypergeometric solutions #{found.map(&:to_s).join(', ')} do not span the solutions (see hyper)"
+        raise RCAS::Unsupported, "rsolve: the hypergeometric solutions #{found.map(&:to_s).join(', ')} do not span the solutions (see hyper)"
       end
       found.map do |t|
         constants << Var.new(:"C#{constants.size + 1}")
@@ -206,7 +206,7 @@ module RCAS
         raise ArgumentError, "#{t}: one argument expected" unless t.args.size == 1
         cs = Solve.polynomial_coefficients(t.args.first, n)
         unless cs && cs.size == 2 && Scalar.one?(cs[1]) && cs[0].is_a?(Num) && cs[0].value.is_a?(Integer)
-          raise NotImplementedError, "#{t}: the argument must be #{n} plus an integer"
+          raise RCAS::Unsupported, "#{t}: the argument must be #{n} plus an integer"
         end
         [t, cs[0].value]
       end

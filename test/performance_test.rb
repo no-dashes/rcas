@@ -110,7 +110,7 @@ class PerformanceTest < Minitest::Test
     RCAS.assume(a: RCAS::RR, b: RCAS::RR, c: RCAS::RR) do
       m = RCAS.matrix([[a, 1, 0, b], [1, b, c, 0], [0, c, a, 1], [b, 0, 1, c]])
       timed(3, "refusing the eigenvalues of a 4 x 4 matrix with three parameters") do
-        assert_raises(NotImplementedError) { m.eigenvalues }
+        assert_raises(NotImplementedError, RCAS::Unsupported) { m.eigenvalues }
       end
     end
   end

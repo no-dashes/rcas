@@ -30,10 +30,10 @@ module RCAS
       return super unless pointwise
       if expr.is_a?(Var)
         return super unless table.key?(var)
-        raise NotImplementedError, "#{self} at #{var} = #{table[var]}: the derivative of an unknown function has no value to substitute into"
+        raise RCAS::Unsupported, "#{self} at #{var} = #{table[var]}: the derivative of an unknown function has no value to substitute into"
       end
       taken = evaluate
-      raise NotImplementedError, "#{self} could not be taken, so it cannot be evaluated at a point" if taken.each_node.any? { |n| n.is_a?(Derivative) }
+      raise RCAS::Unsupported, "#{self} could not be taken, so it cannot be evaluated at a point" if taken.each_node.any? { |n| n.is_a?(Derivative) }
       taken.replace_with(table)
     end
     def ==(other) = other.is_a?(Derivative) && other.order == order && other.children == children
@@ -90,19 +90,19 @@ module RCAS
       pattern = derivatives.zip(slots).to_h
       flattened = equations.map { |e| Solve.to_zero(e).simplify.subs(pattern) }
       solved = Solve.linear_system(flattened, slots).first
-      raise NotImplementedError, "dsolve: the system is not linear in the derivatives" if solved.nil? || solved.size != us.size
+      raise RCAS::Unsupported, "dsolve: the system is not linear in the derivatives" if solved.nil? || solved.size != us.size
 
       rows = []
       forcing = []
       slots.each do |d|
         rhs = Expression.lift(solved[d]).expand
         coefficients = us.map do |u|
-          c = Solve.polynomial_coefficients(rhs, u) or raise NotImplementedError, "dsolve: #{rhs} is not linear in #{u}"
+          c = Solve.polynomial_coefficients(rhs, u) or raise RCAS::Unsupported, "dsolve: #{rhs} is not linear in #{u}"
           # x' = x**2 has the coefficients [0, 0, 1]: reading c[1] alone
           # solved it as x' = 0 (third review, L5)
-          raise NotImplementedError, "dsolve: #{rhs} is not linear in #{u}; only linear systems are solved" if c.size > 2
+          raise RCAS::Unsupported, "dsolve: #{rhs} is not linear in #{u}; only linear systems are solved" if c.size > 2
           value = c[1] || Num.new(0)
-          raise NotImplementedError, "dsolve: the coefficient #{value} is not constant" if Solve.depends?(value, t) || us.any? { |v| Solve.depends?(value, v) }
+          raise RCAS::Unsupported, "dsolve: the coefficient #{value} is not constant" if Solve.depends?(value, t) || us.any? { |v| Solve.depends?(value, v) }
           value
         end
         rows << coefficients
@@ -111,7 +111,7 @@ module RCAS
 
       matrix = MatrixSpace.new(RR, us.size, us.size).unchecked(rows)
       solutions = homogeneous_system(matrix, t)
-      raise NotImplementedError, "dsolve: no solution basis found for this system" if solutions.size < us.size
+      raise RCAS::Unsupported, "dsolve: no solution basis found for this system" if solutions.size < us.size
 
       general = us.each_index.map do |i|
         solutions.each_with_index.map { |vector, k| Var.new(:"C#{k + 1}") * vector[i] }.reduce(:+)
@@ -187,8 +187,8 @@ module RCAS
 
     # The constant solution of u' = A u + c.
     def steady_state(matrix, forcing, t)
-      raise NotImplementedError, "dsolve: a forcing term depending on #{t} is not supported for systems" if forcing.any? { |c| Solve.depends?(c, t) }
-      raise NotImplementedError, "dsolve: the matrix is singular, so there is no constant solution" if Scalar.zero?(matrix.det)
+      raise RCAS::Unsupported, "dsolve: a forcing term depending on #{t} is not supported for systems" if forcing.any? { |c| Solve.depends?(c, t) }
+      raise RCAS::Unsupported, "dsolve: the matrix is singular, so there is no constant solution" if Scalar.zero?(matrix.det)
       matrix.solve(forcing.map { |c| Simplify.negate(c).simplify }).entries
     end
 
@@ -197,13 +197,13 @@ module RCAS
     def first_order(f, y, x)
       dy = Var.new(:_dy)
       coeffs = Solve.polynomial_coefficients(f.subs(Derivative.new(y, x) => dy), dy)
-      raise NotImplementedError, "the equation must be linear in D(#{y}, #{x})" unless coeffs && coeffs.size == 2
+      raise RCAS::Unsupported, "the equation must be linear in D(#{y}, #{x})" unless coeffs && coeffs.size == 2
       rhs = (-coeffs[0] / coeffs[1]).simplify # y' = rhs(x, y)
       # linear first: y' = y separated is log|y| = x + C, and exp(C1 + x)
       # misses y = 0 and every negative solution, where the linear rule
       # gives C1*exp(x) (third review, 3.6)
       linear(rhs, y, x) || separable(rhs, y, x) ||
-        raise(NotImplementedError, "#{y}' = #{rhs} is neither separable nor linear")
+        raise(RCAS::Unsupported, "#{y}' = #{rhs} is neither separable nor linear")
     end
 
     # y' = g(x) * h(y)
@@ -227,7 +227,7 @@ module RCAS
       implicit = (left - right - c1).simplify
       begin
         Solve.univariate(implicit, y, 1).map { |s| Equation.new(y, s.simplify) }
-      rescue NotImplementedError, ArgumentError
+      rescue NotImplementedError, RCAS::Unsupported, ArgumentError
         [Equation.new(left.simplify, (right + c1).simplify)]
       end
     end
@@ -258,12 +258,12 @@ module RCAS
       pattern = { y => ds[0] }
       (1..n).each { |k| pattern[Derivative.new(y, x, k)] = ds[k] }
       g = f.subs(pattern)
-      raise NotImplementedError, "only linear equations with constant coefficients are supported" unless Solve.linear_in?(g, ds)
+      raise RCAS::Unsupported, "only linear equations with constant coefficients are supported" unless Solve.linear_in?(g, ds)
 
       coeffs = ds.map { |d| Solve.polynomial_coefficients(g, d)[1] || Num.new(0) }
       raise ArgumentError, "no derivative of order #{n} in the equation" if Scalar.zero?(coeffs[n])
       coeffs.each do |k|
-        raise NotImplementedError, "coefficient #{k} is not constant" if Solve.depends?(k, x) || Solve.depends?(k, y)
+        raise RCAS::Unsupported, "coefficient #{k} is not constant" if Solve.depends?(k, x) || Solve.depends?(k, y)
       end
       forcing = Simplify.negate(g.subs(ds.to_h { |d| [d, Num.new(0)] })).simplify
 
@@ -275,7 +275,7 @@ module RCAS
         else
           undetermined_coefficients(coeffs, forcing, x) ||
             (n == 2 && variation_of_parameters(coeffs, forcing, groups, x)) ||
-            raise(NotImplementedError, "no method for the forcing term #{forcing}")
+            raise(RCAS::Unsupported, "no method for the forcing term #{forcing}")
         end
       [Equation.new(y, (homogeneous + particular).simplify)]
     end

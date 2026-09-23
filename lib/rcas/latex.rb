@@ -473,7 +473,7 @@ module RCAS
   # Mixin for every rcas value that can be typeset: #to_latex is defined by
   # the including class; #show renders it inline (see Render).
   module Typeset
-    def to_latex(**) = raise(NotImplementedError, "#{self.class} has no LaTeX form")
+    def to_latex(**) = raise(RCAS::Unsupported, "#{self.class} has no LaTeX form")
 
     # Display typeset in the terminal (inline image in iTerm2).
     def show(**options) = Render.show(self, **options)

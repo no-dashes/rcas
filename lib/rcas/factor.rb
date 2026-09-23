@@ -26,7 +26,7 @@ module RCAS
     def factor(poly)
       ring = poly.ring
       unless ring.base == ZZ || ring.base == QQ
-        raise NotImplementedError, "factorization is implemented over ZZ and QQ, not #{ring.base}"
+        raise RCAS::Unsupported, "factorization is implemented over ZZ and QQ, not #{ring.base}"
       end
       poly.terms.each_value do |c|
         next if c.is_a?(Num) && (c.value.is_a?(Integer) || c.value.is_a?(Rational))

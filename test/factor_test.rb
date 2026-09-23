@@ -103,7 +103,7 @@ class FactorTest < Minitest::Test
   end
 
   def test_unsupported_inputs
-    assert_raises(NotImplementedError) { RR[:x].call(:x**2 - 2).factor }
+    assert_raises(NotImplementedError, RCAS::Unsupported) { RR[:x].call(:x**2 - 2).factor }
     RCAS.assume(a: ZZ)
     assert_raises(RCAS::DomainError) { @r.call(:a * :x**2 - 1).factor }
   end
@@ -118,7 +118,7 @@ class FactorTest < Minitest::Test
     g, s, t = QQ[:x].call(:x**2 + 1).xgcd(:x)
     assert_equal [1, 1, -:x], [g, s, t]
     assert_equal g, s * (:x**2 + 1) + t * :x
-    assert_raises(NotImplementedError) { @r.call(:x**2 + 1).xgcd(:x) }
+    assert_raises(NotImplementedError, RCAS::Unsupported) { @r.call(:x**2 + 1).xgcd(:x) }
   end
 
   def test_multivariate_gcd
@@ -128,7 +128,7 @@ class FactorTest < Minitest::Test
     assert_equal "x + y", QQ[:x, :y].call((:x + :y) * (:x - :y) / 2).gcd((:x + :y)**2).to_s
     assert_equal "x + y", (@s.call((:x + :y) * (:x - :y)) / (:x - :y)).to_s
     assert_raises(RCAS::DomainError) { @s.call((:x + :y) * (:x - :y)) / (:x - 1) }
-    assert_raises(NotImplementedError) { RR[:x, :y].call(:x * :y).gcd(:x) }
+    assert_raises(NotImplementedError, RCAS::Unsupported) { RR[:x, :y].call(:x * :y).gcd(:x) }
   end
 
   def test_resultant_and_discriminant

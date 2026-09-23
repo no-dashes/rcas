@@ -95,7 +95,7 @@ class ReviewQualityTest < Minitest::Test
     # x = 1 - y; {x=1, y=0} alone drops the whole line. Refusing is acceptable.
     begin
       solutions = RCAS.solve([@x + @y - 1, @x + (1 + disguised_zero) * @y - 1], [@x, @y])
-    rescue NotImplementedError
+    rescue NotImplementedError, RCAS::Unsupported
       return assert true
     end
     refute_empty solutions
@@ -137,7 +137,7 @@ class ReviewQualityTest < Minitest::Test
     begin
       power = RCAS.real_domain(@x**@x, @x)
       exponential = RCAS.real_domain(n(-2)**@x, @x)
-    rescue NotImplementedError
+    rescue NotImplementedError, RCAS::Unsupported
       return assert true
     end
     refute power.include?(n(Rational(-1, 2))), "x**x at -1/2 is not real: #{power}"

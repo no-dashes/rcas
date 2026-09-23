@@ -256,7 +256,7 @@ module RCAS
           xs.drop(1).flat_map { |x| Analysis.denominators(Expression.lift(component), x) }
         ).uniq.each do |d|
           next if nonvanishing?(d, xs, ranges)
-          raise NotImplementedError, "#{name}: the field is singular where #{d} = 0, which may meet the region; the theorem needs a field without singularities there"
+          raise RCAS::Unsupported, "#{name}: the field is singular where #{d} = 0, which may meet the region; the theorem needs a field without singularities there"
         end
       end
     end
@@ -342,7 +342,7 @@ module RCAS
     def regular?(f, xs)
       regular_on!(f, xs, [], "conservative?")
       true
-    rescue NotImplementedError
+    rescue NotImplementedError, RCAS::Unsupported
       false
     end
 
@@ -403,8 +403,8 @@ module RCAS
       numerator = Fraction.as_fraction(d, xs.map(&:name))
       return [Expression.lift(d)] if numerator.nil? || !numerator.last.constant?
       Factor.factor(numerator.first).factors.map { |g, _| g.to_expr }.reject { |g| g.variables.empty? }
-    rescue StandardError, NotImplementedError => rescued
-      RCAS.guard!(rescued) if rescued.is_a?(StandardError)
+    rescue StandardError, NotImplementedError, RCAS::Unsupported => rescued
+      RCAS.guard!(rescued, refused: true) if rescued.is_a?(StandardError)
       [Expression.lift(d)]
     end
   end

@@ -40,9 +40,9 @@ module RCAS
       n = Zeilberger.index_of(s)
       k = Expression.lift(k)
       found = certificate(term, n, k, q, max_order: max_order)
-      raise NotImplementedError, "qsumrecursion: no recurrence of order #{max_order} or less for #{term}" if found.nil?
+      raise RCAS::Unsupported, "qsumrecursion: no recurrence of order #{max_order} or less for #{term}" if found.nil?
       if boundary_terms?(found, n, k)
-        raise NotImplementedError, "qsumrecursion: the telescoping identity holds for #{term}, but its " \
+        raise RCAS::Unsupported, "qsumrecursion: the telescoping identity holds for #{term}, but its " \
                                    "boundary terms do not vanish, so the sum itself does not obey the recurrence"
       end
       Equation.new(found.recurrence(s.name), Num.new(0))
@@ -53,7 +53,7 @@ module RCAS
       n = Zeilberger.index_of(s)
       k = Expression.lift(k)
       found = certificate(term, n, k, q, max_order: max_order)
-      raise NotImplementedError, "qsumcertificate: no recurrence of order #{max_order} or less for #{term}" if found.nil?
+      raise RCAS::Unsupported, "qsumcertificate: no recurrence of order #{max_order} or less for #{term}" if found.nil?
       found.rational
     end
 
@@ -119,7 +119,7 @@ module RCAS
       found = Certificate.new(coefficients.map { |value| value.subs(Y => q**n).simplify },
                               rational.subs(Y => q**n, X => q**k).simplify, order, term, n, k, q)
       verify(coefficients, rational, in_k, shifted, q) ? found : nil
-    rescue DomainError, NotImplementedError, ZeroDivisionError
+    rescue DomainError, NotImplementedError, RCAS::Unsupported, ZeroDivisionError
       nil
     end
 
@@ -171,7 +171,7 @@ module RCAS
         factor = factor.exact_div(content)
       end
       [polynomials.map(&:to_expr), factor.to_expr]
-    rescue DomainError, NotImplementedError, ZeroDivisionError
+    rescue DomainError, NotImplementedError, RCAS::Unsupported, ZeroDivisionError
       [coefficients, Num.new(1)]
     end
 

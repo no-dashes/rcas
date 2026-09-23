@@ -139,7 +139,7 @@ class QDifferenceTest < Minitest::Test
 
   def test_equations_without_q_hypergeometric_solutions
     assert_empty qhyper(f(Q**2 * X), f(Q * X) + X * f(X)) # q-Airy
-    assert_raises(NotImplementedError) { qsolve(f(Q**2 * X), f(Q * X) + X * f(X)) }
+    assert_raises(NotImplementedError, RCAS::Unsupported) { qsolve(f(Q**2 * X), f(Q * X) + X * f(X)) }
   end
 
   def test_the_index_can_be_named
@@ -192,6 +192,6 @@ class QZeilbergerTest < Minitest::Test
   end
 
   def test_no_recurrence_within_the_order
-    assert_raises(NotImplementedError) { recursion(qbinomial(N, K, Q)**2) }
+    assert_raises(NotImplementedError, RCAS::Unsupported) { recursion(qbinomial(N, K, Q)**2) }
   end
 end

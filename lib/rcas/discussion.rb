@@ -153,7 +153,7 @@ module RCAS
     # than raising in the middle of the report.
     def derivative(e, x)
       tidy(e.diff(x))
-    rescue ArgumentError, NotImplementedError
+    rescue ArgumentError, NotImplementedError, RCAS::Unsupported
       nil
     end
 
@@ -161,7 +161,7 @@ module RCAS
     # determined and prints as "not determined". These are the ways the
     # library says so. A bare `rescue StandardError` said it for a typo or a
     # genuine bug too, and the tests still passed.
-    UNDECIDED = [ArgumentError, DomainError, ZeroDivisionError, NotImplementedError, SeriesError].freeze
+    UNDECIDED = [ArgumentError, DomainError, ZeroDivisionError, NotImplementedError, RCAS::Unsupported, SeriesError].freeze
 
     # A derivative reads better cancelled: the second derivative of
     # (x**2 + 1)/x is 2/x**3, not a quotient of quartics.
@@ -175,7 +175,7 @@ module RCAS
 
     def domain_of(f, x)
       Analysis.real_domain(f, x)
-    rescue NotImplementedError, ArgumentError, DomainError
+    rescue NotImplementedError, RCAS::Unsupported, ArgumentError, DomainError
       nil
     end
 
@@ -320,7 +320,7 @@ module RCAS
         found = (@cycle && one_period(g, x)) || Solve.solve(g, x, principal: @principal != false)
         return nil unless found.is_a?(Array)
         found.select { |root| root.is_a?(ImageSet) ? !root.nonreal? : real?(root) }
-      rescue NotImplementedError, ArgumentError, DomainError
+      rescue NotImplementedError, RCAS::Unsupported, ArgumentError, DomainError
         factor_solutions(g, x)
       end
     end
@@ -388,7 +388,7 @@ module RCAS
     # point whose realness cannot be told is kept.
     def real?(value)
       Inequalities.real?(value)
-    rescue NotImplementedError
+    rescue NotImplementedError, RCAS::Unsupported
       true
     rescue *UNDECIDED
       false
@@ -533,7 +533,7 @@ module RCAS
       slope = Coefficients.coeff(argument, x, 1)
       value = Analysis.numeric(slope) or return nil
       value.negative? ? Neg.new(slope).simplify : slope
-    rescue DomainError, NotImplementedError, ArgumentError
+    rescue DomainError, NotImplementedError, RCAS::Unsupported, ArgumentError
       nil
     end
 

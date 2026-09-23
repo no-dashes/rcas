@@ -30,7 +30,7 @@ module RCAS
         result = gcd_zz(f.clear_denominators.to_ring(zz), g.clear_denominators.to_ring(zz))
         result.to_ring(ring).monic
       else
-        raise NotImplementedError, "gcd over #{ring.base} needs a univariate ring"
+        raise RCAS::Unsupported, "gcd over #{ring.base} needs a univariate ring"
       end
     end
 
@@ -42,7 +42,7 @@ module RCAS
     # Extended Euclid over a field: returns [g, s, t] with s*f + t*g = gcd, gcd monic.
     def xgcd(f, g)
       ring = f.ring
-      raise NotImplementedError, "xgcd needs a univariate ring over a field" unless ring.univariate? && ring.base.field?
+      raise RCAS::Unsupported, "xgcd needs a univariate ring over a field" unless ring.univariate? && ring.base.field?
       r0, r1 = f, g
       s0, s1 = ring.one, ring.zero
       t0, t1 = ring.zero, ring.one

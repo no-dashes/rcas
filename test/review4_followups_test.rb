@@ -18,7 +18,7 @@ class Review4FollowupsTest < Minitest::Test
   def refused
     yield
     false
-  rescue NotImplementedError, ArgumentError
+  rescue NotImplementedError, RCAS::Unsupported, ArgumentError
     true
   end
 
@@ -280,7 +280,7 @@ class Review4FollowupsTest < Minitest::Test
     report = RCAS.discuss(RCAS.tan(@x), @x)
     assert_equal [], report.asymptotes[:horizontal]
     assert_equal ["{pi/2 + pi*k | k in ZZ}"], report.asymptotes[:vertical].map(&:to_s)
-    assert_raises(NotImplementedError) { RCAS::Analysis.horizontal_asymptotes(RCAS.exp(@x) / (@x * (1 + RCAS.exp(@x))) + RCAS.sin(@x), @x) }
+    assert_raises(NotImplementedError, RCAS::Unsupported) { RCAS::Analysis.horizontal_asymptotes(RCAS.exp(@x) / (@x * (1 + RCAS.exp(@x))) + RCAS.sin(@x), @x) }
   end
 
   # ---- declared domains for families -----------------------------------------------------

@@ -105,7 +105,7 @@ class ReviewAlgebraTest < Minitest::Test
       -> { RCAS.lcoeff(RCAS.exp(@x) * @x**3 + @x, @x) } => RCAS.exp(@x) }.each do |call, wrong|
       begin
         result = call.call
-      rescue RCAS::DomainError, NotImplementedError
+      rescue RCAS::DomainError, NotImplementedError, RCAS::Unsupported
         next
       end
       refute_equal wrong, result
@@ -163,7 +163,7 @@ class ReviewAlgebraTest < Minitest::Test
   def test_nested_radical_is_not_called_transcendental
     m = RCAS.minpoly(RCAS.sqrt(1 + RCAS.sqrt(2)))
     assert_equal n(0), RCAS.expand(m - (@x**4 - 2 * @x**2 - 1))
-  rescue NotImplementedError
+  rescue NotImplementedError, RCAS::Unsupported
     assert true
   end
 

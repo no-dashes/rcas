@@ -33,13 +33,13 @@ module RCAS
     # qsolve(eq(f(q*x), (1 - a*x)*f(x)), f, x, q) => f(q**n) = C1*(a; q)_n
     def qsolve(equation, f, x, q, n: :n)
       name, x, q, coeffs, forcing = normalize(equation, f, x, q)
-      raise NotImplementedError, "qsolve: #{forcing} makes the equation inhomogeneous" unless Scalar.zero?(forcing)
+      raise RCAS::Unsupported, "qsolve: #{forcing} makes the equation inhomogeneous" unless Scalar.zero?(forcing)
       index = Var.new(n)
       order = coeffs.size - 1
       found = solutions(coeffs, x, q, index)
-      raise NotImplementedError, "qsolve: no q-hypergeometric solutions (see qhyper)" if found.empty?
+      raise RCAS::Unsupported, "qsolve: no q-hypergeometric solutions (see qhyper)" if found.empty?
       if found.size < order
-        raise NotImplementedError, "qsolve: only #{found.size} of #{order} solutions are q-hypergeometric: " \
+        raise RCAS::Unsupported, "qsolve: only #{found.size} of #{order} solutions are q-hypergeometric: " \
                                    "#{found.map(&:to_s).join(', ')} (see qhyper)"
       end
       general = found.each_with_index.map { |t, i| Var.new(:"C#{i + 1}") * t }.reduce(:+).simplify
@@ -50,7 +50,7 @@ module RCAS
     # description, free of any choice of index.
     def qhyper(equation, f, x, q)
       _, x, q, coeffs, forcing = normalize(equation, f, x, q)
-      raise NotImplementedError, "qhyper: #{equation} is not homogeneous" unless Scalar.zero?(forcing)
+      raise RCAS::Unsupported, "qhyper: #{equation} is not homogeneous" unless Scalar.zero?(forcing)
       ratios(coeffs, x, q)
     end
 
@@ -79,7 +79,7 @@ module RCAS
       raise ArgumentError, "#{equation} is not a q-difference equation: only #{name}(#{x}) occurs" if order.zero?
       ds = (0..order).map { |j| Var.new(:"_f#{j}") }
       h = g.subs(shifts.to_h { |t, j| [t, ds[j]] })
-      raise NotImplementedError, "only linear q-difference equations are supported" unless Solve.linear_in?(h, ds)
+      raise RCAS::Unsupported, "only linear q-difference equations are supported" unless Solve.linear_in?(h, ds)
       coeffs = ds.map { |d| Solve.polynomial_coefficients(h, d)&.[](1) || Num.new(0) }
       forcing = Simplify.negate(h.subs(ds.to_h { |d| [d, Num.new(0)] })).simplify
       coeffs, forcing = Recurrence.clear_denominators(coeffs, forcing, x)
@@ -91,7 +91,7 @@ module RCAS
       g.each_node.select { |e| e.is_a?(Fn) && e.name == name }.uniq.to_h do |t|
         raise ArgumentError, "#{t}: one argument expected" unless t.args.size == 1
         j = power_of_q((t.args.first / x).cancel, q)
-        raise NotImplementedError, "#{t}: the argument must be #{x} times a power of #{q}" if j.nil?
+        raise RCAS::Unsupported, "#{t}: the argument must be #{x} times a power of #{q}" if j.nil?
         [t, j]
       end
     end
@@ -114,7 +114,7 @@ module RCAS
         end
       end
       found
-    rescue DomainError, NotImplementedError, ZeroDivisionError
+    rescue DomainError, NotImplementedError, RCAS::Unsupported, ZeroDivisionError
       []
     end
 
@@ -145,7 +145,7 @@ module RCAS
       Solve.polynomial_roots(coefficients).map(&:simplify)
            .reject { |z| Scalar.zero?(z) || z.is_a?(RootOf) }
            .uniq { |z| z.to_s }
-    rescue NotImplementedError, DomainError
+    rescue NotImplementedError, RCAS::Unsupported, DomainError
       []
     end
 
@@ -198,7 +198,7 @@ module RCAS
       Solve.polynomial_roots(coefficients).map(&:simplify)
            .filter_map { |z| power_of_q(z, q) }
            .reject(&:negative?).max
-    rescue NotImplementedError, DomainError
+    rescue NotImplementedError, RCAS::Unsupported, DomainError
       nil
     end
 
@@ -227,7 +227,7 @@ module RCAS
         end
       end
       (Simplify.power_node(constant.simplify, n) * total).simplify
-    rescue DomainError, ZeroDivisionError, NotImplementedError
+    rescue DomainError, ZeroDivisionError, NotImplementedError, RCAS::Unsupported
       nil
     end
 
@@ -263,7 +263,7 @@ module RCAS
         end
       end
       pieces
-    rescue NotImplementedError, DomainError
+    rescue NotImplementedError, RCAS::Unsupported, DomainError
       nil
     end
 
@@ -279,7 +279,7 @@ module RCAS
         return [poly.ring.one] if list.size > MAX_DIVISORS
       end
       list.uniq { |d| d.to_expr.to_s }
-    rescue NotImplementedError, DomainError
+    rescue NotImplementedError, RCAS::Unsupported, DomainError
       [poly.ring.one]
     end
 

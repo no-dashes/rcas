@@ -12,7 +12,20 @@ module RCAS
   # so do NoMethodError and NameError, which are never mathematics.
   def self.strict? = ENV["RCAS_STRICT"] == "1"
 
-  def self.guard!(error)
+  # What rcas raises when it cannot do something: "cannot" is an answer of
+  # its own, never "none". A StandardError, so that a caller's `rescue => e`
+  # catches it (it was a NotImplementedError, a ScriptError, until the
+  # fourth review asked a second time); and since a broad rescue would now
+  # see it, guard! passes it on, so it reaches the caller exactly as the
+  # ScriptError did. A rescue that means to take a refusal names it, and
+  # says so to guard! with `refused: true`.
+  class Unsupported < StandardError; end
+
+  # A refusal of either kind: Ruby's own NotImplementedError too.
+  def self.refusal?(error) = error.is_a?(Unsupported) || error.is_a?(NotImplementedError)
+
+  def self.guard!(error, refused: false)
+    raise error if !refused && error.is_a?(Unsupported)
     raise error if defined?(::Timeout::Error) && error.is_a?(::Timeout::Error)
     # NoMethodError is a NameError; 1 + nil is a TypeError (fourth review)
     raise error if strict? && (error.is_a?(NameError) || error.is_a?(TypeError))
@@ -341,8 +354,8 @@ module RCAS
       precise = Precision.evalf(self, Precision::FLOAT_DIGITS, bindings)
       v = precise.to_f
       v.finite? ? v : nil
-    rescue StandardError, NotImplementedError => rescued
-      RCAS.guard!(rescued)
+    rescue StandardError, NotImplementedError, RCAS::Unsupported => rescued
+      RCAS.guard!(rescued, refused: true)
       nil
     end
 

@@ -65,8 +65,8 @@ module RCAS
       Analysis.denominators(f, k).flat_map do |d|
         roots = begin
           Solve.solve(d, k)
-        rescue StandardError, NotImplementedError => rescued
-          RCAS.guard!(rescued) if rescued.is_a?(StandardError)
+        rescue StandardError, NotImplementedError, RCAS::Unsupported => rescued
+          RCAS.guard!(rescued, refused: true) if rescued.is_a?(StandardError)
           next []
         end
         next [] unless roots.is_a?(Array)
@@ -227,7 +227,7 @@ module RCAS
       # like binomial(n, k)**4 that have no closed form anyway. sumrecursion
       # goes further when asked.
       Zeilberger.closed_form(f, n, k, from, to == n ? to : n, max_order: 1)
-    rescue DomainError, NotImplementedError, ZeroDivisionError
+    rescue DomainError, NotImplementedError, RCAS::Unsupported, ZeroDivisionError
       nil
     end
 
@@ -359,8 +359,8 @@ module RCAS
     def tidy(value)
       return value if value.is_a?(Num) || value.variables.empty?
       value.factor.simplify
-    rescue StandardError, NotImplementedError => rescued
-      RCAS.guard!(rescued)
+    rescue StandardError, NotImplementedError, RCAS::Unsupported => rescued
+      RCAS.guard!(rescued, refused: true)
       value
     end
 
@@ -407,7 +407,7 @@ module RCAS
       g = without_removable_poles((bm.to_expr * x_expr / c.to_expr).cancel, f, k)
       check = (g.subs(k => k + 1) - g - f).cancel
       Scalar.zero?(check) || Decide.identically_zero?(check) ? g : nil
-    rescue DomainError, NotImplementedError, ZeroDivisionError
+    rescue DomainError, NotImplementedError, RCAS::Unsupported, ZeroDivisionError
       nil
     end
 
@@ -438,7 +438,7 @@ module RCAS
       coeffs = (0..res.degree(:_h)).map { |i| res.coefficient_in(:_h, i).to_expr }
       roots = begin
         Solve.polynomial_roots(coeffs)
-      rescue NotImplementedError
+      rescue NotImplementedError, RCAS::Unsupported
         []
       end
       roots.select { |r| r.is_a?(Num) && r.value.is_a?(Integer) && r.value >= 0 }.map(&:value).uniq.sort

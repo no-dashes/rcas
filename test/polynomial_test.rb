@@ -101,7 +101,7 @@ class PolynomialTest < Minitest::Test
     assert_equal 2, p.degree(:y)
     assert_equal 2, p.coeff(1, 1)
     assert_equal "2*x + 2*y", p.derivative(:x).to_s
-    assert_raises(NotImplementedError) { p.divmod(r.call(:x + :y)) }
+    assert_raises(NotImplementedError, RCAS::Unsupported) { p.divmod(r.call(:x + :y)) }
     assert_equal "1/2 + x/2", (r.call(:x + 1) / 2).to_s
   end
 end

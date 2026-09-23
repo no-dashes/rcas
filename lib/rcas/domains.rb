@@ -75,11 +75,11 @@ module RCAS
 
   # Common protocol of NN, ZZ, QQ, RR, CC, polynomial rings and fraction fields.
   class Domain
-    def include?(_obj) = raise(NotImplementedError)
+    def include?(_obj) = raise(RCAS::Unsupported)
     alias member? include?
     def ===(obj) = include?(obj)
 
-    def subset?(_other) = raise(NotImplementedError)
+    def subset?(_other) = raise(RCAS::Unsupported)
     def superset?(other) = other.subset?(self)
     def <=(other) = subset?(other)
     def >=(other) = superset?(other)
@@ -96,7 +96,7 @@ module RCAS
     def scalar? = true
 
     # Smallest standard domain containing both.
-    def join(_other) = raise(NotImplementedError)
+    def join(_other) = raise(RCAS::Unsupported)
 
     # ZZ[x], QQ[x, y]
     def [](*vars)

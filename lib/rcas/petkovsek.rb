@@ -50,7 +50,7 @@ module RCAS
       found
     rescue TooMany
       raise
-    rescue DomainError, NotImplementedError, ZeroDivisionError
+    rescue DomainError, NotImplementedError, RCAS::Unsupported, ZeroDivisionError
       []
     end
 
@@ -98,7 +98,7 @@ module RCAS
       Solve.polynomial_roots(coefficients).map(&:simplify)
            .reject { |z| Scalar.zero?(z) || z.is_a?(RootOf) }
            .uniq { |z| z.to_s }
-    rescue NotImplementedError, DomainError
+    rescue NotImplementedError, RCAS::Unsupported, DomainError
       []
     end
 
@@ -142,7 +142,7 @@ module RCAS
       [poly.ring.one]
     end
 
-    class TooMany < NotImplementedError; end
+    class TooMany < RCAS::Unsupported; end
 
     # The first index from which the product of the ratio is finite and
     # non-zero: past every non-negative integer root of numerator and
@@ -158,7 +158,7 @@ module RCAS
                       .select { |r| r.is_a?(Num) && r.value.is_a?(Integer) && !r.value.negative? }
                       .map(&:value)
       integers.empty? ? 0 : integers.max + 1
-    rescue NotImplementedError, DomainError, ZeroDivisionError
+    rescue NotImplementedError, RCAS::Unsupported, DomainError, ZeroDivisionError
       0
     end
   end

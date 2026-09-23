@@ -207,12 +207,12 @@ module RCAS
         total = mass(Num.new(k))
         10_000.times do
           order = Inequalities.compare(total, p)
-          raise NotImplementedError, "quantile: cannot compare cdf(#{k}) with #{p}" if order.nil?
+          raise RCAS::Unsupported, "quantile: cannot compare cdf(#{k}) with #{p}" if order.nil?
           return Num.new(k) if order >= 0 || (hi.is_a?(Num) && k >= hi.value)
           k += 1
           total = (total + mass(Num.new(k))).simplify
         end
-        raise NotImplementedError, "quantile: the #{p}-quantile lies beyond 10000 steps from the start"
+        raise RCAS::Unsupported, "quantile: the #{p}-quantile lies beyond 10000 steps from the start"
       end
 
       # A quantile is defined for a probability; a number outside [0, 1] is

@@ -62,13 +62,13 @@ class Review2SolveTest < Minitest::Test
     f = eq((@x**2 - 1) / (@x - 1), @x + 1)
     r = begin
       RCAS.solve(f, @x, domain: RCAS::RR)
-    rescue NotImplementedError
+    rescue NotImplementedError, RCAS::Unsupported
       nil
     end
     refute r.include?(n(1)), "domain RR: #{r} contains the pole 1" if r
     r = begin
       RCAS.assume(x: RCAS::ZZ) { RCAS.solve(f, @x) }
-    rescue NotImplementedError
+    rescue NotImplementedError, RCAS::Unsupported
       nil
     end
     refute r.include?(n(1)), "x in ZZ: #{r} contains the pole 1" if r
@@ -121,7 +121,7 @@ class Review2SolveTest < Minitest::Test
      [1 / RCAS.log(@x), :horizontal, 0]].each do |f, kind, value|
       got = begin
         RCAS.asymptotes(f, @x)[kind]
-      rescue NotImplementedError
+      rescue NotImplementedError, RCAS::Unsupported
         next
       end
       assert got.any? { |v| (real(v) || Float::NAN) == value }, "#{f}: #{kind} #{got.inspect} misses #{value}"
@@ -133,7 +133,7 @@ class Review2SolveTest < Minitest::Test
   def test_an_abs_identity_on_a_half_line_is_a_set
     s = begin
       RCAS.solve(eq(RCAS.abs(@x), @x), @x)
-    rescue NotImplementedError
+    rescue NotImplementedError, RCAS::Unsupported
       return pass
     end
     assert s.include?(n(0)) && s.include?(n(5)), "#{s}"
@@ -147,7 +147,7 @@ class Review2SolveTest < Minitest::Test
   def test_an_integer_domain_keeps_only_integers
     s = begin
       RCAS.solve(RCAS.sin(2 * pi * @x), @x, domain: RCAS::ZZ)
-    rescue NotImplementedError
+    rescue NotImplementedError, RCAS::Unsupported
       return pass
     end
     return pass if s == RCAS::ZZ || s == [RCAS::ZZ]
@@ -169,7 +169,7 @@ class Review2SolveTest < Minitest::Test
   def test_no_tangent_at_a_corner
     t = begin
       RCAS.tangent(RCAS.abs(@x), @x, 0)
-    rescue ArgumentError, NotImplementedError
+    rescue ArgumentError, NotImplementedError, RCAS::Unsupported
       return pass
     end
     flunk "tangent(abs(x), x, 0) = #{t}, but abs has a corner at 0"

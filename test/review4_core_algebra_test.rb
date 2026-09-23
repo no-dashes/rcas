@@ -94,7 +94,7 @@ class Review2CoreAlgebraTest < Minitest::Test
     [RCAS.cos(l(10)**-30) - 1, RCAS.sin(l(1)) - RCAS.sin(1 + l(10)**-20)].each do |c|
       r = begin
         RCAS.limit(c * @x, @x, RCAS::OO)
-      rescue RCAS::SeriesError, NotImplementedError
+      rescue RCAS::SeriesError, NotImplementedError, RCAS::Unsupported
         :refused
       end
       assert(r == :refused || r.is_a?(RCAS::Limit) || r == (-RCAS::OO).simplify, "limit(#{c}*x, x, oo) = #{r.inspect}")
@@ -113,13 +113,13 @@ class Review2CoreAlgebraTest < Minitest::Test
     assert_equal d.doit.subs(y: @x).simplify, d.subs(y: @x).doit.simplify
     r = begin
       RCAS.D(@x**3, @x).subs(x: 2).doit
-    rescue NotImplementedError
+    rescue NotImplementedError, RCAS::Unsupported
       :refused
     end
     assert(r == :refused || value(r) == 12, "D(x**3, x) at x = 2 gave #{r.inspect}")
     r = begin
       RCAS::Integral.new(@x**2, @x).subs(x: 2).doit
-    rescue NotImplementedError
+    rescue NotImplementedError, RCAS::Unsupported
       :refused
     end
     assert(r == :refused || r.is_a?(RCAS::Expression), "integral(x**2, x) at x = 2 gave #{r.inspect}")

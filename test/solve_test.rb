@@ -259,7 +259,7 @@ class SolveTest < Minitest::Test
 
   # An equation rcas cannot solve says where the numbers are.
   def test_the_message_points_at_nsolve
-    e = assert_raises(NotImplementedError) { RCAS.solve(RCAS.cos(:x) - :x, :x) }
+    e = assert_raises(NotImplementedError, RCAS::Unsupported) { RCAS.solve(RCAS.cos(:x) - :x, :x) }
     assert_match(/nsolve/, e.message)
   end
 
@@ -324,14 +324,14 @@ class SolveTest < Minitest::Test
       (-3..3).each { |i| assert_in_delta 0.0, f.evalf(x: set.at(i).evalf), 1e-12, "#{f} at #{set.at(i)}" }
     end
     # a term of another degree is not this rule's business
-    assert_raises(NotImplementedError) { RCAS.solve(RCAS.sin(x) + RCAS.cos(x) + 1, x) }
+    assert_raises(NotImplementedError, RCAS::Unsupported) { RCAS.solve(RCAS.sin(x) + RCAS.cos(x) + 1, x) }
   end
 
   # One factor rcas cannot solve means roots it cannot name: a partial list
   # would say nothing about what is missing, so the message stands.
   def test_a_product_with_an_unsolvable_factor_still_says_so
     x = RCAS::Var.new(:x)
-    e = assert_raises(NotImplementedError) { RCAS.solve(RCAS.sin(x) * (x - RCAS.cos(x)), x) }
+    e = assert_raises(NotImplementedError, RCAS::Unsupported) { RCAS.solve(RCAS.sin(x) * (x - RCAS.cos(x)), x) }
     assert_match(/nsolve/, e.message)
   end
 
@@ -421,8 +421,8 @@ class SolveTest < Minitest::Test
                    "every value of x, and x was declared an integer"
     end
     # an equation no rule can take is still unsolved, not "no solutions"
-    assert_raises(NotImplementedError) { RCAS.solve(RCAS.sin(x) + x, x) }
-    assert_raises(NotImplementedError) { RCAS.solve(x + RCAS.cos(x) * RCAS.sin(x), x) }
+    assert_raises(NotImplementedError, RCAS::Unsupported) { RCAS.solve(RCAS.sin(x) + x, x) }
+    assert_raises(NotImplementedError, RCAS::Unsupported) { RCAS.solve(x + RCAS.cos(x) * RCAS.sin(x), x) }
   end
 
   # sin(x)*cos(x) = 1/2 is homogeneous once the 1/2 is read as

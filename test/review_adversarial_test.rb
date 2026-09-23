@@ -27,7 +27,7 @@ class ThirdReviewAdversarialTest < Minitest::Test
     # Principal sqrt(-1)=i; i*sqrt(-1)=-1 is a real value.
     begin
       result = RCAS.real_domain(RCAS::I*RCAS.sqrt(@x),@x)
-    rescue NotImplementedError
+    rescue NotImplementedError, RCAS::Unsupported
       return assert true
     end
     assert result.include?(-1), 'The correct real locus is (-infinity,0].'
@@ -70,7 +70,7 @@ class ThirdReviewAdversarialTest < Minitest::Test
     # Returning an explicit refusal is acceptable; an empty solution list is not.
     begin
       result = RCAS.inflections(@x*RCAS.sin(@x),@x)
-    rescue NotImplementedError
+    rescue NotImplementedError, RCAS::Unsupported
       return assert true
     end
     refute_empty result
@@ -79,7 +79,7 @@ class ThirdReviewAdversarialTest < Minitest::Test
   def test_parameter_dependent_multiplicity_requires_a_condition
     begin
       result = RCAS::Analysis.inflections(@a*@x**3+@x**4,@x,points:[n(0)])
-    rescue NotImplementedError
+    rescue NotImplementedError, RCAS::Unsupported
       return assert true
     end
     # The current array has no means of carrying the necessary a != 0 condition.
@@ -90,7 +90,7 @@ class ThirdReviewAdversarialTest < Minitest::Test
     f = n(-1)**RCAS.sqrt(2)+@x
     begin
       result = RCAS.real_domain(f,@x)
-    rescue NotImplementedError
+    rescue NotImplementedError, RCAS::Unsupported
       return assert true
     end
     assert_equal RCAS::RealSet.empty, result

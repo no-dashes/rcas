@@ -61,7 +61,7 @@ class ReviewLinearAlgebraTest < Minitest::Test
     # x' = x**2 has x = -1/(C + t); x = constant is not a solution. Refusing is fine.
     begin
       sol = RCAS.dsolve([RCAS.eq(RCAS.D(@x, @t), @x**2), RCAS.eq(RCAS.D(@y, @t), @y)], [@x, @y], @t)
-    rescue NotImplementedError, ArgumentError
+    rescue NotImplementedError, RCAS::Unsupported, ArgumentError
       return assert true
     end
     fx = sol.find { |e| e.lhs == @x }.rhs
@@ -145,13 +145,13 @@ class ReviewLinearAlgebraTest < Minitest::Test
     field = [-@y / (@x**2 + @y**2), @x / (@x**2 + @y**2)]
     verdict = begin
       RCAS.conservative?(field)
-    rescue ArgumentError, NotImplementedError
+    rescue ArgumentError, NotImplementedError, RCAS::Unsupported
       false
     end
     refute verdict
     begin
       g = RCAS.green(field, x: -1..1, y: -1..1)
-    rescue ArgumentError, NotImplementedError
+    rescue ArgumentError, NotImplementedError, RCAS::Unsupported
       return
     end
     assert zero?(g - 2 * RCAS::PI), "#{g}"
@@ -163,7 +163,7 @@ class ReviewLinearAlgebraTest < Minitest::Test
      -> { RCAS.divergence_theorem([@x, @y, @z], x: 0..1, y: 0..@x, z: 0..1) }].each do |call|
       begin
         result = call.call
-      rescue ArgumentError, NotImplementedError
+      rescue ArgumentError, NotImplementedError, RCAS::Unsupported
         next
       end
       refute_includes result.variables, :x, "#{result} still depends on the integration variable"

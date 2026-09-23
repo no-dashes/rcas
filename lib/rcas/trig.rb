@@ -151,7 +151,7 @@ module RCAS
       substituted = expr.subs(names)
       return nil if substituted.each_node.any? { |n| n.is_a?(Fn) }
       substituted.cancel.subs(names.invert)
-    rescue DomainError, NotImplementedError
+    rescue DomainError, NotImplementedError, RCAS::Unsupported
       nil
     end
 

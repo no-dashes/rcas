@@ -105,7 +105,7 @@ module RCAS
         end
       end
       unless columns.size == n
-        raise NotImplementedError, "jordan: only #{columns.size} of #{n} basis vectors were found; " \
+        raise RCAS::Unsupported, "jordan: only #{columns.size} of #{n} basis vectors were found; " \
                                    "the eigenvalues have to be exact for the chains to be built"
       end
       [basis_matrix(matrix, columns), jordan_matrix(matrix, blocks)]
