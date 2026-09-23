@@ -74,9 +74,9 @@ class GroebnerTest < Minitest::Test
 
   def test_polynomial_systems
     sols = RCAS.solve([X**2 + Y**2 - 25, X + Y - 7], [X, Y])
-    assert_equal "[{x=>4, y=>3}, {x=>3, y=>4}]", sols.inspect
+    assert_equal TestSupport.hash_style("[{x=>4, y=>3}, {x=>3, y=>4}]"), TestSupport.hash_style(sols.inspect)
     sols = RCAS.solve([X**2 - 1, Y - X, Z**2 - X], [X, Y, Z])
-    assert_equal "[{x=>1, y=>1, z=>1}, {x=>1, y=>1, z=>-1}, {x=>-1, y=>-1, z=>-i}, {x=>-1, y=>-1, z=>i}]", sols.inspect
+    assert_equal TestSupport.hash_style("[{x=>1, y=>1, z=>1}, {x=>1, y=>1, z=>-1}, {x=>-1, y=>-1, z=>-i}, {x=>-1, y=>-1, z=>i}]"), TestSupport.hash_style(sols.inspect)
     sols = RCAS.solve([X**2 - Y, Y**2 - X], [X, Y])
     assert_equal 4, sols.size
     sols.each do |s|
@@ -90,7 +90,7 @@ class GroebnerTest < Minitest::Test
       end
     end
     assert_equal [], RCAS.solve([X**2 + Y**2 - 1, X + Y - 3, X - Y], [X, Y])
-    assert_equal "[{x=>0, y=>0}]", RCAS.solve([X * Y, X + Y], [X, Y]).inspect
+    assert_equal TestSupport.hash_style("[{x=>0, y=>0}]"), TestSupport.hash_style(RCAS.solve([X * Y, X + Y], [X, Y]).inspect)
     e = assert_raises(NotImplementedError, RCAS::Unsupported) { RCAS.solve([X * Y - 1], [X, Y]) }
     assert_match(/infinitely many solutions/, e.message)
   end

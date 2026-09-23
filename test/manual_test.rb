@@ -60,7 +60,7 @@ class ManualTest < Minitest::Test
       rescue Exception => e # rubocop:disable Lint/RescueException
         "#{e.class}: #{e.message}"
       end
-      next if actual == expected || expected.empty?
+      next if expected.empty? || TestSupport.hash_style(actual) == TestSupport.hash_style(expected)
       failures << "rcas> #{input}\n  expected: #{expected}\n  actual:   #{actual}"
     end
     RCAS.forget

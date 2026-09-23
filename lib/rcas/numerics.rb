@@ -465,7 +465,9 @@ module RCAS
       to = Expression.lift(to)
       lo = bound(from)
       hi = bound(to)
-      return(digits ? Decimal.new(BigDecimal(0), digits) : 0.0) if lo == hi
+      width = exact_width(from, to)
+      return(digits ? Decimal.new(BigDecimal(0), digits) : 0.0) if width ? Decide.zero?(width) == true : lo == hi
+      return rescaled(f, var, from, width, digits) if width && lost_width?(lo, hi, width)
       numeric_integrand!(f, var, lo, hi)
       inside = breakpoints(f, var, lo, hi)
       ends = lo > hi ? [from, *inside.reverse, to] : [from, *inside, to]
@@ -473,6 +475,31 @@ module RCAS
       pieces = ends.each_cons(2).map { |a, b| piece(f, var, a, b, digits) }
       return pieces.sum if digits.nil?
       Decimal.new(pieces.map { |d| d.is_a?(Decimal) ? d.value : BigDecimal(d.to_s) }.sum, digits)
+    end
+
+    # The width of a range between two finite constant ends, exactly; nil
+    # for an infinite end or one with a parameter.
+    def exact_width(from, to)
+      return nil if [from, to].any? { |b| Limits.infinite?(b) || !b.variables.empty? }
+      (to - from).simplify
+    end
+
+    # Floats can lose a range entirely: 10**20 and 10**20 + 1 are one
+    # Float, and a width of 10**-400 underflows to nothing. Both integrals
+    # of a review (23 Sept 2026) were 1 and came back as 0.0.
+    def lost_width?(lo, hi, width)
+      w = width.evalf
+      return true unless w.is_a?(Numeric) && !w.is_a?(Complex) && w.to_f.finite?
+      w = w.to_f
+      w.zero? || lo == hi || ((hi - lo) - w).abs > 1e-12 * w.abs
+    end
+
+    # x = from + width*t over 0..1: the width becomes a factor of the
+    # integrand, where it is exact, and the range is one Floats can hold.
+    def rescaled(f, var, from, width, digits)
+      t = Var.new(Expression.fresh_variable(:t, f.variables).name)
+      g = (f.subs(var.name => from + width * t) * width).simplify
+      digits ? nintegrate(g, t, 0, 1, digits: digits) : nintegrate(g, t, 0, 1)
     end
 
     # One piece: no kink, jump or pole inside, whatever the ends do.

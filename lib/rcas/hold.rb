@@ -27,17 +27,54 @@ module RCAS
 
     IDENTIFIER = RCAS::IDENTIFIER
 
+    # A block whose source cannot be read is refused, never run: running it
+    # is exactly what hold was asked not to do, and `hold { 1 / 2 }` came
+    # back as 0 under Ruby 4 that way (a review, 23 Sept 2026).
     def hold(block)
-      ast = begin
-        RubyVM::AbstractSyntaxTree.of(block, keep_script_lines: true)
-      rescue ArgumentError, RuntimeError, IOError, Errno::ENOENT
-        nil
+      body = block_body(block)
+      raise RCAS::Unsupported, "hold could not read the block's source, so it cannot keep it unevaluated" if body.nil?
+      Builder.new(block.binding).build(body)
+    end
+
+    # The syntax tree of the block's body. RubyVM::AbstractSyntaxTree.of
+    # reads it directly where the block was compiled by parse.y (Ruby 3.3,
+    # or --parser=parse.y later, which hands back the whole call, ITER,
+    # rather than the block's SCOPE). A block compiled by Prism - the
+    # default since Ruby 3.4 - has no such tree, and `reparsed_body` cuts
+    # its source out by the code location of its instruction sequence.
+    def block_body(block)
+      ast = RubyVM::AbstractSyntaxTree.of(block, keep_script_lines: true)
+      ast = ast.children.last if ast&.type == :ITER
+      ast&.children&.last
+    rescue ArgumentError, RuntimeError, IOError, SystemCallError
+      reparsed_body(block)
+    end
+
+    def reparsed_body(block)
+      iseq = RubyVM::InstructionSequence.of(block)
+      l1, c1, l2, c2 = iseq.to_a[4][:code_location]
+      eval_lines = iseq.script_lines
+      lines = eval_lines || (File.readlines(iseq.path) if File.file?(iseq.path))
+      return nil unless lines && l1
+      # a file starts at line 1; code eval'd with a line number (irb's, the
+      # chat's) starts wherever that says, which the block does not record,
+      # so every start that keeps the block inside the text is tried
+      bases = eval_lines ? [1, *(l2 - lines.size + 1..l1)].uniq : [1]
+      bases.each do |base|
+        from, to = l1 - base, l2 - base
+        next if from.negative? || to >= lines.size
+        text = from == to ? lines[from].byteslice(c1...c2) : lines[from].byteslice(c1..) + lines[from + 1...to].join + lines[to].byteslice(0, c2)
+        next unless text&.match?(/\A(\{|do\b)/)
+        node = begin
+          RubyVM::AbstractSyntaxTree.parse("proc #{text}").children.last
+        rescue SyntaxError
+          next
+        end
+        return node.children.last.children.last if node&.type == :ITER
       end
-      if ast.nil?
-        warn "rcas: hold could not read the block's source, evaluating it instead"
-        return Expression.lift(block.call)
-      end
-      Builder.new(block.binding).build(ast.children.last)
+      nil
+    rescue ArgumentError, RuntimeError, IOError, SystemCallError
+      nil
     end
 
     # The same for a line of source text instead of a block: the expression

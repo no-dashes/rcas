@@ -16,34 +16,71 @@ module RCAS
   #
   # Sources (keys: MANUAL.md, Sources): [Ros14, ch. 4-5]; erf [AS64, §7.1].
   module Distributions
+    # sum(h**m/m!, m, 0, n - 1) for a rational h = p/q, exactly. Over the
+    # common denominator q**(n - 1)*(n - 1)! every term is an Integer, and
+    # each follows from the one before by an exact division by a small
+    # number, so the sum needs one gcd instead of one per term. The
+    # Rational sum term by term cost 1.3 s at n = 5000 under Ruby 3.3 and a
+    # minute under a Ruby 4 whose bignum gcd is slower (a review, 23 Sept
+    # 2026); the powers and factorials one by one had cost 12 s before that.
+    def self.exponential_partial_sum(h, n)
+      p, q = h.numerator, h.denominator
+      top = n - 1
+      denominator = q**top * (1..top).reduce(1, :*)
+      term = denominator # the m = 0 term, h**0/0! over the denominator
+      sum = 0
+      (0..top).each do |m|
+        sum += term
+        term = term * p / (q * (m + 1)) if m < top
+      end
+      Rational(sum, denominator)
+    end
+
     class Distribution
       attr_reader :params
 
       def initialize(*params)
         @params = params.map { |p| Expression.lift(p) }
+        @params.each { |p| real!(p) }
         validate
         freeze
       end
 
       # What the parameters have to be. A symbolic parameter is left alone -
-      # Normal(mu, sigma) is a legitimate object - but a number that cannot
+      # Normal(mu, sigma) is a legitimate object - but a constant that cannot
       # be one is refused here rather than returning a negative probability
-      # later (Binomial(10, 1.5).pdf(3) was -3.1640625).
+      # later (Binomial(10, 1.5).pdf(3) was -3.1640625). A constant is any
+      # expression without indeterminates, decided by `Decide`: only a Num
+      # was checked once, so Exponential(-sqrt(2)) had a cdf below 0 and
+      # Normal(0, i) a variance of -1 (a review, 23 Sept 2026). An
+      # undecided constant is let through, like a symbol.
       def validate; end
 
-      # Raise unless the numeric value of the parameter passes the block.
-      def positive(param, what) = requires(param, what, "positive") { |v| v.positive? }
-      def nonnegative(param, what) = requires(param, what, "not negative") { |v| !v.negative? }
-      def probability_in(param, what) = requires(param, what, "between 0 and 1") { |v| v >= 0 && v <= 1 }
+      # Every parameter of every distribution here is real.
+      def real!(param)
+        return unless param.variables.empty?
+        return if Decide.zero?(ComplexParts.im(param)) != false
+        raise ArgumentError, "#{name}: the parameters must be real, got #{param}"
+      rescue NotImplementedError, RCAS::Unsupported => e
+        RCAS.guard!(e, refused: true) # parts rcas cannot take decide nothing
+      end
+
+      # Raise when the decided sign of the constant parameter fails.
+      def positive(param, what) = requires(param, what, "positive") { |sign| %i[negative zero].include?(sign.call(param)) }
+      def nonnegative(param, what) = requires(param, what, "not negative") { |sign| sign.call(param) == :negative }
+
+      def probability_in(param, what)
+        requires(param, what, "between 0 and 1") { |sign| sign.call(param) == :negative || sign.call(param - 1) == :positive }
+      end
 
       def whole(param, what)
-        requires(param, what, "a non-negative whole number") { |v| v.integer? && !v.negative? }
+        requires(param, what, "a non-negative whole number") { |sign| sign.call(param) == :negative || Infer.excluded?(param, ZZ) }
       end
 
       def requires(param, what, description)
-        value = param.is_a?(Num) ? param.value : nil
-        return if value.nil? || !value.real?
-        raise ArgumentError, "#{name}: #{what} must be #{description}, got #{param}" unless yield(value)
+        return unless param.variables.empty?
+        failed = yield(->(e) { Decide.sign(Expression.lift(e).simplify) })
+        raise ArgumentError, "#{name}: #{what} must be #{description}, got #{param}" if failed
       end
 
       def name = self.class.name.split("::").last
@@ -363,8 +400,8 @@ module RCAS
 
     class Uniform < Distribution
       def validate
-        return unless a.is_a?(Num) && b.is_a?(Num) && a.value.real? && b.value.real?
-        raise ArgumentError, "Uniform: the range is empty (#{a} to #{b})" unless a.value < b.value
+        return unless a.variables.empty? && b.variables.empty?
+        raise ArgumentError, "Uniform: the range is empty (#{a} to #{b})" if %i[negative zero].include?(Decide.sign((b - a).simplify))
       end
       def a = params[0]
       def b = params[1]
@@ -814,15 +851,7 @@ class ChiSquare < Distribution
     if k.is_a?(Num) && k.value.is_a?(Integer) && k.value.even? && k.value.positive?
       half = (x / 2).simplify
       tail = if half.is_a?(Num) && (half.value.is_a?(Integer) || half.value.is_a?(Rational))
-               # term by term, t(m + 1) = t(m)*half/(m + 1), in Rationals: the
-               # powers and factorials one by one took 12 s at k = 10**4
-               term = 1r
-               sum = 0r
-               (0...k.value / 2).each do |m|
-                 sum += term
-                 term = term * half.value / (m + 1)
-               end
-               Num.new(Simplify.normalize_number(sum))
+               Num.new(Simplify.normalize_number(Distributions.exponential_partial_sum(half.value.to_r, k.value / 2)))
              else
                (0...k.value / 2).map { |m| half**m / RCAS.factorial(m) }.reduce(:+)
              end
@@ -907,11 +936,12 @@ end
     class DiscreteUniform < Discrete
       def validate
         [a, b].each do |e|
-          next unless e.is_a?(Num) && e.value.real?
-          raise ArgumentError, "DiscreteUniform: the ends must be whole numbers, got #{e}" unless e.value == e.value.round
+          next unless e.variables.empty?
+          whole_value = e.is_a?(Num) && e.value.is_a?(Float) ? e.value == e.value.round : !Infer.excluded?(e, ZZ)
+          raise ArgumentError, "DiscreteUniform: the ends must be whole numbers, got #{e}" unless whole_value
         end
-        return unless a.is_a?(Num) && b.is_a?(Num) && a.value.real? && b.value.real?
-        raise ArgumentError, "DiscreteUniform: the range is empty (#{a} to #{b})" unless a.value <= b.value
+        return unless a.variables.empty? && b.variables.empty?
+        raise ArgumentError, "DiscreteUniform: the range is empty (#{a} to #{b})" if Decide.sign((b - a).simplify) == :negative
       end
       def a = params[0]
       def b = params[1]

@@ -252,7 +252,11 @@ Without the launcher, `require "rcas"` and use `:x`, `RCAS::ZZ` or
 `include RCAS::Sets`, and `RCAS.sin(:x)` / `RCAS.assume(x: RCAS::ZZ)`.
 Blocks passed to `hold` work in files and in irb; code assembled with
 `eval` is covered too because loading rcas turns on
-`RubyVM.keep_script_lines`.
+`RubyVM.keep_script_lines`. This holds under both of Ruby's parsers
+(Prism has been the default since 3.4). A block whose source cannot be
+read at all, such as `&:to_s` or code given to `ruby -e` under Prism, is
+refused rather than evaluated, because evaluating it is exactly what
+`hold` was asked not to do.
 
 ## Courses
 
@@ -1214,6 +1218,23 @@ has no formula still has all the digits you want. And a `Float` in the
 expression carries only its own sixteen digits, so the answer is reported
 with sixteen however many were asked for: padding them out to fifty would
 be inventing thirty-four.
+
+A zero is the one answer that more digits cannot confirm. A value of
+`10**-200` looks like 0 at 30 digits, and like 0 again at 60. So rcas
+keeps raising the working precision until the digits appear, and it
+returns 0 only when it can *prove* the value is exactly zero. For an
+algebraic number that proof is a root separation bound; otherwise it is
+a normal form, such as the logarithms of the primes. An identity that
+rcas cannot prove is refused rather than rounded:
+
+```
+rcas> evalf(sin(pi + 10**-200), 30)
+=> -1.0e-200
+rcas> evalf(log(6) - log(2) - log(3), 30)
+=> 0.0
+rcas> evalf(atan(1/2r) + atan(1/3r) - pi/4, 30)
+=> RCAS::Precision::NoConvergence: evalf: atan(1/2) + atan(1/3) - pi/4 could not be certified to 30 digits; the working precision ran out before two evaluations agreed (it is 0 to 660 digits, and rcas cannot prove it is exactly 0)
+```
 
 The constants, `exp`, `log`, the trigonometric and hyperbolic functions
 and their inverses, roots, powers, a finite `sum` and a real `RootOf` are
@@ -3295,7 +3316,11 @@ that is not orthogonal is orthogonalised first and dependent generators
 drop out: projecting onto a list that spans the whole space gives the
 vector back. `least_squares(A, b)` solves the normal
 equations, which is the best fit when `A*x = b` has no solution; it is the
-matrix form of `linreg` (section 1.10).
+matrix form of `linreg` (section 1.10). The normal equations use the
+conjugate transpose, so complex entries get the complex best fit: for the
+column (1, 2i), the value of z that minimises `|z - 1|**2 + |2*i*z|**2`
+is 1/5. Vectors of different lengths live in different spaces, and
+`project`, `gram_schmidt` and `least_squares` refuse to mix them.
 
 ```
 rcas> gram_schmidt([vector(1, 1, 0), vector(1, 0, 1)])
@@ -3310,6 +3335,8 @@ rcas> project(vector(1, 0), onto: [vector(1, 0), vector(1, 1)])
 => (1, 0)
 rcas> least_squares(matrix([[1, 1], [1, 2], [1, 3]]), vector(1, 2, 4))
 => (-2/3, 3/2)
+rcas> least_squares(matrix([[1], [2*I]]), vector(1, 0))
+=> (1/5)
 ```
 
 ### 1.8 Differential equations and recurrences

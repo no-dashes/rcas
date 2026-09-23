@@ -77,6 +77,6 @@ class IrbTest < Minitest::Test
     out = run_session("foo(1)", "u(n + 1) + u(n)", 'foo("a")')
     assert_includes out, "foo(1)", "an undefined name applied to a number is an unknown function"
     assert_includes out, "u(n + 1) + u(n)"
-    assert out.grep(/undefined method `foo'/).any?, "other argument kinds still raise: #{out.join("\n")}"
+    assert out.grep(/undefined method [`']foo'/).any?, "other argument kinds still raise: #{out.join("\n")}"
   end
 end

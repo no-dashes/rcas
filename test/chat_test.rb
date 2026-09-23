@@ -170,6 +170,7 @@ class ChatReplTest < Minitest::Test
   end
 
   def test_questions_go_to_claude_through_the_tool
+    skip "the anthropic gem is not installed" unless TestSupport.anthropic?
     script = [
       { text: "Let me factor that.", tool: { code: "ZZ[x].(x**6 - 1).factor", show: true } },
       { text: "Done: four irreducible factors." }
@@ -190,12 +191,14 @@ class ChatReplTest < Minitest::Test
   end
 
   def test_prose_that_parses_as_ruby_is_still_a_question
+    skip "the anthropic gem is not installed" unless TestSupport.anthropic?
     script = [{ text: "x squared is a monomial." }]
     _, out = repl("what is x squared\n", script: script)
     assert_includes out, "⏺ x squared is a monomial."
   end
 
   def test_tool_errors_are_reported_back
+    skip "the anthropic gem is not installed" unless TestSupport.anthropic?
     script = [
       { text: "Trying.", tool: { code: "ZZ[x].(1 / x)" } },
       { text: "That is not a polynomial." }
@@ -206,6 +209,7 @@ class ChatReplTest < Minitest::Test
   end
 
   def test_api_errors_leave_history_clean
+    skip "the anthropic gem is not installed" unless TestSupport.anthropic?
     factory = lambda do |ws, ui, model|
       RCAS::Chat::Assistant.new(ws, ui, model: model, runner_factory: ->(_p) { raise Anthropic::Errors::APIConnectionError.new(url: URI("https://api.anthropic.com"), message: "down") })
     end

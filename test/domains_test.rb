@@ -146,7 +146,7 @@ class DomainsTest < Minitest::Test
     refute :x.in?(NN)
 
     RCAS.assume(n: NN, y: QQ)
-    assert_equal "{:x=>x in ZZ, :n=>n in NN, :y=>y in QQ}", RCAS.assumptions.to_s, "an assumption prints as the statement it is"
+    assert_equal "{x: x in ZZ, n: n in NN, y: y in QQ}", TestSupport.hash_style(RCAS.assumptions.to_s), "an assumption prints as the statement it is"
     assert_equal ZZ, RCAS.assumption(:x), "while assumption(name) is the domain itself"
     assert_equal RCAS::Var.new(:k), ZZ.var(:k)
     assert_equal ZZ, :k.domain

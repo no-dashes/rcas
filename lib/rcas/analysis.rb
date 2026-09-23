@@ -582,8 +582,7 @@ module RCAS
         # every fractional power is the principal one, real only for a base
         # that is not negative - x**(1/3) too; surd(x, 3) is the real root
         # (the fifth review's decision on odd roots)
-        if node.is_a?(Pow) && node.exponent.is_a?(Num) && node.exponent.value.is_a?(Rational) &&
-           node.exponent.value.denominator > 1 && condition_argument?(node.base, x)
+        if node.is_a?(Pow) && condition_argument?(node.base, x) && fractional_exponent?(node.exponent)
           conditions << Inequality.new(node.base, :>=, 0)
         elsif node.is_a?(Fn) && node.name == :log && condition_argument?(node.args.first, x)
           conditions << Inequality.new(node.args.first, :>, 0)
@@ -593,6 +592,29 @@ module RCAS
         end
       end
       conditions
+    end
+
+    # Whether a constant real exponent is not an integer, so that the power
+    # asks for a base that is not negative. A literal Rational was the only
+    # case once, and x**0.5 and x**pi had the whole line as their domain (a
+    # review, 23 Sept 2026). A Float is judged by its value, any other
+    # constant by `Infer.excluded?` (pi is not an integer: it is
+    # transcendental). An exponent in x (x**x) is `scattered_domain`'s, one
+    # in a parameter is left alone like every parameter condition, and a
+    # constant whose integrality rcas cannot decide is refused rather than
+    # dropped.
+    def fractional_exponent?(e)
+      return false unless e.variables.empty?
+      e = e.simplify
+      if e.is_a?(Num)
+        v = e.value
+        return false unless v.is_a?(Numeric) && v.real?
+        return v.is_a?(Float) ? v.finite? && v != v.round : !(v.is_a?(Integer) || (v.is_a?(Rational) && v.denominator == 1))
+      end
+      return false if (domain = Infer.domain(e)) && domain <= ZZ
+      return false unless Decide.sign(ComplexParts.im(e)) == :zero # a complex exponent is not this rule's
+      return true if Infer.excluded?(e, ZZ)
+      raise RCAS::Unsupported, "real_domain: cannot decide whether the exponent #{e} is an integer, which decides whether a negative base is allowed"
     end
 
     # ---- several variables ---------------------------------------------------------

@@ -20,7 +20,18 @@ module RCAS
     # complex number: (1, i).(1, i) is 1 + i*i = 0 bilinearly, and |(1, i)|
     # is sqrt(2), not 0 (third review, L12). Symbolic entries are taken as
     # they stand, so the real case is unchanged.
-    def dot(u, v) = u.entries.zip(v.entries).map { |a, b| Scalar.mul(a, conjugate(b)) }.reduce { |x, y| Scalar.add(x, y) }.simplify
+    def dot(u, v)
+      same_length!(u, v, "dot")
+      u.entries.zip(v.entries).map { |a, b| Scalar.mul(a, conjugate(b)) }.reduce { |x, y| Scalar.add(x, y) }.simplify
+    end
+
+    # zip drops the extra coordinates of the longer vector, which made
+    # project((1, 2), onto: (1, 0, 3)) a plausible (1/10, 0) (a review,
+    # 23 Sept 2026): vectors of two different spaces have no inner product.
+    def same_length!(u, v, name)
+      return if u.entries.size == v.entries.size
+      raise ArgumentError, "#{name}: the vectors have #{u.entries.size} and #{v.entries.size} entries; they must lie in the same space"
+    end
 
     def conjugate(e)
       e = Expression.lift(e)
@@ -32,7 +43,10 @@ module RCAS
 
     def scale(v, factor) = v.space.unchecked(v.entries.map { |e| (e * factor).simplify })
 
-    def subtract(u, v) = u.space.unchecked(u.entries.zip(v.entries).map { |a, b| (a - b).simplify })
+    def subtract(u, v)
+      same_length!(u, v, "subtract")
+      u.space.unchecked(u.entries.zip(v.entries).map { |a, b| (a - b).simplify })
+    end
 
     # The projection of v onto a vector or onto the span of several.
     #
@@ -63,7 +77,10 @@ module RCAS
       end
     end
 
-    def add(u, v) = u.space.unchecked(u.entries.zip(v.entries).map { |a, b| (a + b).simplify })
+    def add(u, v)
+      same_length!(u, v, "add")
+      u.space.unchecked(u.entries.zip(v.entries).map { |a, b| (a + b).simplify })
+    end
 
     # An orthogonal (or orthonormal) basis of the same span; dependent
     # vectors drop out rather than appearing as zeros.
@@ -78,11 +95,19 @@ module RCAS
       basis.map { |w| scale(w, (1 / norm(w)).simplify) }
     end
 
-    # The x minimising |A x - b|, from the normal equations A' A x = A' b.
+    # The x minimising |A x - b|, from the normal equations A* A x = A* b
+    # with A* the conjugate transpose. The plain transpose is right only for
+    # real entries: for A = (1, 2i)' it gave -1/3 where the minimiser of
+    # |z - 1|**2 + |2iz|**2 is 1/5, and (1, i)' had "dependent columns"
+    # (a review, 23 Sept 2026). `conjugate` leaves a symbolic entry alone,
+    # as `dot` does, so the real case is unchanged.
     def least_squares(matrix, target)
-      transpose = matrix.transpose
-      normal = transpose * matrix
-      right = transpose * target
+      unless target.entries.size == matrix.rows
+        raise ArgumentError, "least_squares: the matrix has #{matrix.rows} rows and the vector #{target.entries.size} entries"
+      end
+      adjoint = RCAS.matrix(matrix.transpose.to_a.map { |row| row.map { |e| conjugate(e) } })
+      normal = adjoint * matrix
+      right = adjoint * target
       raise ArgumentError, "least_squares: the columns are dependent, so the solution is not unique" if Scalar.zero?(normal.det)
       normal.solve(right.entries)
     end

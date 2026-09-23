@@ -197,6 +197,7 @@ module RCAS
       end
       previous = nil
       shrinking = 0
+      proof = nil # asked once, when the numbers first look like a zero
       GUARDS.each_with_index do |guard, level|
         state = { limit: digits }
         value = walk(expr, digits + guard, table, state)
@@ -206,18 +207,39 @@ module RCAS
         return Decimal.new(value.mult(1, keep), keep) if keep < digits
         if previous
           return Decimal.new(value.mult(1, digits), digits) if agree?(value, previous, digits)
-          # an exact 0 is what a cancellation deeper than the working
-          # precision looks like (exp(10**-60) - 1 at 30 digits), so zeros
-          # agree only at the last two guards, where the value is 0 to more
-          # than 600 digits; a value that shrinks with every step is a
-          # zero too (sin(pi*10**15)), but only if it was never exactly 0
-          return Decimal.new(BigDecimal(0), digits) if value.zero? && previous.zero? && level == GUARDS.size - 1
+          # Two zeros, or a value that shrinks with every step, is what a
+          # zero looks like - and also what a cancellation deeper than the
+          # working precision looks like: exp(10**-1000) - 1 is 0 at every
+          # guard, and sin(pi + 10**-200) shrank twice before the guard
+          # reached the 200 digits that show it. Numbers never prove a zero
+          # (the fourth review's rule, which this loop had kept breaking):
+          # `Decide.zero?` is asked for a proof, a root separation bound or
+          # a normal form, and without one the guard is raised further.
           shrinking = !previous.zero? && value.abs < previous.abs * BigDecimal("1e-#{guard / 3}") ? shrinking + 1 : 0
-          return Decimal.new(BigDecimal(0), digits) if shrinking >= 2
+          if (value.zero? && previous.zero?) || shrinking >= 2
+            proof = proved_zero?(expr, table) if proof.nil?
+            return Decimal.new(BigDecimal(0), digits) if proof
+          end
         end
         previous = value
       end
-      raise NoConvergence, "evalf: #{expr} could not be certified to #{digits} digits; the working precision ran out before two evaluations agreed"
+      raise NoConvergence, "evalf: #{expr} could not be certified to #{digits} digits; the working precision ran out before two evaluations agreed" \
+                           "#{previous&.zero? ? " (it is 0 to #{digits + GUARDS.last} digits, and rcas cannot prove it is exactly 0)" : ''}"
+    end
+
+    # Only a constant can be proved zero; bindings are substituted first.
+    # An expression with a Float in it has no exact value to prove anything
+    # about: the Float is as exact as it gets, and 0 to more than 600 digits
+    # is its honest value (a Float residual that cancels, as in checking a
+    # solution at a sample point, must still come out as 0.0).
+    def proved_zero?(expr, table)
+      return true if expr.each_node.any? { |n| n.is_a?(Num) && n.value.is_a?(Float) } ||
+                     table.values.any? { |v| v.is_a?(Float) || (v.is_a?(Num) && v.value.is_a?(Float)) }
+      constant = table.empty? ? expr : expr.subs(table.transform_values { |v| Expression.lift(v) })
+      constant.variables.empty? && Decide.zero?(constant) == true
+    rescue StandardError => rescued
+      RCAS.guard!(rescued)
+      false
     end
 
     # The value at `digits` (plus the guard) and the largest magnitude met

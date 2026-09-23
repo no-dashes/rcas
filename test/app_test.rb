@@ -4,6 +4,7 @@ require "test_helper"
 require "rcas/app"
 require "net/http"
 require "tmpdir"
+require "open3"
 
 # The window front end: the session behind it (App::Worksheet), the little
 # HTTP server that carries it (App::Server), the browser the window is
@@ -422,5 +423,17 @@ class AppOptionsTest < Minitest::Test
   def test_an_unknown_flag_says_so
     error = assert_raises(RCAS::App::Error) { RCAS::App.parse(%w[--wat]) }
     assert_match(/--wat/, error.message)
+  end
+end
+
+# The page's own JavaScript, where a harness can run it: test/js holds
+# plain Node scripts against the real app.js with a stub DOM. Node is not a
+# dependency of rcas, so without it these skip.
+class AppScriptTest < Minitest::Test
+  def test_enter_submits_the_line_it_was_pressed_on
+    node = ENV.fetch("PATH", "").split(File::PATH_SEPARATOR).map { |d| File.join(d, "node") }.find { |f| File.executable?(f) }
+    skip "node is not installed" unless node
+    out, status = Open3.capture2e(node, File.expand_path("js/app_race.js", __dir__))
+    assert status.success?, out
   end
 end

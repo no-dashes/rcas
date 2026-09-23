@@ -28,10 +28,30 @@ module RCAS
         else chain(expr, var)
         end
       when Integral then integral(expr, var)
-      when Derivative then expr.var == var ? Derivative.new(expr.expr, expr.var, expr.order + 1) : Num.new(0)
+      when Derivative then derivative(expr, var)
       when Piecewise then Piecewise.new(expr.branches.map { |cond, value| [cond, diff(value, var)] })
       else raise ArgumentError, "can't differentiate #{expr.class}"
       end
+    end
+
+    # A derivative with respect to another variable. D(y, x) of an unknown
+    # function y stands for y(x), which depends on x alone, so its
+    # derivative in anything else is 0. An explicit expression is another
+    # matter: D(x*y, x) is y, and its y-derivative is 1, not the 0 this
+    # returned for every other variable (a review, 23 Sept 2026). It is
+    # taken first and differentiated again; one that cannot be taken stays
+    # a formal mixed derivative rather than becoming 0.
+    def derivative(d, var)
+      return Derivative.new(d.expr, d.var, d.order + 1) if d.var == var
+      return Num.new(0) if d.expr.is_a?(Var) || !d.expr.variables.include?(var.name)
+      taken = begin
+        d.evaluate
+      rescue ArgumentError => e
+        raise unless e.message.start_with?(Integrate::NO_DERIVATIVE) # floor(x*y)
+        d
+      end
+      return diff(taken, var) unless taken.each_node.any? { |n| n.is_a?(Derivative) }
+      Derivative.new(d, var)
     end
 
     # A definite integral is a number, but a number that still depends on

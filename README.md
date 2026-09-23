@@ -46,8 +46,9 @@ was wrong or your rocket doesn't reach the moon in time.
 
 ## Requirements
 
-- Ruby 3.3 or newer (developed on 3.3.10). No gems are needed for the
-  core library or `bin/rcas`; everything is standard library.
+- Ruby 3.3 or newer (developed on 3.3.10; the suite also passes under
+  4.0, whose default parser is Prism). No gems are needed for the core
+  library or `bin/rcas`; everything is standard library.
 - Big-number performance benefits from a Ruby built with GMP
   (`ruby -e 'p Integer::GMP_VERSION'` shows whether yours is); factoring
   large polynomials is noticeably slower without it.
@@ -174,6 +175,12 @@ sets `RCAS_STRICT=1`: where the library catches an error to answer "not
 decided here", a `NoMethodError` or `NameError` is re-raised instead,
 because that is a bug and not mathematics. Set it yourself when running a
 single file (`RCAS_STRICT=1 ruby -Ilib -Itest test/solve_test.rb`).
+
+The core suite needs nothing beyond the standard library. A few tests
+drive optional parts and skip, with the reason, when those are missing:
+the chat tests that script a Claude conversation need the `anthropic`
+gem, `test/js/app_race.js` (the worksheet's Enter key, run against the
+real `app.js`) needs `node`, and the parser test needs Ruby 3.4 or later.
 
 ## Documentation
 
