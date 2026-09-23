@@ -119,12 +119,54 @@ class VanHoeijTest < Minitest::Test
     VanHoeij.singleton_class.alias_method :recombine, :__recombine
   end
 
-  def test_auto_takes_the_lattice_only_for_many_local_factors
+  def test_only_auto_has_a_subset_budget
     assert_equal :auto, RCAS::Factor.recombination
-    refute RCAS::Factor.van_hoeij?(RCAS::Factor::VAN_HOEIJ_FROM - 1)
-    assert RCAS::Factor.van_hoeij?(RCAS::Factor::VAN_HOEIJ_FROM)
-    RCAS::Factor.with_recombination(:van_hoeij) { assert RCAS::Factor.van_hoeij?(2) }
-    RCAS::Factor.with_recombination(:zassenhaus) { refute RCAS::Factor.van_hoeij?(100) }
+    assert_equal RCAS::Factor::SUBSET_BUDGET, RCAS::Factor.subset_budget
+    RCAS::Factor.with_recombination(:zassenhaus) { assert_nil RCAS::Factor.subset_budget }
+    RCAS::Factor.with_recombination(:van_hoeij) { assert_nil RCAS::Factor.subset_budget }
     assert_raises(ArgumentError) { RCAS.factor(@x**2 - 1, recombination: :lll) }
+  end
+
+  # :auto tries subsets while the next size is cheap and hands the rest to
+  # the lattice, with the local factors already lifted. A budget of 50 lets
+  # the single factors through (about 15 of them) and stops at the pairs,
+  # so the linear factor is found and taken out first - the cofactor and
+  # its lifted factors must fit.
+  def with_budget(budget)
+    saved = RCAS::Factor::SUBSET_BUDGET
+    RCAS::Factor.send(:remove_const, :SUBSET_BUDGET)
+    RCAS::Factor.const_set(:SUBSET_BUDGET, budget)
+    yield
+  ensure
+    RCAS::Factor.send(:remove_const, :SUBSET_BUDGET)
+    RCAS::Factor.const_set(:SUBSET_BUDGET, saved)
+  end
+
+  def test_auto_hands_the_rest_to_the_lattice
+    handed = []
+    VanHoeij.singleton_class.alias_method :__recombine, :recombine
+    VanHoeij.define_singleton_method(:recombine) do |f, modular, p, k, lifted: nil|
+      handed << [Dense.deg(f), modular.size, !lifted.nil?]
+      __recombine(f, modular, p, k, lifted: lifted)
+    end
+    f = sd(4) * sd(3, 1) * (@x - 3) * (@x**2 + 1)
+    auto = with_budget(50) { RCAS.factor(f) }
+    refute_empty handed, "no handover"
+    assert handed.all? { |_, _, lifted| lifted }, "the lifted factors were not passed on"
+    assert_operator handed.first[0], :<, Dense.deg(dense(f)), "the linear factor should be taken out before the handover"
+    assert_equal RCAS.factor(f, recombination: :zassenhaus), auto
+  ensure
+    VanHoeij.singleton_class.alias_method :recombine, :__recombine
+  end
+
+  def test_the_handover_agrees_on_random_products
+    rng = Random.new(20260925)
+    with_budget(10) do
+      10.times do
+        parts = [sd(3, rng.rand(-2..2))] + Array.new(rng.rand(1..3)) { (0..rng.rand(1..4)).map { rng.rand(-9..9) }.tap { |c| c[-1] = rng.rand(1..4) } }.map { |c| c.each_with_index.map { |a, i| a * @x**i }.reduce(:+) }
+        f = parts.reduce(:*)
+        assert_equal RCAS.factor(f, recombination: :zassenhaus), RCAS.factor(f), f.to_s[0, 80]
+      end
+    end
   end
 end

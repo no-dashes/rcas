@@ -434,11 +434,17 @@ module RCAS
           m *= p
           k += 1
         end
-        if Factor.van_hoeij?(modular.size) && (found = VanHoeij.recombine(f, modular, p, k))
+        if Factor.recombination == :van_hoeij && (found = VanHoeij.recombine(f, modular, p, k))
           return found
         end
         lifted = hensel_lift_leading(f, modular, p, k)
-        recombine(f, lifted, m).sort_by { |g| [Dense.deg(g), g] }
+        recombine(f, lifted, m, budget: Factor.subset_budget) do |rest, local|
+          # the subsets grew too many: the lattice takes the cofactor and its
+          # local factors, lifted already (lc(rest) times their product is
+          # rest modulo p**k, since every factor taken out had a leading
+          # coefficient prime to p)
+          VanHoeij.recombine(rest, local.map { |g| Dense.mod(g, p) }, p, k, lifted: local)
+        end.sort_by { |g| [Dense.deg(g), g] }
       end
 
       # Distinct-degree then equal-degree factorization of a monic squarefree
@@ -515,13 +521,22 @@ module RCAS
       end
 
       # Try products of the monic lifted factors, scaled by the current
-      # leading coefficient and made primitive, as divisors of f.
-      def recombine(f, modular, m)
+      # leading coefficient and made primitive, as divisors of f. With a
+      # budget, once the subsets of the next size would number more than
+      # that, the cofactor and the local factors left are offered to the
+      # block (van Hoeij's lattice); its factors end the search, and nil
+      # lets the subsets go on without a limit.
+      def recombine(f, modular, m, budget: nil)
         result = []
         remaining = modular
         current = f
         size = 1
         while 2 * size <= remaining.size
+          if budget && block_given? && remaining.size.to_i.then { |r| (1..size).reduce(1) { |c, i| c * (r - i + 1) / i } } > budget
+            handed = yield(current, remaining)
+            return result + handed if handed
+            budget = nil
+          end
           found = false
           lc = current.last
           remaining.each_index.to_a.combination(size).each do |indices|

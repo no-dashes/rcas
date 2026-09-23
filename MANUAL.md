@@ -2847,12 +2847,20 @@ rcas> factor(twice, recombination: :van_hoeij) == factor(twice, recombination: :
 => true
 ```
 
-`factor` uses Zassenhaus's method for fewer than 20 modular factors, where
-it is the faster of the two, and van Hoeij's from 20 on. `recombination:
-:van_hoeij` or `:zassenhaus` picks one, for comparing them. On this
-machine, both took about 0.2 s at 16 modular factors, van Hoeij's was
-twice as fast at 24, and at 32 (the Swinnerton-Dyer polynomial of degree
-64) it took 3 s while Zassenhaus's had not finished after three minutes.
+Which method is faster does not depend on how many modular factors there
+are. It depends on how many of them a true factor needs. When the true
+factors are small, the products of one, two or three modular factors find
+them, and each one found shrinks the problem. On such polynomials
+Zassenhaus's method was about twice as fast at every count from 17 to 26
+modular factors. When every true factor needs eight modular factors, or
+all thirty-two, only the lattice keeps up. So `factor` tries products
+while there are few enough of the next size (50,000), and hands what is
+left to the lattice, with the factors it has already lifted.
+`recombination: :van_hoeij` or `:zassenhaus` picks one method, for
+comparing them. On this machine, three SD(4)s took 1.7 s by products, 0.9
+s by the lattice, and 1.0 s by the default. The Swinnerton-Dyer
+polynomial of degree 64 took 3 s by the lattice or the default, and had
+not finished after three minutes by products.
 
 #### gcd and division of expressions
 

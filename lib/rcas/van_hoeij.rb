@@ -4,16 +4,23 @@ module RCAS
   module Factor
     # How the p-adic factors are put back together: :van_hoeij (the lattice),
     # :zassenhaus (subsets of increasing size, the original method), or
-    # :auto, which takes the lattice once there are VAN_HOEIJ_FROM local
-    # factors or more. Below that the subsets are cheap - the trailing
-    # coefficient test throws out nearly all of them - and measured faster
-    # (24 Sept 2026, products of Swinnerton-Dyer polynomials: 0.12 s against
-    # 0.22 s at 16 local factors, 0.21 s against 0.47 s at 20, but 1.7 s
-    # against 0.9 s at 24 and more than a minute against 3 s at 32, where
-    # the subsets run into their 2**(r - 1)). The old method stays so that
-    # the two can be compared: factor(f, recombination: :zassenhaus).
+    # :auto, the subsets for as long as they are cheap and the lattice for
+    # what is left.
+    #
+    # The number of local factors does not say which is faster; the size of
+    # the subsets the true factors need does. Products of small factors
+    # (x**2 - c, cubics, SD(3)) came out about twice as fast by subsets at
+    # every count from 17 to 26 local factors, because they are found among
+    # the pairs and triples and every one found shrinks the problem, while
+    # three SD(4)s (24 local factors, eight to each true factor) took 1.7 s
+    # by subsets and 0.9 s by the lattice, and SD(6) (32, all in one) more
+    # than three minutes against 3 s (24 Sept 2026). So :auto counts the
+    # subsets of the next size, C(r, s), and hands over to the lattice when
+    # that exceeds SUBSET_BUDGET - at about 4 microseconds a subset, the
+    # budget is what the lattice costs at twenty local factors. The old
+    # method stays so that the two can be compared.
     RECOMBINATIONS = %i[auto van_hoeij zassenhaus].freeze
-    VAN_HOEIJ_FROM = 20
+    SUBSET_BUDGET = 50_000
 
     def self.recombination = Thread.current[:rcas_recombination] || :auto
 
@@ -30,13 +37,9 @@ module RCAS
       Thread.current[:rcas_recombination] = saved
     end
 
-    def self.van_hoeij?(local_factors)
-      case recombination
-      when :van_hoeij then local_factors > 1
-      when :zassenhaus then false
-      else local_factors >= VAN_HOEIJ_FROM
-      end
-    end
+    # The number of subsets the search may try at one size before :auto
+    # hands the rest over to the lattice; nil for no limit.
+    def self.subset_budget = recombination == :auto ? SUBSET_BUDGET : nil
 
     # Van Hoeij's recombination of the p-adic factors by lattice reduction.
     #
@@ -83,20 +86,26 @@ module RCAS
 
       # The irreducible factors of f (primitive, squarefree, positive leading
       # coefficient), or nil when the lattice did not decide - the caller
-      # then recombines by subsets.
-      def recombine(f, modular, p, k)
-        n = Dense.deg(f)
+      # then recombines by subsets. `lifted` are the local factors already
+      # lifted to p**k, when the subsets handed over: lifting again from p
+      # cost 0.8 of 3.7 s on SD(6), and is done only when the lattice needs
+      # more precision than the subsets had.
+      def recombine(f, modular, p, k, lifted: nil)
         r = modular.size
         bounds = cld_bounds(f)
         # enough precision for the first few columns, which have the
         # smallest bounds: the top coefficients
         wanted = bounds.last(3).max * 2**(r / 2 + SAFETY_BITS)
-        k += 1 while p**k <= wanted
+        if p**k <= wanted
+          k += 1 while p**k <= wanted
+          lifted = nil
+        end
         MAX_RAISES.times do
-          lifted = Zassenhaus.hensel_lift_leading(f, modular, p, k)
+          lifted ||= Zassenhaus.hensel_lift_leading(f, modular, p, k)
           found = attempt(f, lifted, p**k, bounds)
           return found if found
           k *= 2
+          lifted = nil
         end
         nil
       end
