@@ -147,6 +147,9 @@ class ReviewPeer3Test < Minitest::Test
     assert_raises(ArgumentError) { RCAS.Binomial(10, RCAS::PI / 2) }
     assert_raises(ArgumentError) { RCAS.Binomial(RCAS.sqrt(2), 1/2r) }
     assert_raises(ArgumentError) { RCAS.Uniform(RCAS.sqrt(3), RCAS.sqrt(2)) }
+    assert_raises(ArgumentError) { RCAS::Distributions::DiscreteUniform.new(1, RCAS.sqrt(2)) }
+    assert_raises(ArgumentError) { RCAS::Distributions::DiscreteUniform.new(RCAS.sqrt(5), 1) }
+    assert_equal "7/2", RCAS::Distributions::DiscreteUniform.new(1, 6).mean.to_s
   end
 
   def test_valid_constants_and_symbols_are_accepted

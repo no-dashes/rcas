@@ -90,6 +90,17 @@ class Review6ClosingTest < Minitest::Test
                  RCAS.integrate(@x**(@a + @b), @x).to_s
   end
 
+  # When no parameter of a denominator had roots, `special_values` handed
+  # back the parameter names themselves (Array#each returns its receiver)
+  # and the branch builder raised a TypeError; found by the manual's
+  # assume(a < 0) transcript while the definite special values landed.
+  def test_a_denominator_without_special_values_leaves_the_answer_alone
+    RCAS.assume(@a < 0) do
+      assert_equal "-1/(1 - a) - 1/a", RCAS.integrate(1 / (@x - @a)**2, @x, 0, 1).to_s
+    end
+    assert_kind_of RCAS::Integral, RCAS.integrate(1 / (@x - @a)**2, @x, 0, 1)
+  end
+
   # cos(a*x) over 0..pi is sin(pi*a)/a, which has no value at a = 0.
   def test_special_values_of_a_definite_integral
     assert_equal "piecewise(a.eq(0) => pi, :else => sin(pi*a)/a)",
