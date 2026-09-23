@@ -1094,13 +1094,8 @@ causes are seven mistakes repeated, so the fixes are policies:
   its support as a piecewise; a moment that does not exist is oo or
   undefined. `evalf` falls back to arbitrary precision when a Float
   overflows (`wide`).
-- Things the review flagged that are **design questions left to the
-  user** (REVIEW.md section 4), so do not settle them on your own: which
-  indeterminates are coordinates in gradient & co., the empty-sum
-  convention, odd roots of negative numbers (Precision takes the real root,
-  Float evalf the principal one), real_domain of expressions with complex
-  intermediate values (`real_domain(I*sqrt(x))` refuses today), and
-  whether solve is complete over CC.
+- The design questions this review raised were decided in the fifth
+  round (see "The design decisions" below).
 
 ## The fourth review (23 Sept 2026): proofs, not agreement
 
@@ -1185,6 +1180,64 @@ way. The lessons, each a policy now:
   `MAX_SYMBOLIC_UNKNOWNS`.
 - One review expectation is wrong and was raised with the user, not
   loosened: `(x**2 + x)/x < 0` is x < -1, so -1/2 is not inside.
+
+## The design decisions (23 Sept 2026, the fifth review)
+
+The user passed on eight decisions, each what most comparable systems do
+and MuPAD where they split (`review/DESIGN_QUESTIONS.md` has the
+comparison). They are settled; do not reopen them without the user.
+
+1. **`**` is the principal root; `surd(x, n)` is the real one.**
+   `x**(1/n)` and `root(x, n)` are principal on every path (Precision
+   takes the principal root too and refuses a non-real value);
+   `surd(x, n)` is `-|x|**(1/n)` below 0 for odd n, `undefined` for even
+   n there; `cbrt(x)` is `surd(x, 3)`. `surd` is a two-argument Fn with a
+   fold (`Functions.surd_value`), a derivative, `Infer`, LaTeX
+   `\sqrt[n]{x}` and a Precision case; OpenMath writes it as an
+   application of `$surd` (no CD has it). `real_domain(x**(1/3))` is
+   [0, oo) - every fractional power needs a base that is not negative -
+   and `discuss`/`plot` of such a power add a note pointing at `surd`
+   (`Analysis.root_hints`).
+2. **`real_domain`: every subexpression real** (Mathematica's rule for
+   FunctionDomain). A decided non-real constant subexpression of the
+   simplified f leaves the empty set; `log(-2)` folds to `log(2) + i*pi`
+   now that this is settled. The "value is real" question is
+   `solve(im(f) == 0, x)`. Scattered domains are answers
+   (`ScatteredSet`: intervals plus or minus affine families): x**x,
+   c**(linear) for a negative c, gamma/factorial of a linear argument.
+3. **`solve` is complete over CC.** `exp(u) = v` is `log(v) + 2*pi*i*k`,
+   `b**u = v` is `(log(v) + 2*pi*i*k)/log(b)` (roots of unity first, and
+   when no power of the root of unity takes v, the logarithm route);
+   several exponentials go through the common measure exp(v/l)
+   (`common_exponential`), and an exponential atom must make the others
+   *whole* powers - a fractional one loses the branch. `domain: RR` keeps
+   the real members of a family whose step is not real (`real_members`).
+   **Every internal caller that means the real line passes
+   `domain: RR`** (poles of definite integrals, kinks, breakpoints,
+   `real_domain`'s zeros, asymptotes, discuss, sums' poles, between's
+   crossings, piecewise solve); keep that for a new caller. The families
+   of `solve` itself keep complex poles.
+4. **Karr's convention** [Kar81] for reversed sums and products, on
+   every path (`Summation.karr`, used by `product` too); `evalf` of a
+   Sum or Product node evaluates it first.
+5. **Coordinates are named.** `Analysis.variables_of`: the given list, or
+   the free names when they are among x, y, z, or - for a field in names
+   of its own - as many names as components; anything else is an
+   ArgumentError naming the extra symbol.
+6. **An antiderivative lists its special parameter values**
+   (`Integrate.with_special_cases`, only at the public `integrate`): a
+   Piecewise over the values where a denominator free of x vanishes, each
+   integrated again; `generic: true` for the short form. Inside rcas,
+   call `Integrate.integrate`, which stays generic.
+7. **Log rules need proved positivity.** `expand_log` and `logcombine`
+   split or join only positive (proved) factors, keep the rest in one
+   log, and take `force: true` for the textbook manipulation. Internal
+   callers whose results are verified (the logarithmic equation in
+   `solve`) pass `force: true`.
+8. **No domain claim where there is no value**: `1/x` for x in RR has
+   none until x != 0 is known (`Infer.nonzero?`). The matrix and vector
+   constructors ask the other question - real where defined - through
+   `Infer.where_defined { }`.
 
 ## Traps we have hit (so you do not hit them again)
 
