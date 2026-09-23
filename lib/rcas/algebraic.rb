@@ -80,9 +80,13 @@ module RCAS
       end
     end
 
+    # Decided: a RootOf knows from Sturm's count, a radical from its
+    # radicand (an |Im| < 1e-12 test before: fourth review, 2.4).
     def generator_real?
-      v = generator.evalf
-      !v.is_a?(Complex) || v.imaginary.abs < 1e-12
+      return generator.real? if generator.is_a?(RootOf)
+      Inequalities.real?(generator)
+    rescue NotImplementedError
+      false
     end
 
     def join(other)

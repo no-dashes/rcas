@@ -79,7 +79,7 @@ module RCAS
     # exactly (Inequalities.compare), so two roots 10**-15 apart bound an
     # interval instead of merging into a point.
     def self.normalize(list)
-      order = ->(a, b) { Inequalities.compare(a, b) || (a.evalf.to_f <=> b.evalf.to_f) }
+      order = ->(a, b) { Inequalities.order!(a, b) }
       sorted = list.reject(&:empty?).sort do |a, b|
         c = order.call(a.low, b.low)
         c.zero? ? (a.left_open ? 1 : 0) <=> (b.left_open ? 1 : 0) : c
@@ -458,15 +458,21 @@ module RCAS
       ra = infinity_rank(a)
       rb = infinity_rank(b)
       return ra <=> rb if ra != 0 || rb != 0
-      fa = real_float(a)
-      fb = real_float(b)
-      if fa && fb && (fa - fb).abs > 1e-9 * [1.0, fa.abs, fb.abs].max
-        return fa <=> fb
-      end
       return 0 if a == b
-      sign = sign_of(a - b)
-      return { positive: 1, negative: -1, zero: 0 }[sign] if sign
-      fa && fb ? fa <=> fb : nil
+      difference = Sub.new(a, b)
+      # Floats decide only clear of their own rounding (the running error
+      # bound), and nothing decides by Floats alone: two values closer than
+      # a relative 1e-9 used to be ordered by them (fourth review, 2.4)
+      quick = Decide.float_sign(difference)
+      return quick == :positive ? 1 : -1 if quick
+      sign = sign_of(difference)
+      { positive: 1, negative: -1, zero: 0 }[sign]
+    end
+
+    # compare, or a refusal: an order the exact routes cannot settle is not
+    # read off Floats.
+    def order!(a, b)
+      compare(a, b) or raise NotImplementedError, "cannot decide whether #{a} or #{b} is the larger"
     end
 
     def infinity_rank(e)
@@ -481,9 +487,7 @@ module RCAS
       points.each_with_object([]) { |p, out| out << p unless out.any? { |q| compare(p, q)&.zero? } }
     end
 
-    def sort(points)
-      points.sort { |p, q| compare(p, q) || (p.evalf.to_f <=> q.evalf.to_f) }
-    end
+    def sort(points) = points.sort { |p, q| order!(p, q) }
   end
 
   # One-parameter inequalities: split the parameter line at the values where

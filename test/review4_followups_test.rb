@@ -177,6 +177,37 @@ class Review4FollowupsTest < Minitest::Test
     assert refused { RCAS.conservative?(vortex) }
   end
 
+  # Control for proven_sign in norm: a base that changes sign on the box
+  # keeps its abs, a sum of squares loses it.
+  def test_a_root_of_a_square_keeps_its_abs_only_where_the_sign_changes
+    box = [[@x, 0, 1], [@y, 0, 1]]
+    assert_kind_of RCAS::Fn, RCAS::VectorCalculus.root_factor(@x + @y - n(1r / 10), box) # abs(...)
+    assert_equal (@x**2 + @y**2).to_s, RCAS::VectorCalculus.root_factor(@x**2 + @y**2, box).to_s
+  end
+
+  # Sturm's count decides which numeric roots are real.
+  def test_numeric_roots_are_real_by_sturm
+    roots = RCAS.solve(@x**5 - @x - 1, @x).map(&:evalf)
+    assert_equal 1, roots.count { |r| r.is_a?(Float) }
+    assert_in_delta 1.1673039782614187, roots.find { |r| r.is_a?(Float) }, 1e-15
+    assert_equal 3, RCAS.solve(@x**5 - 3 * @x + 1, @x).count { |r| r.evalf.is_a?(Float) }
+  end
+
+  # A point the family already says is not said again.
+  def test_a_point_inside_a_family_is_not_listed_twice
+    assert_equal ["{pi*k | k in ZZ}"], RCAS.solve(@x * RCAS.sin(@x), @x).map(&:to_s)
+    assert_equal [RCAS::ZZ], RCAS.solve((@x - 1) * RCAS.sin(RCAS::PI * @x), @x)
+  end
+
+  # An equation holds with Floats within their rounding, and exactly for
+  # exact values.
+  def test_an_equation_holds_within_its_rounding
+    eq = RCAS::Equation.new(@x**2, 2)
+    assert eq.holds?(x: RCAS.sqrt(2))
+    assert eq.holds?(x: 2**0.5)
+    refute eq.holds?(x: 1.4142)
+  end
+
   # grad(1/r) in space is conservative on its domain: its potential is 1/r.
   def test_the_gradient_of_one_over_r_has_its_potential
     r = RCAS.sqrt(@x**2 + @y**2 + @z**2)

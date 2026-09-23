@@ -19,10 +19,16 @@ module RCAS
     def variables = (lhs.variables | rhs.variables).sort
     def solve(var = nil) = Solve.solve(self, var)
 
-    # Does the equation hold for these values?
+    # Does the equation hold for these values? Exactly for exact values; a
+    # Float difference holds when it is within its own rounding error (an
+    # absolute 1e-9 said 1e-10 = 0 holds: fourth review, 2.4).
     def holds?(**bindings)
-      value = Expression.lift((lhs - rhs).call(**bindings)).simplify
-      value.is_a?(Num) && (value.value.is_a?(Float) ? value.value.abs < 1e-9 : value.zero?)
+      difference = Expression.lift(lhs - rhs).subs(bindings.to_h { |k, v| [k, Expression.lift(v)] })
+      value = difference.simplify
+      return false unless value.is_a?(Num) || value.variables.empty?
+      return Decide.zero?(value) == true unless difference.each_node.any? { |n| n.is_a?(Num) && n.value.is_a?(Float) }
+      found, error = Decide.float_with_error(difference)
+      !found.nil? && found.abs <= Decide::ERROR_MARGIN * error
     end
 
     %i[+ - * /].each do |op|
@@ -274,7 +280,25 @@ module RCAS
           return Scalar.zero?(constant) ? everywhere(x, domain, poles, original) : []
         end
       roots = dedupe(found).map { |root| family(root, x, f) }
-      ordered(dedupe(restrict(off_poles(merge_families(roots), poles, x), x, domain)))
+      ordered(absorbed(dedupe(restrict(off_poles(merge_families(roots), poles, x), x, domain))))
+    end
+
+    # A point that is a member of a family is said by the family: x*sin(x)
+    # listed 0 and {pi*k | k in ZZ} (fourth review, 2.5).
+    def absorbed(list)
+      families = list.select { |s| s.is_a?(ImageSet) && s.affine }
+      sets = list.select { |s| s.is_a?(NumberSet) }
+      return list if families.empty? && sets.empty?
+      list.reject do |point|
+        next false unless point.is_a?(Expression) && point.variables.empty?
+        next true if sets.any? { |set| point.is_a?(Num) && set.include?(point.value) }
+        families.any? do |set|
+          base, step = set.affine
+          next false if Scalar.zero?(step)
+          index = ((point - base) / step).simplify
+          index.is_a?(Num) && index.value.is_a?(Integer) && set.domain.include?(index.value)
+        end
+      end
     end
 
     # x/(x + 1) + 1/(x + 1) - 1 is zero as a rational function, which the
@@ -948,10 +972,36 @@ module RCAS
         end
         break if moved < 1e-14
       end
-      roots.map do |z|
-        z = z.real if z.imaginary.abs < 1e-9
-        Num.new(z.is_a?(Complex) ? Complex(z.real.round(12), z.imaginary.round(12)) : z.round(12))
+      # Which roots are real is an exact question: Sturm's theorem counts
+      # them, and that many roots nearest the real axis are the real ones
+      # (an |Im| < 1e-9 test and a rounding to twelve digits decided it
+      # before: fourth review, 2.4). Conjugate pairs are made exact pairs.
+      real = sturm_count(g)
+      nearest = roots.each_with_index.sort_by { |z, _| z.imaginary.abs }.first(real).map(&:last)
+      roots.each_with_index.map do |z, i|
+        Num.new(nearest.include?(i) ? z.real : z)
       end.sort_by { |r| r.value.is_a?(Complex) ? [r.value.real, r.value.imaginary] : [r.value, 0] }
+    end
+
+    # The number of distinct real roots of a polynomial over QQ: the sign
+    # changes of its Sturm sequence at -oo less those at oo.
+    def sturm_count(g)
+      g = g.to_ring(QQ[*g.ring.vars]) unless g.ring.base == QQ # the remainders need a field
+      sequence = [g, g.derivative]
+      until sequence.last.zero? || sequence.last.degree.zero?
+        remainder = sequence[-2] % sequence[-1]
+        break if remainder.zero?
+        sequence << -remainder
+      end
+      at = lambda do |sign|
+        values = sequence.map do |q|
+          lead = q.leading_coefficient.value
+          lead = -lead if sign.negative? && q.degree.odd?
+          lead <=> 0
+        end.reject(&:zero?)
+        values.each_cons(2).count { |a, b| a != b }
+      end
+      at.call(-1) - at.call(1)
     end
 
     # ---- transcendental equations -------------------------------------------------

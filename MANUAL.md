@@ -2028,7 +2028,7 @@ rcas> solve(a*x**2 + b*x + c, x)
 rcas> solve(x**3 - x - 1, x).first
 => RootOf(-1 - x + x**3, 0)
 rcas> solve(x**3 - x - 1, x).first.evalf
-=> 1.324717957245
+=> 1.324717957244746
 rcas> solve(1/(x - 1) - 1/(x + 1) - 1, x)
 => [-3**(1/2), 3**(1/2)]
 rcas> solve(x + sqrt(x) - 6, x)

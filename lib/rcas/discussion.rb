@@ -414,7 +414,7 @@ module RCAS
         last = pieces.last
         # never across a gap: tan is increasing on (0, pi/2) and on
         # (pi/2, pi), and not on (0, pi) (S13)
-        across_gap = extra.any? { |e| (v = Analysis.numeric(e)) && (v - low_value).abs <= 1e-12 * [1.0, v.abs].max }
+        across_gap = extra.any? { |e| !e.is_a?(ImageSet) && Inequalities.compare(e, low)&.zero? }
         if last && last[1] == sign && last[0].high == low && domain.include?(low_value) && !across_gap
           pieces[-1] = [Interval.open(last[0].low, high), sign]
         else
@@ -462,10 +462,16 @@ module RCAS
     def piece_sign(g, x, low, high, domain)
       points = sample_points(low, high).select { |s| domain.include?(s) }
       return :outside if points.empty?
+      # each sample decided exactly at a rational point, skipped when
+      # undecided (it was a Float below 1e-12 that was skipped)
       signs = points.filter_map do |sample|
-        value = Analysis.numeric(g.subs(x => Num.new(sample)))
-        next nil if value.nil? || value.abs < 1e-12
-        value.positive? ? :positive : :negative
+        value = begin
+          g.subs(x => Num.new(Rational(sample).rationalize(Rational(1, 10**12)))).simplify
+        rescue ZeroDivisionError
+          next nil
+        end
+        sign = Decide.sign(value)
+        %i[positive negative].include?(sign) ? sign : nil
       end.uniq
       signs.size == 1 ? signs.first : nil
     end

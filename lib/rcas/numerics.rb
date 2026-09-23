@@ -62,7 +62,7 @@ module RCAS
 
     def beyond_floats?(expr)
       expr.each_node.any? do |n|
-        n.is_a?(Num) && (v = n.value).is_a?(Numeric) && v.real? && !v.is_a?(Float) && !v.zero? && !v.abs.to_f.between?(1e-300, 1e300)
+        n.is_a?(Num) && (v = n.value).is_a?(Numeric) && v.real? && !v.is_a?(Float) && !v.zero? && !Expression.float_of(v.abs).between?(1e-300, 1e300)
       end
     end
 

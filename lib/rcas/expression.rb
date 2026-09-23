@@ -381,7 +381,15 @@ module RCAS
     end
 
     def self.floatify(value)
-      value.is_a?(Complex) ? Complex(value.real.to_f, value.imaginary.to_f) : value.to_f
+      value.is_a?(Complex) ? Complex(float_of(value.real), float_of(value.imaginary)) : float_of(value)
+    end
+
+    # to_f without Ruby's "Integer out of Float range" warning: an integer
+    # beyond the Floats is the infinity it rounds to, which evalf's wide
+    # fallback then takes again in arbitrary precision.
+    def self.float_of(value)
+      return value.to_f unless value.is_a?(Integer) && value.bit_length > 1023
+      value.positive? ? Float::INFINITY : -Float::INFINITY
     end
 
     # Substitute and simplify. Returns a plain Ruby number when everything is
