@@ -312,7 +312,7 @@ module RCAS
     #   (:x * RCAS.exp(:x)).integrate(:x)   # => -exp(x) + x*exp(x)
     def integrate(var = nil, from = nil, to = nil, generic: false, **range)
       var, from, to = Functions.range_arguments(var, from, to, range, "integrate", discrete: false) if var.nil? || from
-      from.nil? ? Integrate.with_special_cases(self, var, generic: generic) : Integrate.definite(self, var, from, to)
+      from.nil? ? Integrate.with_special_cases(self, var, generic: generic) : Integrate.definite_with_special_cases(self, var, from, to, generic: generic)
     end
 
     # Numeric evaluation: every number becomes a Float so roots and function

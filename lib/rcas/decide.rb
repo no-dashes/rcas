@@ -239,6 +239,7 @@ module RCAS
         simplified = e.simplify
         return true if simplified.is_a?(Num) && simplified.value == 0
         return true if factorial_zero?(e)
+        return true if log_zero?(simplified)
         !simplified.is_a?(Num) && Scalar.identically_zero?(simplified)
       ensure
         Thread.current[:rcas_decide_symbolic] = nil
@@ -246,6 +247,34 @@ module RCAS
     rescue StandardError => rescued
       RCAS.guard!(rescued)
       false
+    end
+
+    # log(6) - log(2) - log(3) is 0, and neither simplify nor the numerics
+    # can say so (the numerics never prove a zero). The log of a positive
+    # rational is the sum of the logs of its primes, each counted with its
+    # exponent - log(p/q) = log(p) - log(q) holds for positive p and q -
+    # and the logs of distinct primes are linearly independent over QQ
+    # (unique factorization), so once every such log is written over its
+    # primes, simplify merging the like terms to 0 is a proof. A number too
+    # hard to factor quickly keeps its log whole, which is still an equal
+    # expression, only a less decisive one.
+    def log_zero?(e)
+      logs = e.each_node.select do |n|
+        n.is_a?(Fn) && n.name == :log && n.args.size == 1 && n.args.first.is_a?(Num) &&
+          (v = n.args.first.value).is_a?(Numeric) && (v.is_a?(Integer) || v.is_a?(Rational)) && v.positive? && v != 1
+      end.uniq
+      return false if logs.empty?
+      split = logs.to_h do |n|
+        value = n.args.first.value.to_r
+        terms = [[value.numerator, 1], [value.denominator, -1]].flat_map do |m, sign|
+          next [] if m == 1
+          primes = NumberTheory.prime_division(m, hard: false)
+          next [[m, sign]] unless primes
+          primes.map { |p, k| [p, sign * k] }
+        end
+        [n, terms.map { |p, k| Num.new(k) * Fn.new(:log, [Num.new(p)]) }.reduce(:+)]
+      end
+      zero_number?(e.subs(split).simplify)
     end
 
     # gamma(u) is (u - 1)!, and simplify cancels factorials whose arguments

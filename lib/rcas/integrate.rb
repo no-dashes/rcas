@@ -83,7 +83,38 @@ module RCAS
         integrand = f.subs(parameter => value).simplify
         # log(a*x) at a = 0 is log(0): no integrand, so no branch
         next nil unless defined_value?(integrand)
-        at = integrate(integrand, x)
+        # a value in the other parameters (a = b for sin(a*x)*cos(b*x))
+        # leaves an integrand with special values of its own; it has one
+        # parameter fewer, so this ends
+        at = value.variables.empty? ? integrate(integrand, x) : with_special_cases(integrand, x)
+        complete?(at) ? [Equation.new(parameter, value), at] : nil
+      end
+      branches.empty? ? found : Piecewise.new(branches + [[Piecewise::OTHERWISE, found]])
+    end
+
+    # The same for a definite integral: cos(a*x) over 0..pi is
+    # sin(pi*a)/a, which has no value at a = 0, where the integral is pi.
+    # The special values are read off the answer, and each is integrated
+    # again with the bounds taken at it; a family of them stays one branch
+    # with the integral unevaluated, since there is no one integrand to
+    # integrate.
+    def definite_with_special_cases(expr, var, from, to, generic: false)
+      f = Expression.lift(expr)
+      x = Expression.lift(var)
+      found = definite(f, x, from, to)
+      return found if generic || !complete?(found)
+      bounds = [from, to].map { |b| Expression.lift(b) }
+      parameters = ((f.variables | bounds.flat_map(&:variables)) & found.variables) - [x.name]
+      return found if parameters.empty?
+      branches = special_values(found, x, parameters).filter_map do |parameter, value, denominator|
+        if value.is_a?(ImageSet)
+          condition = Equation.new(denominator, Num.new(0))
+          next [condition, Integral.new(f, x, *bounds)]
+        end
+        integrand = f.subs(parameter => value).simplify
+        next nil unless defined_value?(integrand)
+        lo, hi = bounds.map { |b| b.subs(parameter => value).simplify }
+        at = value.variables.empty? ? definite(integrand, x, lo, hi) : definite_with_special_cases(integrand, x, lo, hi)
         complete?(at) ? [Equation.new(parameter, value), at] : nil
       end
       branches.empty? ? found : Piecewise.new(branches + [[Piecewise::OTHERWISE, found]])
@@ -141,7 +172,10 @@ module RCAS
 
     # [parameter, value, denominator] at which a denominator of the
     # antiderivative that is free of x vanishes, for one parameter at a
-    # time; the value is a point or a family.
+    # time; the value is a point or a family. A denominator in several
+    # parameters - b - a and a + b for sin(a*x)*cos(b*x) - is solved for
+    # the first of them in which it has roots free of it, and the value is
+    # then an expression in the others (a = b, a = -b).
     def special_values(found, x, parameters)
       denominators = []
       found.each_node do |node|
@@ -151,21 +185,26 @@ module RCAS
         end
       end
       pairs = denominators.uniq.reject { |d| d.variables.include?(x.name) }.flat_map do |d|
-        movers = d.variables & parameters
-        next [] unless movers.size == 1
-        parameter = Var.new(movers.first)
-        # complete: one period of sin(a) = 0 left a = 2*pi dividing by zero
-        roots = begin
-          Solve.solve(d, parameter)
-        rescue ArgumentError, NotImplementedError, RCAS::Unsupported
-          next []
-        end
-        next [] unless roots.is_a?(Array)
-        points = roots.select { |r| r.is_a?(Expression) && r.variables.empty? }.map { |r| [parameter, r.simplify, d] }
-        families = roots.select { |r| r.is_a?(ImageSet) }.map { |r| [parameter, r, d] }
-        points + families
+        movers = (d.variables & parameters).sort
+        next [] if movers.empty?
+        movers.lazy.map { |name| values_of(d, Var.new(name), movers - [name]) }.find(&:any?) || []
       end
       pairs.uniq { |p, v, _| [p, v] }
+    end
+
+    # [parameter, value, d] for the roots of d in the parameter that are
+    # free of it; a family only when d has no other parameter
+    def values_of(d, parameter, others)
+      # complete: one period of sin(a) = 0 left a = 2*pi dividing by zero
+      roots = begin
+        Solve.solve(d, parameter)
+      rescue ArgumentError, NotImplementedError, RCAS::Unsupported
+        return []
+      end
+      return [] unless roots.is_a?(Array)
+      points = roots.select { |r| r.is_a?(Expression) && (r.variables - others).empty? }.map { |r| [parameter, r.simplify, d] }
+      families = others.empty? ? roots.select { |r| r.is_a?(ImageSet) }.map { |r| [parameter, r, d] } : []
+      points + families
     end
 
     def integrate(expr, var)

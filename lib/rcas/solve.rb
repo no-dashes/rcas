@@ -1248,7 +1248,7 @@ module RCAS
     def transcendental(f, x, depth, all: false)
       atoms = f.each_node.select { |n| depends?(n, x) && transcendental_atom?(n) }.uniq
       atoms = atoms.sort_by { |n| -n.each_node.count }
-      common = common_exponential(atoms, x)
+      common = common_exponential(atoms, x) || common_power(atoms, x)
       atoms.unshift(common) if common && !atoms.include?(common)
       t = Var.new(:"_s#{depth}")
 
@@ -1552,9 +1552,70 @@ module RCAS
       Fn.new(:exp, [(first * Num.new(Rational(numerator, denominator))).simplify])
     end
 
-    # Replace the atom u by t. exp(k*v) becomes t**k for every whole k.
+    # r**(v/l) for the powers b_i**w_i of f with positive rational bases
+    # that are powers of one r (4 = 2**2, 1/8 = 2**-3), l the least common
+    # denominator of the exponents e_i*w_i measured against the first:
+    # every one of them is then a whole power of it, and 4**x - 3*2**x + 2
+    # is t**2 - 3*t + 2 in t = 2**x. A whole power is safe over CC, since
+    # b**w is exp(w*log(b)) with a real log(b). nil when the bases have no
+    # common root or the exponents are not rational multiples of one another.
+    def common_power(atoms, x)
+      powers = atoms.select { |n| n.is_a?(Pow) && power_base(n.base) && depends?(n.exponent, x) }
+      return nil if powers.size < 2
+      roots = powers.map { |n| power_base(n.base) }
+      return nil unless roots.map(&:first).uniq.size == 1
+      exponents = powers.zip(roots).map { |n, (_, e)| (n.exponent * e).simplify }
+      first = exponents.first
+      ratios = exponents.map do |w|
+        r = (w / first).simplify
+        return nil unless r.is_a?(Num) && (r.value.is_a?(Integer) || r.value.is_a?(Rational))
+        r.value.to_r
+      end
+      numerator = ratios.map(&:numerator).reduce(:gcd)
+      denominator = ratios.map(&:denominator).reduce(:lcm)
+      Pow.new(Num.new(roots.first.first), (first * Num.new(Rational(numerator, denominator))).simplify)
+    end
+
+    # A positive rational base b as [r, e] with b = r**e, r > 1 and not
+    # itself a perfect power; nil for any other base.
+    def power_base(base)
+      return nil unless base.is_a?(Num) && (base.value.is_a?(Integer) || base.value.is_a?(Rational))
+      b = base.value.to_r
+      return nil unless b.positive? && b != 1
+      sign = b > 1 ? 1 : -1
+      b = 1 / b if sign.negative?
+      e = [b.numerator, b.denominator].max.bit_length.downto(2).find do |k|
+        [b.numerator, b.denominator].all? { |n| Simplify.integer_root(n, k)**k == n }
+      end || 1
+      r = Rational(Simplify.integer_root(b.numerator, e), Simplify.integer_root(b.denominator, e))
+      [Simplify.normalize_number(r), sign * e]
+    end
+
+    # Replace the atom u by t. exp(k*v) becomes t**k for every whole k, and
+    # so does b**w when b = r**e and e*w is k times the exponent of u = r**v.
     def replace_atom(f, u, x, t)
-      if u.is_a?(Fn) && u.name == :exp
+      if u.is_a?(Pow) && power_base(u.base) && depends?(u.exponent, x)
+        r, e = power_base(u.base)
+        v = (u.exponent * e).simplify # u is r**v
+        constant, table = Expand.table(f)
+        rebuilt = {}
+        table.each do |factors, coeff|
+          new_factors = {}
+          factors.each do |base, exp|
+            root = exp.is_a?(Expression) && depends?(exp, x) && power_base(Expression.lift(base))
+            if root
+              return nil unless root.first == r
+              ratio = (exp * root.last / v).simplify
+              return nil unless ratio.is_a?(Num) && ratio.value.is_a?(Integer) # whole powers only, as for exp
+              new_factors[t] = (new_factors[t] || 0) + ratio.value
+            else
+              new_factors[base] = exp
+            end
+          end
+          rebuilt[new_factors] = (rebuilt[new_factors] || 0) + coeff
+        end
+        Simplify.rebuild_sum(constant, rebuilt)
+      elsif u.is_a?(Fn) && u.name == :exp
         v = u.args.first
         constant, table = Expand.table(f)
         rebuilt = {}

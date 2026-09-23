@@ -345,7 +345,7 @@ module RCAS
     def integrate(expr, var = nil, from = nil, to = nil, generic: false, **range)
       return Functions.iterated_integral(expr, range) if range.size > 1
       var, from, to = Functions.range_arguments(var, from, to, range, "integrate", discrete: false) if var.nil? || from
-      from.nil? ? Integrate.with_special_cases(expr, var, generic: generic) : Integrate.definite(expr, var, from, to)
+      from.nil? ? Integrate.with_special_cases(expr, var, generic: generic) : Integrate.definite_with_special_cases(expr, var, from, to, generic: generic)
     end
 
     # polynomial structure: degree(f, x), lcoeff(f, x), coeff(f, x, 2), collect(f, x)

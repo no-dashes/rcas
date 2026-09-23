@@ -916,6 +916,21 @@ rcas> integrate(cos(a*x), x, generic: true)
 => sin(a*x)/a
 ```
 
+A denominator in two parameters gives a value in terms of the other one,
+and that branch can have special values of its own. A definite integral
+lists its special values the same way:
+
+```
+rcas> integrate(exp(a*x)*exp(-b*x), x)
+=> piecewise(a.eq(b) => x, :else => exp(a*x - b*x)/(a - b))
+rcas> integrate(cos(a*x), x, 0, PI)
+=> piecewise(a.eq(0) => pi, :else => sin(pi*a)/a)
+```
+
+What rcas does not state yet is when the integral *converges*:
+`integrate(x**a, x, 0, 1)` answers `1/(1 + a)` for every `a` other than
+-1, although the integral diverges for `a < -1`.
+
 The same machinery gives `sqrt(tan(x))` in logarithms and arc tangents, by
 way of the quartic denominator that the substitution `t = sqrt(tan(x))`
 leaves behind. An integrand rcas cannot even differentiate, `floor(x)` or an
@@ -4425,7 +4440,9 @@ with polynomial coefficients, Abramov's rational solutions, the
 Almkvist-Zeilberger algorithm for hyperexponential integrals,
 multivariate (holonomic) summation, formal power series whose
 coefficients are not hypergeometric (`tan`, `exp(x)/(1 - x)`), iterated
-integrals (a definite integral inside another one stays formal), the sign
+integrals (a definite integral inside another one stays formal),
+convergence conditions on the parameters of a definite integral
+(`integrate(x**a, x, 0, 1)` is `1/(1 + a)` also where it diverges), the sign
 of an expression on a box of *several* parameter ranges that is not a
 product of factors in one range each (the length element in
 `vector_calculus.rb` keeps its `abs` there rather than guess), and of

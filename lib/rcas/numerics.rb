@@ -203,6 +203,7 @@ module RCAS
         ->(_) { nil }
       end
       root = to.nil? ? newton(g, derivative, from, var, expr) : bisect(g, derivative, from, to, var, expr)
+      root = certified(expr, var, g, root, from, to) if to
       case crossing(g, root, from, to)
       when :pole
         raise ArgumentError, "nsolve: #{expr} has a pole at #{root}, not a root; give a range on one side of it"
@@ -267,6 +268,53 @@ module RCAS
       end
     end
 
+    # The sign test of the bisection. A product of the two values is no
+    # test: two values of 1e-165 multiply to 0, and (x - 1)**41 then
+    # "changed sign" at 0.9999 and was called a jump.
+    def same_sign?(a, b) = (a.positive? && b.positive?) || (a.negative? && b.negative?)
+    def opposite_sign?(a, b) = (a.positive? && b.negative?) || (a.negative? && b.positive?)
+
+    # A bracketed root of an exact f, checked by exact signs. Float
+    # evaluation of expand((x - 1)**9) is noise for |x - 1| < 0.05 - the
+    # terms are of size 126 and cancel to 1e-16 - and the bisection
+    # followed the noise to 0.985. So the signs a little either side of the
+    # root are decided (`Decide.sign` at exact rational points: exactly for
+    # a polynomial, by certified digits otherwise) and, when they do not
+    # differ, the bisection is run again on decided signs alone. Float
+    # input has no exact signs to ask, and an undecided sign keeps the
+    # Float root, which is what the caller had before.
+    def certified(expr, var, g, root, from, to)
+      return root if Expression.lift(expr).each_node.any? { |n| n.is_a?(Num) && n.value.is_a?(Float) }
+      sign = exact_sign(expr, var)
+      return root if sign.call(root) == :zero
+      d = 16 * Float::EPSILON * [root.abs, Float::MIN].max
+      left, right = sign.call(root - d), sign.call(root + d)
+      return root if left.nil? || right.nil? || left != right
+      lo, hi = [from, to].minmax
+      slo, shi = sign.call(lo), sign.call(hi)
+      return root if slo.nil? || shi.nil? || slo == shi || [slo, shi].include?(:zero)
+      steps = 0
+      until narrow?(lo, hi) || steps > 4 * MAX_STEPS
+        steps += 1
+        x = (lo + hi) / 2.0
+        s = sign.call(x)
+        return root if s.nil? # nothing decided to go on: keep the Float answer
+        return x if s == :zero
+        s == slo ? lo = x : hi = x
+      end
+      g.call(lo)&.abs.to_f <= g.call(hi)&.abs.to_f ? lo : hi
+    end
+
+    def exact_sign(expr, var)
+      e = Expression.lift(expr)
+      lambda do |x|
+        Decide.sign(e.subs(var => Num.new(x.to_r)).simplify)
+      rescue StandardError => rescued
+        RCAS.guard!(rescued)
+        nil
+      end
+    end
+
     # Converged when the bracket is a few units in the last place wide: a
     # small value of f is not a root - (x - 3/10)/10**12 is -3e-13 at 0 and
     # exp(-50*x)*(x - 1/2) is 1e-22 at 1, and |f| < 1e-12 answered with
@@ -298,7 +346,7 @@ module RCAS
       raise ArgumentError, "nsolve: #{expr} is not defined at both ends of #{lo}..#{hi}" if flo.nil? || fhi.nil?
       return lo if flo.zero?
       return hi if fhi.zero?
-      raise ArgumentError, "nsolve: #{expr} has the same sign at #{lo} and #{hi}; give a range that brackets a root" if flo * fhi > 0
+      raise ArgumentError, "nsolve: #{expr} has the same sign at #{lo} and #{hi}; give a range that brackets a root" if same_sign?(flo, fhi)
 
       return 0.0 if crosses_at_zero?(g, lo, hi, flo)
       x = (lo + hi) / 2.0
@@ -315,7 +363,7 @@ module RCAS
         value = defined_near(g, x, lo, hi)
         return x if value.nil?
         return x if value.zero?
-        value * flo > 0 ? (lo = x; flo = value) : (hi = x; fhi = value)
+        same_sign?(value, flo) ? (lo = x; flo = value) : (hi = x; fhi = value)
       end
       flo.abs <= fhi.abs ? lo : hi # the caller tells a root from a pole or a jump
     end
@@ -330,7 +378,7 @@ module RCAS
       return false unless lo.negative? && hi.positive? && g.call(0.0).nil?
       left = g.call(-Float::MIN)
       right = g.call(Float::MIN)
-      !left.nil? && !right.nil? && left * flo > 0 && right * flo < 0
+      !left.nil? && !right.nil? && same_sign?(left, flo) && opposite_sign?(right, flo)
     end
 
     # The value at x, or at the nearest point inside the bracket where the
@@ -379,7 +427,7 @@ module RCAS
       right = g.call(x + d)
       here = g.call(x)
       return false if left.nil? || right.nil? || here.nil?
-      return true if left * right <= 0
+      return true if !same_sign?(left, right)
       here.abs <= 1e-6 * [left.abs, right.abs].min && [left.abs, right.abs].min.positive?
     end
 
@@ -391,7 +439,7 @@ module RCAS
         [start + i * step, start - i * step].each do |x|
           value = g.call(x)
           next if value.nil? || previous.nil?
-          return [[x, start].min, [x, start].max] if value * previous <= 0
+          return [[x, start].min, [x, start].max] if !same_sign?(value, previous)
         end
       end
       nil
