@@ -322,6 +322,63 @@ class Review4FollowupsTest < Minitest::Test
     assert_equal (@n / (1 + @n)).simplify, RCAS.sum(1 / (@k * (@k + 1)), @k, 1, @n)
   end
 
+  # ---- evaluation ---------------------------------------------------------------------------
+
+  # A Float that lost its digits to cancellation is taken again in
+  # arbitrary precision: 1 - cdf(30) of Poisson(2) is 3.77e-26, and an
+  # exact zero comes out as 0.0 rather than rounding noise.
+  def test_evalf_does_not_hand_back_a_cancelled_float
+    tail = 1 - RCAS::Distributions::Poisson.new(2).cdf(30)
+    assert_in_delta 3.7695528553257976e-26, tail.evalf, 1e-36
+    assert_equal 0.0, (RCAS.sqrt(2) * RCAS.sqrt(3) - RCAS.sqrt(6)).evalf
+  end
+
+  # E1 and erfc by continued fractions: no series to cancel.
+  def test_continued_fractions_for_the_far_tails
+    assert_in_delta(-1.4065187662340329e-307, RCAS.Ei(@x).evalf(20, x: -700).to_f, 1e-320)
+    assert_in_delta(-0.0011482955912753258, RCAS.Ei(@x).evalf(20, x: -5).to_f, 1e-18)
+    assert_in_delta Math.erfc(12.0), RCAS.erfc(@x).evalf(20, x: 12).to_f, 1e-76
+  end
+
+  # A piecewise condition is decided exactly, and k in ZZ is one.
+  def test_piecewise_conditions_are_decided
+    pw = RCAS::Piecewise.new([[RCAS::Membership.new(@k, RCAS::ZZ), @k**2], [RCAS::Piecewise::OTHERWISE, n(0)]])
+    assert_equal n(0), pw.subs(k: 5r / 2).simplify
+    assert_equal n(9), pw.subs(k: 3).simplify
+    tiny = RCAS::Piecewise.new([[RCAS::Inequality.new(RCAS.cos(n(10)**-30) - 1, :<, 0), n(1)], [RCAS::Piecewise::OTHERWISE, n(2)]])
+    assert_equal n(1), tiny.simplify
+  end
+
+  # ---- distributions ------------------------------------------------------------------------
+
+  # The t distribution's tails in closed form for 1 and 2 degrees of
+  # freedom, its centre, and the normal limit for a huge nu.
+  def test_student_t_tails_and_centre
+    t = RCAS::Distributions::StudentT
+    assert_equal "atan(1/5)/pi", t.new(1).survival(5).to_s
+    assert_in_delta 0.5 - 5 / (2 * Math.sqrt(27)), t.new(2).survival(5).evalf, 1e-15
+    assert_equal n(0), t.new(7).quantile(1r / 2)
+    assert_in_delta 0.8413447460685429, t.new(10**9).cdf(1.0).value, 1e-9
+  end
+
+  # Discrete quantiles exactly, Float upper tails summed from the top.
+  def test_discrete_quantiles_and_tails
+    b = RCAS::Distributions::Binomial
+    assert_equal n(0), b.new(3, 1r / 2).quantile(1r / 8)
+    assert_equal n(1), b.new(3, 1r / 2).quantile(1r / 8 + 10r**-30)
+    assert_in_delta 3.2248444478817708e-24, b.new(100, 0.5).probability(@x > 95).value, 1e-30
+    assert_equal n(1000), b.new(2000, 1r / 2).quantile(0.5)
+  end
+
+  # A symbolic range that turns out reversed is empty; p = 1 is the top
+  # of an exponential, and no constant outside [0, 1] is a probability.
+  def test_ranges_and_quantile_arguments
+    pr = RCAS::Distributions::Exponential.new(1).probability(@a..@z)
+    assert_equal n(0), pr.subs(a: 3, z: 1).simplify
+    assert_equal RCAS::OO, RCAS::Distributions::Exponential.new(2).quantile(1)
+    assert refused { RCAS::Distributions::Normal.new(0, 1).quantile(RCAS.sqrt(2)) }
+  end
+
   # Poisson pmf in Floats keeps its digits too: e**-2 * 2**3/3!.
   def test_a_float_poisson_pmf_keeps_its_digits
     assert_in_delta Math.exp(-2) * 8 / 6, RCAS::Distributions::Poisson.new(2.0).pdf(3).value, 1e-17

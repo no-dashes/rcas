@@ -158,8 +158,15 @@ module RCAS
         return nil unless cond.variables.empty?
         f = (cond.lhs - cond.rhs).simplify
         return %i[<= >=].include?(cond.op) if Scalar.zero?(f)
-        value = f.evalf
-        value.is_a?(Numeric) && value.real? ? value.public_send(cond.op, 0) : nil
+        # decided, not read off a Float (the fourth review's policy)
+        sign = Inequalities.sign_of(f)
+        return nil unless %i[positive negative zero].include?(sign)
+        value = { positive: 1, negative: -1, zero: 0 }.fetch(sign)
+        value.public_send(cond.op, 0)
+      when Membership
+        # k in ZZ at k = 5/2: a number is in a set or not; anything else waits
+        value = cond.value.simplify
+        value.is_a?(Num) ? cond.domain.include?(value.value) : nil
       end
     end
 

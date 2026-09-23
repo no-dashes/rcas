@@ -48,14 +48,21 @@ class DistributionsTest < Minitest::Test
     assert_equal ["15/128", "11/64", "7/128", "5", "5/2", "0"], [b.pdf(3), b.cdf(3), b.probability(X >= 8), b.mean, b.variance, b.pdf(11)].map(&:to_s)
     assert_equal "1", b.cdf(10).to_s
     assert_equal "1", (0..10).map { |k| b.pdf(k) }.reduce(:+).simplify.to_s
-    assert_equal "p**k*binomial(n, k)*(1 - p)**(-k + n)", RCAS.Binomial(:n, :p).pdf(:k).to_s
+    # a symbolic point keeps the support and the integers in it (the fourth
+    # review, T6); the assumption that k lies there leaves the formula
+    assert_equal "piecewise(k < 0 => 0, n < k => 0, k in ZZ => p**k*binomial(n, k)*(1 - p)**(-k + n), :else => 0)",
+                 RCAS.Binomial(:n, :p).pdf(:k).to_s
+    RCAS.assume(k: RCAS::NN) { assert_equal "l**k*exp(-l)/k!", RCAS.Poisson(:l).pdf(:k).to_s }
     assert_equal "n*p*(1 - p)", RCAS.Binomial(:n, :p).variance.to_s
     p = RCAS.Poisson(2)
     assert_equal ["1/exp(2)", "3/exp(2)", "2", "2"], [p.pdf(0), p.cdf(1), p.mean, p.variance].map(&:to_s)
-    assert_equal "l**k*exp(-l)/k!", RCAS.Poisson(:l).pdf(:k).to_s
-    assert_equal "sum(l**j*exp(-l)/j!, j, 0, k)", RCAS.Poisson(:l).cdf(:k).to_s
+    assert_equal "piecewise(k < 0 => 0, k in ZZ => l**k*exp(-l)/k!, :else => 0)", RCAS.Poisson(:l).pdf(:k).to_s
+    assert_equal "piecewise(k < 0 => 0, :else => sum(l**j*exp(-l)/j!, j, 0, floor(k)))", RCAS.Poisson(:l).cdf(:k).to_s
+    RCAS.assume(k: RCAS::NN) { assert_equal "sum(l**j*exp(-l)/j!, j, 0, k)", RCAS.Poisson(:l).cdf(:k).to_s }
     g = RCAS.Geometric(Rational(1, 2))
-    assert_equal ["1 - (1/2)**k/2", "1", "1/8", "7/8"], [g.cdf(:k), g.mean, g.pdf(2), g.cdf(2)].map(&:to_s)
+    assert_equal ["1", "1/8", "7/8"], [g.mean, g.pdf(2), g.cdf(2)].map(&:to_s)
+    assert_equal "piecewise(k < 0 => 0, :else => 1 - (1/2)**floor(k)/2)", g.cdf(:k).to_s
+    RCAS.assume(k: RCAS::NN) { assert_equal "1 - (1/2)**k/2", g.cdf(:k).to_s }
     d = RCAS.DiscreteUniform(1, 6)
     assert_equal ["7/2", "35/12", "1/3", "1/6", "0", "1/2"], [d.mean, d.variance, d.probability(X >= 5), d.pdf(3), d.pdf(7), d.probability(2..4)].map(&:to_s)
     assert_equal "5", d.quantile(0.75).to_s

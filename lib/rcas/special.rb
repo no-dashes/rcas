@@ -153,9 +153,11 @@ module RCAS
         d = 1.0 / d
         delta = d * c
         h *= delta
-        break if (delta - 1.0).abs < EPSILON
+        return h if (delta - 1.0).abs < EPSILON
       end
-      h
+      # a continued fraction that has not settled is no value: StudentT with
+      # 10**12 degrees of freedom printed 0.84128 for 0.84134 (fourth review)
+      raise ArgumentError, "beta_i: the continued fraction did not converge for a = #{a}, b = #{b}, x = #{x}"
     end
   end
 end

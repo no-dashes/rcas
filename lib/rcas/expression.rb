@@ -312,7 +312,20 @@ module RCAS
       value = folded if folded
       value = Numerics.resolve(value) if value.is_a?(Expression) && value.each_node.any? { |n| n.is_a?(Integral) }
       value = value.value if value.is_a?(Num)
-      overflowed?(value) ? (wide(bindings) || value) : value
+      return wide(bindings) || value if overflowed?(value)
+      cancelled?(value, bindings) ? (wide(bindings) || value) : value
+    end
+
+    # A Float that lost most of its digits to cancellation: the running
+    # error bound (Decide) says so for a constant. 1 - cdf(30) of
+    # Poisson(2) is exact as written and came out as 0 or noise in Floats
+    # (fourth review, P-11); the value is taken again in arbitrary
+    # precision, which is certified.
+    def cancelled?(value, bindings)
+      return false unless value.is_a?(Float) && value.finite? && bindings.empty? && variables.empty?
+      return false unless each_node.any? { |n| n.is_a?(Add) || n.is_a?(Sub) }
+      found, error = Decide.float_with_error(self)
+      !found.nil? && error > value.abs * 1e-9
     end
 
     # Every leaf a Float first is fast and fails on large parts: 200**200

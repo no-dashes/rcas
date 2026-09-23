@@ -3424,8 +3424,11 @@ the mean with its complement `erfc`, which keeps its digits where `erf` is
 A density or CDF at a symbolic point keeps the support in it as a
 `piecewise`, because the formula alone is wrong off the support and a
 later substitution would not know: `Uniform(0, 1).probability(x <= a)` at
-`a = 2` is 1, not 2. Once the point is known to lie on the support (an
-assumption does it), the formula is all that is left. A moment that does
+`a = 2` is 1, not 2. A discrete distribution says one thing more: its
+mass sits on the whole numbers, so the pmf is 0 off them (`k in ZZ` is a
+condition like any other) and the cdf counts up to `floor(k)`. Once the
+point is known to lie on the support (an assumption does it), the formula
+is all that is left. A moment that does
 not exist is not a number either: the Cauchy distribution `StudentT(1)` has
 no mean (`undefined`), and its variance is `oo`.
 
@@ -3441,7 +3444,7 @@ rcas> X = Normal(0, 1)
 rcas> [X.pdf(x), X.cdf(x)]
 => [2**(1/2)*exp(-x**2/2)/(2*pi**(1/2)), 1/2 + erf(2**(1/2)*x/2)/2]
 rcas> [X.probability(x > 1), X.probability(-1..1).evalf, X.quantile(0.975)]
-=> [erfc(2**(1/2)/2)/2, 0.6826894921370861, 1.9599639845400532]
+=> [erfc(2**(1/2)/2)/2, 0.6826894921370861, 1.9599639845400538]
 rcas> Normal(mu, sigma).pdf(x)
 => 2**(1/2)*exp(-(-mu + x)**2/(2*sigma**2))/(2*pi**(1/2)*sigma)
 rcas> B = Binomial(10, 1/2r)
@@ -3450,8 +3453,10 @@ rcas> [B.pdf(3), B.cdf(3), B.probability(x >= 8), B.mean, B.variance]
 => [15/128, 11/64, 7/128, 5, 5/2]
 rcas> [B.probability(2*x >= 16), Uniform(0, 1).probability(-x <= 0)]
 => [7/128, 1]
-rcas> [Binomial(cnt, prob).pdf(k), Poisson(rate).pdf(k), Geometric(1/2r).cdf(k)]
-=> [prob**k*binomial(cnt, k)*(1 - prob)**(cnt - k), rate**k*exp(-rate)/k!, 1 - (1/2)**k/2]
+rcas> [Poisson(rate).pdf(k), DiscreteUniform(1, 6).cdf(k)]
+=> [piecewise(k < 0 => 0, k in ZZ => rate**k*exp(-rate)/k!, :else => 0), piecewise(k < 1 => 0, 6 <= k => 1, :else => floor(k)/6)]
+rcas> assume(k: NN) { [Poisson(rate).pdf(k), Geometric(1/2r).cdf(k)] }
+=> [rate**k*exp(-rate)/k!, 1 - (1/2)**k/2]
 rcas> D = DiscreteUniform(1, 6)
 => DiscreteUniform(1, 6)
 rcas> [D.mean, D.variance, D.probability(x >= 5), D.sample(5, random: Random.new(1))]
@@ -3470,9 +3475,9 @@ are numeric.
 
 ```
 rcas> [StudentT(1).cdf(1), ChiSquare(2).cdf(x), StudentT(10).quantile(0.975)]
-=> [3/4, 1 - exp(-x/2), 2.228138851986275]
+=> [3/4, 1 - exp(-x/2), 2.228138851986274]
 rcas> [ChiSquare(3).quantile(0.95), FRatio(3, 10).quantile(0.95), Normal(0, 1).quantile(0.975)]
-=> [7.8147279032511765, 3.7082648190468426, 1.9599639845400532]
+=> [7.8147279032511765, 3.708264819046842, 1.9599639845400538]
 rcas> ChiSquare(k).pdf(x)
 => 2**(-k/2)*x**(-1 + k/2)*exp(-x/2)/gamma(k/2)
 rcas> StudentT(nu).pdf(t)
@@ -3544,9 +3549,9 @@ rcas> confidence_interval([5.1, 4.9, 5.6, 5.2, 5.0])
 rcas> confidence_interval([5.1, 4.9, 5.6, 5.2, 5.0], sigma: 0.3)
 => [4.897043237827026, 5.422956762172975]
 rcas> confidence_interval([5.1, 4.9, 5.6, 5.2, 5.0], parameter: :stdev)
-=> [0.16187686012471716, 0.7763919787687236]
+=> [0.1618768601247171, 0.7763919787687236]
 rcas> proportion_interval(41, 100)
-=> [0.3186731302113652, 0.507985699465892]
+=> [0.3186731302113651, 0.5079856994658921]
 ```
 
 Not implemented: analysis of variance, non-parametric tests (Wilcoxon,

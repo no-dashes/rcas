@@ -68,7 +68,11 @@ module RCAS
           order = Inequalities.compare(lo, hi)
           return Num.new(0) if order == 1 || (order&.zero? && event.exclude_end?)
           interval = Interval.new(lo, hi, right_open: event.exclude_end? && !event.end.nil?)
-          set_probability(interval)
+          found = set_probability(interval)
+          return found unless order.nil?
+          # a symbolic range may turn out reversed, and then it is empty, not
+          # cdf(b) - cdf(a) < 0 (fourth review, T6)
+          Piecewise.new([[Inequality.new(lo, event.exclude_end? ? :< : :<=, hi), found], [Piecewise::OTHERWISE, Num.new(0)]])
         when Inequality
           # The direct route is for "X op c" alone: both that the left side
           # is the variable and that the right side is free of it. P(X <= X)
@@ -141,11 +145,24 @@ module RCAS
       # P over one interval. A discrete distribution counts the closed ends
       # in, which the cdf alone does not: cdf(hi) - cdf(lo) leaves out lo.
       def piece_probability(interval)
-        total = interval.high == OO && !Limits.infinite?(interval.low) ? survival(interval.low) : cdf_at(interval.high) - cdf_at(interval.low)
+        lo, hi = interval.low, interval.high
+        total =
+          if hi == OO && !Limits.infinite?(lo) then survival(lo)
+          elsif !Limits.infinite?(lo) && !Limits.infinite?(hi) then between(lo, hi)
+          else cdf_at(hi) - cdf_at(lo)
+          end
         return total unless discrete?
         total += pdf_at(interval.low) unless interval.left_open
         total -= pdf_at(interval.high) if interval.right_open
         total
+      end
+
+      # P(lo < X <= hi) for finite ends: in the upper tail as a difference of
+      # survival functions, where cdf(10) - cdf(9) of the standard normal
+      # cancelled to 0 (fourth review, P-11); the cdf elsewhere.
+      def between(lo, hi)
+        upper = !discrete? && lo.variables.empty? && (c = RCAS.real_float(cdf_at(lo))) && c > 0.5
+        upper ? (survival(lo) - survival(hi)).simplify : (cdf_at(hi) - cdf_at(lo)).simplify
       end
 
       # E[f(X)]: an integral or sum over the support (formal when rcas cannot do it).
@@ -182,13 +199,33 @@ module RCAS
       end
 
       def float?(param) = param.is_a?(Num) && param.value.is_a?(Float)
+      def exact?(e) = (e = Expression.lift(e)).variables.empty? && e.each_node.none? { |n| n.is_a?(Num) && n.value.is_a?(Float) }
+
+      # The least k with cdf(k) >= p, the mass added up exactly and compared
+      # exactly (Decide for the constants a rate like 1 brings: e**-1/k!).
+      def exact_quantile(p, k, hi)
+        total = mass(Num.new(k))
+        10_000.times do
+          order = Inequalities.compare(total, p)
+          raise NotImplementedError, "quantile: cannot compare cdf(#{k}) with #{p}" if order.nil?
+          return Num.new(k) if order >= 0 || (hi.is_a?(Num) && k >= hi.value)
+          k += 1
+          total = (total + mass(Num.new(k))).simplify
+        end
+        raise NotImplementedError, "quantile: the #{p}-quantile lies beyond 10000 steps from the start"
+      end
 
       # A quantile is defined for a probability; a number outside [0, 1] is
       # refused rather than answered with log(-2) (third review, P-13).
+      # A constant is compared exactly: 2*sqrt(2) and pi are no probabilities
+      # either (only a Num was checked: fourth review, P-13).
       def probability!(p)
         v = Expression.lift(p)
-        return unless v.is_a?(Num) && v.value.is_a?(Numeric) && v.value.real?
-        raise ArgumentError, "quantile: #{p} is not a probability, it must lie in [0, 1]" unless v.value >= 0 && v.value <= 1
+        return unless v.variables.empty?
+        below = Inequalities.compare(v, Num.new(0))
+        above = Inequalities.compare(v, Num.new(1))
+        return unless below == -1 || above == 1
+        raise ArgumentError, "quantile: #{p} is not a probability, it must lie in [0, 1]"
       end
 
       # Generic quantile: bisection on the numeric CDF (continuous) or a scan (discrete).
@@ -201,13 +238,18 @@ module RCAS
           # for every k (quadratic, and it overflowed for Poisson(200))
           lo, hi = support
           k = lo.evalf.to_i
+          target = Expression.lift(p)
+          return exact_quantile(target, k, hi) if exact?(target) && params.all? { |q| exact?(q) }
           values = params.all? { |q| q.is_a?(Num) } ? numeric_params : nil
-          mass = ->(j) { values && respond_to?(:float_pmf) ? float_pmf(j, values) : pdf(j).evalf.to_f }
-          total = mass.call(k)
-          while total < pv - 1e-12
+          weight = ->(j) { values && respond_to?(:float_pmf) ? float_pmf(j, values) : pdf(j).evalf.to_f }
+          total = weight.call(k)
+          # the least k with cdf(k) >= p, allowing only the rounding the Float
+          # sum itself has made (a slack of 1e-12 answered 0 for
+          # Binomial(3, 1/2) at 1/8 + 1e-14: fourth review)
+          while total < pv * (1 - 4 * (k - lo.evalf.to_i + 1) * Float::EPSILON)
             break if hi.is_a?(Num) && k >= hi.value
             k += 1
-            total += mass.call(k)
+            total += weight.call(k)
           end
           Num.new(k)
         else
@@ -225,16 +267,23 @@ module RCAS
             hi = lo
             lo = lo.negative? ? lo * 4 : lo - 1.0
           end
+          # in the upper half the survival function is the one to solve: the
+          # cdf near 1 moves in steps of 1.1e-16, and the normal quantile at
+          # 1 - 1e-15 came out as 7.9364 for 7.9414 (fourth review, P-6)
+          upper = pv > 0.5
+          tail = 1.0 - pv
+          below = ->(v) { upper ? survival(Num.new(v)).evalf > tail : cdf(v).evalf < pv }
           200.times do
             mid = (lo + hi) / 2.0
             break if mid == lo || mid == hi
-            cdf(mid).evalf < pv ? lo = mid : hi = mid
+            below.call(mid) ? lo = mid : hi = mid
           end
           x = (lo + hi) / 2.0
           3.times do # Newton polish, kept only while it is a small correction
             density = pdf(x).evalf
             break unless density.is_a?(Numeric) && density.positive?
-            step = x - (cdf(x).evalf - pv) / density
+            miss = upper ? tail - survival(Num.new(x)).evalf : cdf(x).evalf - pv
+            step = x - miss / density
             break unless step.finite? && (step - x).abs <= 1e-6 * [1.0, x.abs].max
             x = step
           end
@@ -262,6 +311,17 @@ module RCAS
       def survival(c)
         z = ((Expression.lift(c) - mu) / (sigma * RCAS.sqrt(2))).simplify
         return (RCAS.erfc(z) / 2).simplify if Decide.sign(z) == :positive
+        super
+      end
+
+      # Both ends in one tail: erfc there, which keeps the digits; across
+      # the mean: (erf(b) - erf(a))/2, so P(-1 <= X <= 1) is erf(sqrt(2)/2).
+      def between(lo, hi)
+        a, b = [lo, hi].map { |v| ((Expression.lift(v) - mu) / (sigma * RCAS.sqrt(2))).simplify }
+        sa, sb = [a, b].map { |z| Decide.sign(z) }
+        return ((RCAS.erfc(a) - RCAS.erfc(b)) / 2).simplify if sa == :positive && %i[positive zero].include?(sb)
+        return ((RCAS.erfc(Neg.new(b).simplify) - RCAS.erfc(Neg.new(a).simplify)) / 2).simplify if sb == :negative
+        return ((RCAS.erf(b) - RCAS.erf(a)) / 2).simplify if sa && sb
         super
       end
 
@@ -367,7 +427,9 @@ module RCAS
 
       def quantile(p)
         probability!(p)
-        (Fn.new(:log, [1 / (1 - Expression.lift(p))]) / rate).simplify
+        p = Expression.lift(p)
+        return OO if p.is_a?(Num) && p.value == 1 # the whole mass lies below oo alone
+        (Fn.new(:log, [1 / (1 - p)]) / rate).simplify
       end
       def moment(k, _var = :x) = k.is_a?(Integer) && k >= 0 ? (RCAS.factorial(k) / rate**k).simplify : super
       def mean = (1 / rate).simplify
@@ -382,9 +444,64 @@ module RCAS
     class Discrete < Distribution
       def discrete? = true
 
-      # Sum of pdf over the support up to k, exactly for numeric k; else a formal sum.
+      # P(X > c) past the mean as the sum of the tail itself: 1 - cdf in
+      # Floats gave Binomial(100, 0.5) the probability -3.2e-14 of X > 95
+      # (fourth review, P-11). Exact parameters keep 1 - cdf, which is exact
+      # and which evalf now evaluates without cancelling.
+      def survival(c)
+        c = Expression.lift(c)
+        lo, hi = support
+        return super unless c.variables.empty? && params.all? { |q| q.is_a?(Num) } && params.any? { |q| float?(q) }
+        top = floor_of(c) or return super
+        mean_value = RCAS.real_float(mean)
+        return super if mean_value.nil? || top < mean_value
+        values = numeric_params
+        weight = ->(j) { respond_to?(:float_pmf) ? float_pmf(j, values) : mass(Num.new(j)).evalf.to_f }
+        last = Limits.infinite?(hi) ? nil : hi.value.to_i
+        total = 0.0
+        k = [top + 1, lo.value.to_i].max
+        100_000.times do
+          break if last && k > last
+          term = weight.call(k)
+          total += term
+          break if last.nil? && term <= total * Float::EPSILON / 4
+          k += 1
+        end
+        Num.new(total)
+      end
+
+      # The mass at a point. At a symbolic point the formula holds only on
+      # the support and at whole numbers, so it comes as a piecewise that
+      # says so (the pmf of Binomial(10, 1/2) at 5/2 was not 0, and the cdf
+      # of a die was 3/2 at 9: fourth review, T6) - unless the assumptions
+      # already put the point there.
+      def pdf(k)
+        k = Expression.lift(k)
+        return mass(k) if k.variables.empty? || on_support?(k)
+        lo, hi = support
+        branches = [[Inequality.new(k, :<, lo), Num.new(0)]]
+        branches << [Inequality.new(hi, :<, k), Num.new(0)] unless Limits.infinite?(hi)
+        branches << [Membership.new(k, ZZ), mass(k)]
+        Piecewise.new(branches + [[Piecewise::OTHERWISE, Num.new(0)]])
+      end
+
+      # k is a whole number between the ends of the support, by the
+      # assumptions.
+      def on_support?(k)
+        domain = Infer.domain(k)
+        return false unless domain && domain <= ZZ
+        lo, hi = support
+        above = Limits.infinite?(lo) || %i[positive nonnegative].include?(RCAS.sign_of((k - lo).simplify)) ||
+                (domain <= NN && lo.is_a?(Num) && lo.value <= 0)
+        below = Limits.infinite?(hi) || %i[positive nonnegative].include?(RCAS.sign_of((hi - k).simplify))
+        above && below
+      end
+
+      # Sum of the mass over the support up to k, exactly for numeric k; at a
+      # symbolic k the sum up to floor(k), inside the support.
       def cdf(k)
         k = Expression.lift(k)
+        return symbolic_cdf(k) unless k.variables.empty?
         lo, hi = support
         # a constant bound that is not a number: the values are integers, so
         # X <= sqrt(5) is X <= 2 (a formal sum up to sqrt(5) summed
@@ -394,10 +511,21 @@ module RCAS
           return Num.new(0) if k.value < lo.value
           return Num.new(1) if hi.is_a?(Num) && k.value >= hi.value
           top = k.value.floor
-          return (lo.value.to_i..top).map { |j| pdf(j) }.reduce(:+).simplify
+          return (lo.value.to_i..top).map { |j| mass(Num.new(j)) }.reduce(:+).simplify
         end
         j = Var.new(:j)
-        Summation.sum(pdf(j), j, lo, k)
+        Summation.sum(mass(j), j, lo, k)
+      end
+
+      def symbolic_cdf(k)
+        integer = (d = Infer.domain(k)) && d <= ZZ
+        top = integer ? k : Fn.new(:floor, [k])
+        formula = respond_to?(:cdf_formula) ? cdf_formula(top) : Summation.sum(mass(Var.new(:j)), Var.new(:j), support.first, top)
+        return formula if on_support?(k)
+        lo, hi = support
+        branches = [[Inequality.new(k, :<, lo), Num.new(0)]]
+        branches << [Inequality.new(hi, :<=, k), Num.new(1)] unless Limits.infinite?(hi)
+        Piecewise.new(branches + [[Piecewise::OTHERWISE, formula]])
       end
 
       # floor of a real constant, decided exactly; nil when it cannot be.
@@ -422,11 +550,11 @@ module RCAS
       def draw(values, random)
         u = random.rand
         k = support.first.evalf.to_i
-        mass = ->(j) { respond_to?(:float_pmf) ? float_pmf(j, values) : pdf(j).evalf }
-        total = mass.call(k)
+        weight = ->(j) { respond_to?(:float_pmf) ? float_pmf(j, values) : mass(Num.new(j)).evalf }
+        total = weight.call(k)
         while total < u
           k += 1
-          total += mass.call(k)
+          total += weight.call(k)
         end
         k
       end
@@ -437,7 +565,7 @@ module RCAS
       def p = params[0]
       def support = [Num.new(0), Num.new(1)]
 
-      def pdf(k)
+      def mass(k)
         k = Expression.lift(k)
         if k.is_a?(Num)
           return p if k.value == 1
@@ -462,7 +590,7 @@ module RCAS
       def p = params[1]
       def support = [Num.new(0), n]
 
-      def pdf(k)
+      def mass(k)
         k = Expression.lift(k)
         return Num.new(0) if k.is_a?(Num) && n.is_a?(Num) && (k.value.negative? || k.value > n.value || !k.value.integer?)
         # a Float probability is a numeric question, and the exact binomial
@@ -487,7 +615,7 @@ module RCAS
       def rate = params[0]
       def support = [Num.new(0), OO]
 
-      def pdf(k)
+      def mass(k)
         k = Expression.lift(k)
         return Num.new(0) if k.is_a?(Num) && (k.value.negative? || !k.value.integer?)
         return Num.new(Distributions.poisson_pmf(k.value.to_i, rate.value)) if float?(rate) && k.is_a?(Num)
@@ -512,17 +640,14 @@ module RCAS
       def p = params[0]
       def support = [Num.new(0), OO]
 
-      def pdf(k)
+      def mass(k)
         k = Expression.lift(k)
         return Num.new(0) if k.is_a?(Num) && (k.value.negative? || !k.value.integer?)
         ((1 - p)**k * p).simplify
       end
 
-      def cdf(k)
-        k = Expression.lift(k)
-        return super if k.is_a?(Num)
-        (1 - (1 - p)**(k + 1)).simplify
-      end
+      # at a whole k >= 0
+      def cdf_formula(k) = (1 - (1 - p)**(k + 1)).simplify
 
       def mean = ((1 - p) / p).simplify
       def variance = ((1 - p) / p**2).simplify
@@ -601,19 +726,47 @@ class StudentT < Distribution
     x = Expression.lift(x)
     return ((1 + 2 * Fn.new(:atan, [x]) / PI) / 2).simplify if nu == Num.new(1)
     return (Num.new(1) / 2 + x / (2 * RCAS.sqrt(2 + x**2))).simplify if nu == Num.new(2)
-    v = numeric(nu, "cdf")
-    t = numeric(x, "cdf")
-    tail = Special.beta_i(v / (v + t * t), v / 2.0, 0.5) / 2.0
-    Num.new(t.negative? ? tail : 1.0 - tail)
+    Num.new(1.0 - upper_tail(numeric(nu, "cdf"), numeric(x, "cdf")))
   end
 
-  # The upper tail directly, for a number: the same incomplete beta.
+  # The upper tail directly: atan(1/t)/pi for the Cauchy distribution and
+  # 1/(s*(s + t)) with s = sqrt(2 + t**2) for two degrees of freedom, where
+  # 1 - cdf cancelled (fourth review, P-11); the incomplete beta otherwise.
   def survival(c)
-    return super if [1, 2].any? { |n| nu == Num.new(n) } || !Expression.lift(c).variables.empty?
-    v = numeric(nu, "cdf")
-    t = numeric(c, "cdf")
+    c = Expression.lift(c)
+    if (nu == Num.new(1) || nu == Num.new(2)) && Decide.sign(c) == :positive
+      return (Fn.new(:atan, [1 / c]) / PI).simplify if nu == Num.new(1)
+      root = RCAS.sqrt(2 + c**2)
+      return (1 / (root * (root + c))).simplify
+    end
+    return super if [1, 2].any? { |n| nu == Num.new(n) } || !c.variables.empty?
+    Num.new(upper_tail(numeric(nu, "cdf"), numeric(c, "cdf")))
+  end
+
+  # P(T > t) in Floats. Near 0 the tail is 1/2 - I_y(1/2, nu/2)/2 with
+  # y = t**2/(nu + t**2) computed directly - through x = nu/(nu + t**2)
+  # the digits of cdf(1e-9) were lost to the rounding of x; far out it is
+  # I_x(nu/2, 1/2)/2. For a huge nu the incomplete beta does not settle,
+  # and the normal limit with its 1/nu correction is exact to 1/nu**2.
+  def upper_tail(v, t)
+    if v > 1e7
+      phi = Math.exp(-t * t / 2) / Math.sqrt(2 * Math::PI)
+      return Math.erfc(t / Math.sqrt(2)) / 2 + phi * (t**3 + t) / (4 * v)
+    end
+    if t * t < v
+      half = Special.beta_i(t * t / (v + t * t), 0.5, v / 2.0) / 2.0
+      return t.negative? ? 0.5 + half : 0.5 - half
+    end
     tail = Special.beta_i(v / (v + t * t), v / 2.0, 0.5) / 2.0
-    Num.new(t.positive? ? tail : 1.0 - tail)
+    t.positive? ? tail : 1.0 - tail
+  end
+
+  # symmetric about 0: the median is 0, not the -2e-8 a bisection stops at
+  def quantile(p)
+    probability!(p)
+    q = Expression.lift(p)
+    return Num.new(0) if q.is_a?(Num) && q.value == Rational(1, 2)
+    super
   end
 
   # A moment exists only for enough degrees of freedom: the Cauchy
@@ -621,15 +774,18 @@ class StudentT < Distribution
   # (third review, P-7). For a number below the threshold the answer is
   # oo where the integral diverges to it and undefined where it has no
   # value; a symbolic nu keeps the formula, which holds above it.
-  def mean = moment_exists(1, Num.new(0), UNDEFINED)
+  def mean = moment_exists(1, UNDEFINED) { Num.new(0) }
   def median = Num.new(0)
-  def variance = moment_exists(2, (nu / (nu - 2)).simplify, nu_above?(1) ? OO : UNDEFINED)
-  def skewness = moment_exists(3, Num.new(0), UNDEFINED)
-  def kurtosis = moment_exists(4, (3 + 6 / (nu - 4)).simplify, nu_above?(2) ? OO : UNDEFINED)
+  def variance = moment_exists(2, nu_above?(1) ? OO : UNDEFINED) { (nu / (nu - 2)).simplify }
+  def skewness = moment_exists(3, UNDEFINED) { Num.new(0) }
+  def kurtosis = moment_exists(4, nu_above?(2) ? OO : UNDEFINED) { (3 + 6 / (nu - 4)).simplify }
 
-  def moment_exists(order, value, otherwise)
-    return value unless nu.is_a?(Num) && nu.value.real?
-    nu.value > order ? value : otherwise
+  # The formula only where the moment exists: it is taken after the test,
+  # nu/(nu - 2) at nu = 2 divided by zero before oo was ever answered
+  # (fourth review, P-7).
+  def moment_exists(order, otherwise)
+    return yield unless nu.is_a?(Num) && nu.value.real?
+    nu.value > order ? yield : otherwise
   end
 
   def nu_above?(threshold) = nu.is_a?(Num) && nu.value.real? && nu.value > threshold
@@ -760,7 +916,7 @@ end
         RCAS.piecewise(k < a => 0, k < b => ((top - a + 1) / count).simplify, :else => 1)
       end
 
-      def pdf(k)
+      def mass(k)
         k = Expression.lift(k)
         if k.is_a?(Num) && a.is_a?(Num) && b.is_a?(Num)
           return Num.new(0) unless k.value.integer? && k.value.between?(a.value, b.value)

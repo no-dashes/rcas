@@ -470,7 +470,7 @@ module RCAS
     def special(name, x, prec, node)
       case name
       when :erf  then erf(x, prec)
-      when :erfc then BigDecimal(1) - erf(x, prec)
+      when :erfc then x > 3 ? erfc_fraction(x, prec) : BigDecimal(1) - erf(x, prec)
       when :Si   then sine_integral(x, prec)
       when :Ci   then cosine_integral(x, prec, node)
       when :Ei   then exponential_integral(x, prec, node)
@@ -536,9 +536,63 @@ module RCAS
       euler_gamma(work) + BigMath.log(x, work) + sum
     end
 
+    # erfc(x) = exp(-x**2)/sqrt(pi) / (x + (1/2)/(x + 1/(x + (3/2)/(x + ...))))
+    # [AS64, 7.1.14], by the modified Lentz method: no 1 - erf(x) to cancel,
+    # so erfc(12) and erfc(28) have all their digits (fourth review, P-3).
+    def erfc_fraction(x, prec)
+      work = prec + GUARD
+      tiny = BigDecimal("1e-#{3 * work}")
+      f = x
+      c = x
+      d = BigDecimal(0)
+      n = 1
+      loop do
+        a = BigDecimal(n).div(2, work)
+        d = x + a.mult(d, work)
+        d = tiny if d.zero?
+        d = BigDecimal(1).div(d, work)
+        c = x + a.div(c, work)
+        c = tiny if c.zero?
+        delta = c.mult(d, work)
+        f = f.mult(delta, work)
+        break if (delta - 1).abs < tolerance(work)
+        n += 1
+        raise NoConvergence, "evalf: the erfc continued fraction did not settle at #{x.to_f}" if n > MAX_TERMS
+      end
+      exponential(-x.mult(x, work), work).div(BigMath.PI(work).sqrt(work).mult(f, work), work)
+    end
+
+    # E1(z) = exp(-z) / (z + 1 - 1/(z + 3 - 4/(z + 5 - 9/(z + 7 - ...)))) for
+    # z > 0 [AS64, 5.1.22], Lentz again: Ei(-700) = -E1(700) is 1.4e-307,
+    # which the power series reaches only through 600 cancelled digits.
+    def exponential_integral_fraction(z, prec)
+      work = prec + GUARD
+      tiny = BigDecimal("1e-#{3 * work}")
+      f = z + 1
+      c = f
+      d = BigDecimal(0)
+      n = 1
+      loop do
+        a = BigDecimal(-(n * n))
+        b = z + 2 * n + 1
+        d = b + a.mult(d, work)
+        d = tiny if d.zero?
+        d = BigDecimal(1).div(d, work)
+        c = b + a.div(c, work)
+        c = tiny if c.zero?
+        delta = c.mult(d, work)
+        f = f.mult(delta, work)
+        break if (delta - 1).abs < tolerance(work)
+        n += 1
+        raise NoConvergence, "evalf: the E1 continued fraction did not settle at #{z.to_f}" if n > MAX_TERMS
+      end
+      exponential(-z, work).div(f, work)
+    end
+
     # Ei(x) = gamma + log|x| + sum x**k/(k*k!)
     def exponential_integral(x, prec, node)
       raise Unsupported, "evalf: #{node} is infinite at 0" if x.zero?
+      return -exponential_integral_fraction(-x, prec) if x < -4
       work = cancellation(x.negative? ? x.abs.to_f : 0.0, prec)
       term = BigDecimal(1)
       sum = BigDecimal(0)
