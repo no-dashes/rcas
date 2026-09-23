@@ -16,4 +16,23 @@ module TestSupport
   # tests that drive it through a scripted runner skip without it, since
   # the core promises to need nothing beyond the standard library.
   def anthropic? = Gem::Specification.find_all_by_name("anthropic").any?
+
+  # A singleton method of +object+ replaced by +impl+ for the length of the
+  # block, and put back after. Aliasing the original away and defining a
+  # new one printed Ruby's "method redefined" warnings twice per stub; the
+  # method is removed before either definition instead. A stub that wants
+  # the original asks for object.method(name) before calling this - a
+  # Method object keeps working after its method is removed.
+  def replacing(object, name, impl)
+    singleton = object.singleton_class
+    original = singleton.instance_method(name)
+    singleton.send(:remove_method, name)
+    singleton.define_method(name, impl)
+    yield
+  ensure
+    if original
+      singleton.send(:remove_method, name) if singleton.instance_methods(false).include?(name) || singleton.private_instance_methods(false).include?(name)
+      singleton.define_method(name, original)
+    end
+  end
 end

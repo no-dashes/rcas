@@ -2,12 +2,6 @@
 
 require "rcas"
 
-begin
-  require "anthropic"
-rescue LoadError
-  # The REPL works without the gem; only questions to Claude need it.
-end
-
 module RCAS
   # A Claude-Code-style terminal front end for rcas (bin/rcas-chat).
   #
@@ -19,6 +13,33 @@ module RCAS
   #   sessions are saved so `rcas-chat --continue` picks up where you left.
   module Chat
     class Error < StandardError; end
+
+    # The anthropic gem, loaded on first need: when credentials are present,
+    # or a test hands the assistant a scripted runner. A session nobody asks
+    # Claude in never loads it - it was a thousand files and a fifth of a
+    # second on every start of rcas-chat, and one of its dependencies
+    # (standardwebhooks) warns under -w. true when the gem is there.
+    def self.load_anthropic
+      return true if defined?(EvalTool)
+      return false if @anthropic_missing
+      quietly do
+        require "anthropic"
+        require_relative "chat/tool"
+      end
+      true
+    rescue LoadError
+      @anthropic_missing = true
+      false
+    end
+
+    # $VERBOSE off for the block and back to what it was on every way out.
+    def self.quietly
+      verbose = $VERBOSE
+      $VERBOSE = nil
+      yield
+    ensure
+      $VERBOSE = verbose
+    end
   end
 end
 

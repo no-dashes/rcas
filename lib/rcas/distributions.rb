@@ -706,7 +706,12 @@ def binomial_pmf(n, k, p)
   return 0.0 if k.negative? || k > n
   return (k == 0 ? 1.0 : 0.0) if p.zero?
   return (k == n ? 1.0 : 0.0) if p == 1.0
-  coefficient = (1..k).reduce(1) { |c, i| c * (n - k + i) / i }.to_f if [k, n - k].min <= 2000
+  if [k, n - k].min <= 2000
+    exact = (1..k).reduce(1) { |c, i| c * (n - k + i) / i }
+    # past 2**1024 it is no Float (to_f warns and gives Infinity); the
+    # logarithms below take over
+    coefficient = exact.to_f if exact.bit_length <= 1023
+  end
   if coefficient&.finite?
     rest = p < 1e-4 ? Math.exp((n - k) * log_one_minus(p)) : (1.0 - p)**(n - k)
     direct = coefficient * p**k * rest

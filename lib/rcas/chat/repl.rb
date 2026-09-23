@@ -69,7 +69,6 @@ module RCAS
       end
 
       def transcript = @session.transcript
-      attr_reader :assistant
 
       def run
         @ui.banner(model: @assistant.model, backend: Render.available? ? Render.selected.name : :none,

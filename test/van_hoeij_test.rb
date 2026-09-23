@@ -97,26 +97,22 @@ class VanHoeijTest < Minitest::Test
 
   # when the lattice does not decide, the subsets answer
   def test_an_undecided_lattice_falls_back_to_the_subsets
-    VanHoeij.singleton_class.alias_method :__attempt, :attempt
-    VanHoeij.define_singleton_method(:attempt) { |*| nil }
     f = sd(4) * sd(4, 1)
-    assert_equal RCAS.factor(f, recombination: :zassenhaus), RCAS.factor(f, recombination: :van_hoeij)
-  ensure
-    VanHoeij.singleton_class.alias_method :attempt, :__attempt
+    TestSupport.replacing(VanHoeij, :attempt, ->(*) {}) do
+      assert_equal RCAS.factor(f, recombination: :zassenhaus), RCAS.factor(f, recombination: :van_hoeij)
+    end
   end
 
   # the outer choice reached the inner call only once the inner default
   # stopped resetting it to :auto (found while comparing the two)
   def test_the_old_method_is_used_when_asked_for
-    VanHoeij.singleton_class.alias_method :__recombine, :recombine
-    VanHoeij.define_singleton_method(:recombine) { |*| raise "van Hoeij was called" }
     f = sd(5)
-    assert RCAS.factor(f, recombination: :zassenhaus).to_expr
-    assert RCAS::ZZ[:x].(RCAS.expand(f)).factor(recombination: :zassenhaus)
-    assert RCAS.expand(f).factor(recombination: :zassenhaus)
-    assert_raises(RuntimeError) { RCAS.factor(f, recombination: :van_hoeij) }
-  ensure
-    VanHoeij.singleton_class.alias_method :recombine, :__recombine
+    TestSupport.replacing(VanHoeij, :recombine, ->(*, **) { raise "van Hoeij was called" }) do
+      assert RCAS.factor(f, recombination: :zassenhaus).to_expr
+      assert RCAS::ZZ[:x].(RCAS.expand(f)).factor(recombination: :zassenhaus)
+      assert RCAS.expand(f).factor(recombination: :zassenhaus)
+      assert_raises(RuntimeError) { RCAS.factor(f, recombination: :van_hoeij) }
+    end
   end
 
   def test_only_auto_has_a_subset_budget
@@ -144,19 +140,17 @@ class VanHoeijTest < Minitest::Test
 
   def test_auto_hands_the_rest_to_the_lattice
     handed = []
-    VanHoeij.singleton_class.alias_method :__recombine, :recombine
-    VanHoeij.define_singleton_method(:recombine) do |f, modular, p, k, lifted: nil|
+    original = VanHoeij.method(:recombine)
+    spy = lambda do |f, modular, p, k, lifted: nil|
       handed << [Dense.deg(f), modular.size, !lifted.nil?]
-      __recombine(f, modular, p, k, lifted: lifted)
+      original.call(f, modular, p, k, lifted: lifted)
     end
     f = sd(4) * sd(3, 1) * (@x - 3) * (@x**2 + 1)
-    auto = with_budget(50) { RCAS.factor(f) }
+    auto = TestSupport.replacing(VanHoeij, :recombine, spy) { with_budget(50) { RCAS.factor(f) } }
     refute_empty handed, "no handover"
     assert handed.all? { |_, _, lifted| lifted }, "the lifted factors were not passed on"
     assert_operator handed.first[0], :<, Dense.deg(dense(f)), "the linear factor should be taken out before the handover"
     assert_equal RCAS.factor(f, recombination: :zassenhaus), auto
-  ensure
-    VanHoeij.singleton_class.alias_method :recombine, :__recombine
   end
 
   def test_the_handover_agrees_on_random_products

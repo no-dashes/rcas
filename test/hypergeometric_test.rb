@@ -98,7 +98,6 @@ class ZeilbergerTest < Minitest::Test
 
   # The sum itself obeys the recurrence, checked by adding the terms up.
   def assert_recurrence(term, coefficients, upper: N)
-    order = coefficients.size - 1
     (0..4).each do |i|
       total = coefficients.each_with_index.reduce(RCAS::Num.new(0)) do |acc, (c, j)|
         top = upper.subs(N => i + j).simplify.value

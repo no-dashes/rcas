@@ -159,7 +159,6 @@ class QZeilbergerTest < Minitest::Test
   def recursion(term) = RCAS.qsumrecursion(term, K, Q, s).to_s
 
   def assert_q_recurrence(term, coefficients)
-    order = coefficients.size - 1
     (0..3).each do |i|
       total = coefficients.each_with_index.reduce(RCAS::Num.new(0)) do |acc, (c, j)|
         sum = (0..(i + j)).reduce(RCAS::Num.new(0)) { |inner, l| inner + term.subs(N => i + j, K => l).simplify }

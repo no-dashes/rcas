@@ -789,3 +789,31 @@ class ChatPickerTest < Minitest::Test
     assert_equal "fives", RCAS::Chat::Session.find("fives").title
   end
 end
+
+# The anthropic gem is loaded only when Claude can be used (24 Sept 2026,
+# the user's suggestion): without credentials rcas-chat never touches it,
+# which saved a thousand files and a fifth of a second on every start.
+class ChatAnthropicLoadingTest < Minitest::Test
+  LIB = File.expand_path("../lib", __dir__)
+
+  def probe(env)
+    require "open3"
+    require "rbconfig"
+    script = 'require "rcas/chat"; print [RCAS::Chat::Assistant.configured?, defined?(::Anthropic) ? 1 : 0, $VERBOSE.inspect].join(" ")'
+    Dir.mktmpdir do |home|
+      out, err, status = Open3.capture3({ "HOME" => home, "ANTHROPIC_API_KEY" => nil, "ANTHROPIC_AUTH_TOKEN" => nil }.merge(env),
+                                        RbConfig.ruby, "-I", LIB, "-e", script)
+      assert status.success?, err
+      out
+    end
+  end
+
+  def test_without_credentials_the_gem_is_not_loaded
+    assert_equal "false 0 false", probe({})
+  end
+
+  def test_with_credentials_it_is
+    skip "the anthropic gem is not installed" unless TestSupport.anthropic?
+    assert_equal "true 1 false", probe("ANTHROPIC_API_KEY" => "not-a-real-key"), "and $VERBOSE is as it was"
+  end
+end

@@ -53,6 +53,12 @@ class ManualTest < Minitest::Test
     failures = []
     transcripts.each do |input, expected|
       actual = begin
+        # each section of the manual is a session of its own, and a constant
+        # it assigns (R = ZZ[x] in one, R = F[x] in another) is new there;
+        # in this one workspace the second assignment warned
+        if (name = input[/\A\s*([A-Z]\w*)\s*=(?!=)/, 1]) && Workspace.const_defined?(name, false)
+          Workspace.send(:remove_const, name)
+        end
         RCAS::Results.record_input(input, b) # a real session numbers the lines,
         value = b.eval(input)
         RCAS::Results.record(value) # so that `In[-1]` and `Out[-1]` work

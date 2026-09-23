@@ -193,7 +193,7 @@ lib/rcas/openmath/objects.rb the thirteen object classes of the standard. An Ope
 lib/rcas/openmath/xml.rb     the XML encoding, written and read; the reader is hand-rolled over StringScanner because REXML is a bundled gem, not the stdlib
 lib/rcas/openmath/popcorn.rb the POPCORN notation [HR09], written and read: the third encoding of the same objects and the one a person types. `Node#to_s` is POPCORN with every symbol written out (arith1.plus($x, 1)), `to_popcorn` the sugared spelling ($x + 1); both parse. Variables carry `$` so a bare name can be short for a symbol - that is the whole trick. Watch the operators that are not ordinary notation: // is nums1.rational, | is complex1.complex_cartesian, .. is interval1.interval, ~ is relation2.approx (not relation1), `!(` builds an OME, and a minus in front of a literal belongs to the literal (-17 is Int(-17), never unary_minus(17)). The precedence *levels* are the published grammar's, but the bracketing follows the operators' association, because the reference implementation's own numbers (plus 70, minus 75) write plus($a, minus($b, $c)) as "$a + $b - $c", which reads back as a different tree
 lib/rcas/openmath/phrasebook.rb  the one table, both directions. No expression class carries a to_openmath of its own: one declaration list builds a decode index keyed by [cd, name] and an encode index keyed by node class / Fn name. Symbol names and argument orders were checked against the official CDs (piece1.piece is (value, condition), transc1.log is (base, x), limit1.limit is (point, direction, lambda)). A symbol with no row decodes to a held Fn named "cd.name", and such an Fn encodes back to the symbol, so an unknown document survives the round trip
-lib/rcas/latex.rb, render.rb, chat.rb, chat/*   typesetting and the chat front end (see below)
+lib/rcas/latex.rb, render.rb, chat.rb, chat/*   typesetting and the chat front end (see below); chat/tool.rb (the rcas_eval tool) is loaded with the anthropic gem only
 lib/rcas/app.rb             rcas-app: the window front end. A stdlib TCPServer on 127.0.0.1 serves one page and a few JSON routes; App::Window opens a Chromium-family browser with `--app=URL` (borrowed engine, not a bundled one), so closing the window ends the program
 lib/rcas/app/worksheet.rb   the session behind the window: Chat::Workspace + Results, every answer a plain Hash cell { n:, input:, kind:, text:, latex:, svg:, stdout:, hint: }; it borrows Chat::UI#text_of/#typesettable? and Chat::Usage.hint rather than restating those rules
 lib/rcas/app/server.rb      the HTTP server: loopback only, a per-run token in the X-RCAS-Token header, and a Host check against DNS rebinding. Static assets are free, every added route needs the token
@@ -477,6 +477,15 @@ and the library keep no state apart from the session's results and
 language questions in `rcas-chat` (`ANTHROPIC_API_KEY`); without it the
 chat shows no trace of it: no model line, no `/ask` in `/help`, no
 mention in errors (the user wants non-AI users to see a plain CAS).
+**The gem is not even loaded without credentials** (24 Sept 2026, the
+user's suggestion): `Chat.load_anthropic` requires it (quietly - its
+dependency standardwebhooks warns under -w) and then `chat/tool.rb`, whose
+`EvalInput`/`EvalTool` subclass the gem's classes, only when
+`Assistant.credentials?` (ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, or
+`~/.config/anthropic` from `ant auth login`) or a test passes a
+`runner_factory`. `configured?` asks the credentials first, so a plain
+session never loads it: 0.027 s instead of 0.22 s and a thousand files.
+Never `require "anthropic"` at the top of a chat file again.
 
 ## In and Out: the numbered session
 
@@ -1458,6 +1467,16 @@ a hash.
   Return `Assignment[hash]` from anything new that hands such a Hash out.
 - **Hash#inspect changed in Ruby 3.4.** Never compare the `inspect` of a
   Hash against a literal without `TestSupport.hash_style` on both sides.
+- **The suite prints no warnings** (24 Sept 2026, from about 1190), and
+  `test/warnings_test.rb` keeps it so: every part loads under -w silently.
+  Source text that is read to be inspected rather than run goes through
+  `Hold.parse` (or `Hold.quietly { }` around `AbstractSyntaxTree.of`),
+  because the parser lints the fragment (`x + 1` is "useless use of + in
+  void context"); the chat evaluates a line that does not parse quietly,
+  since Ruby printed some of those warnings even without -w. A test stub
+  goes through `TestSupport.replacing(object, name, impl) { }`, never
+  alias-and-redefine, which warns twice. `Integer#to_f` past 2**1024 warns
+  and gives Infinity: check `bit_length` first.
 - **Never evaluate a block that was handed over to be kept.** A
   fallback that runs it answers `hold { 1 / 2 }` with 0.
 - `RCAS::IRB::AutoSymbol` turns an undefined `name(args)` with Expression,

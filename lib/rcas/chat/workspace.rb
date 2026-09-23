@@ -49,15 +49,31 @@ module RCAS
             previous = $stdout
             $stdout = StringIO.new(output)
             begin
-              @binding.eval(code, "(rcas)", 1)
+              run(code)
             ensure
               $stdout = previous
             end
           else
-            @binding.eval(code, "(rcas)", 1)
+            run(code)
           end
         @binding.local_variable_set(:_, value)
         [value, output]
+      end
+
+      # A line that does not parse raises its SyntaxError, which the REPL
+      # reports; Ruby also printed a warning of its own for some of them,
+      # past the UI and onto stderr (`? hello` without Claude gave "invalid
+      # character syntax; use ?\s" and then the error). Such a line is
+      # evaluated quietly, so the error is still the same one. A line that
+      # parses runs as it is, with whatever warnings its running gives.
+      def run(code)
+        parses = begin
+          Hold.parse(code)
+          true
+        rescue SyntaxError
+          false
+        end
+        parses ? @binding.eval(code, "(rcas)", 1) : Hold.quietly { @binding.eval(code, "(rcas)", 1) }
       end
 
       # Run code for its side effects only (used when restoring a session).
@@ -75,7 +91,7 @@ module RCAS
 
       # Does +code+ parse as Ruby?
       def ruby?(code)
-        RubyVM::AbstractSyntaxTree.parse(code)
+        Hold.parse(code)
         true
       rescue SyntaxError
         false
@@ -85,7 +101,7 @@ module RCAS
       # define (foo(1), x(squared))? Such calls would become unknown functions.
       def undefined_calls?(code)
         receiver = @binding.receiver
-        stack = [RubyVM::AbstractSyntaxTree.parse(code)]
+        stack = [Hold.parse(code)]
         until stack.empty?
           node = stack.pop
           next unless node.is_a?(RubyVM::AbstractSyntaxTree::Node)
@@ -99,7 +115,7 @@ module RCAS
 
       # Is +code+ Ruby that merely stops early (open block, string, paren)?
       def incomplete?(code)
-        RubyVM::AbstractSyntaxTree.parse(code)
+        Hold.parse(code)
         false
       rescue SyntaxError => e
         e.message.match?(/unexpected end-of-input|unexpected end of input|unexpected end-of-file|unterminated .* meets end of file|embedded document meets end of file/i)

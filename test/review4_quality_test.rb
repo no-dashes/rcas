@@ -99,15 +99,12 @@ class Review2QualityTest < Minitest::Test
   def test_strict_mode_reaches_the_domain_test_of_analysis
     old = ENV['RCAS_STRICT']
     ENV['RCAS_STRICT'] = '1'
-    singleton = RCAS::Inequalities.singleton_class
-    singleton.alias_method(:__review_real, :real?)
-    singleton.define_method(:real?) { |*| raise NoMethodError, 'injected' }
-    assert_raises(NoMethodError) { RCAS::Analysis.defined_at?(RCAS.log(@x), @x, n(2)) }
-  ensure
-    if singleton.method_defined?(:__review_real)
-      singleton.alias_method(:real?, :__review_real)
-      singleton.remove_method(:__review_real)
+    # the stub goes through TestSupport.replacing (24 Sept 2026), which does
+    # what the alias did without Ruby's "method redefined" warnings
+    TestSupport.replacing(RCAS::Inequalities, :real?, ->(*) { raise NoMethodError, 'injected' }) do
+      assert_raises(NoMethodError) { RCAS::Analysis.defined_at?(RCAS.log(@x), @x, n(2)) }
     end
+  ensure
     ENV['RCAS_STRICT'] = old
   end
 end

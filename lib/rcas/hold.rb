@@ -27,6 +27,24 @@ module RCAS
 
     IDENTIFIER = RCAS::IDENTIFIER
 
+    # The syntax tree of a piece of source text, without Ruby's lint
+    # warnings. Parsing `x + 1` on its own warns "possibly useless use of +
+    # in void context" under -w, and so does every line of a session that is
+    # read to be inspected (In[n], the chat's checks) rather than run: the
+    # warnings are about the fragment, not about anything the reader wrote
+    # wrong, and the test suite printed dozens of them.
+    def parse(text) = quietly { RubyVM::AbstractSyntaxTree.parse(text) }
+
+    # AbstractSyntaxTree.of parses the block's lines again, with the same
+    # warnings.
+    def quietly
+      verbose = $VERBOSE
+      $VERBOSE = nil
+      yield
+    ensure
+      $VERBOSE = verbose
+    end
+
     # A block whose source cannot be read is refused, never run: running it
     # is exactly what hold was asked not to do, and `hold { 1 / 2 }` came
     # back as 0 under Ruby 4 that way (a review, 23 Sept 2026).
@@ -43,7 +61,7 @@ module RCAS
     # default since Ruby 3.4 - has no such tree, and `reparsed_body` cuts
     # its source out by the code location of its instruction sequence.
     def block_body(block)
-      ast = RubyVM::AbstractSyntaxTree.of(block, keep_script_lines: true)
+      ast = quietly { RubyVM::AbstractSyntaxTree.of(block, keep_script_lines: true) }
       ast = ast.children.last if ast&.type == :ITER
       ast&.children&.last
     rescue ArgumentError, RuntimeError, IOError, SystemCallError
@@ -66,7 +84,7 @@ module RCAS
         text = from == to ? lines[from].byteslice(c1...c2) : lines[from].byteslice(c1..) + lines[from + 1...to].join + lines[to].byteslice(0, c2)
         next unless text&.match?(/\A(\{|do\b)/)
         node = begin
-          RubyVM::AbstractSyntaxTree.parse("proc #{text}").children.last
+          Hold.parse("proc #{text}").children.last
         rescue SyntaxError
           next
         end
@@ -83,7 +101,7 @@ module RCAS
     # and ArgumentError on a node hold cannot keep. RCAS::Results uses it
     # for In[n].
     def source(text, context = nil)
-      body = RubyVM::AbstractSyntaxTree.parse(text).children.last
+      body = parse(text).children.last
       body = body.children.first if body&.type == :BEGIN # an empty line, or a comment
       body.nil? ? nil : Builder.new(context || TOPLEVEL_BINDING).build(body)
     end

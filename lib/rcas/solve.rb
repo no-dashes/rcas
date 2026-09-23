@@ -1155,7 +1155,6 @@ module RCAS
     # conjugate - the roots of a real polynomial come in conjugate pairs,
     # and one left without a partner can only be real.
     def float_roots(coeffs)
-      n = coeffs.size - 1
       lead = coeffs.last.value.to_f
       a = coeffs.map { |c| c.value.to_f / lead }
       zero = a.index { |c| !c.zero? } # x**m divides: those roots are exactly 0
