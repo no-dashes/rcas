@@ -1263,6 +1263,54 @@ Of the review's section 3 (its optional items), three landed in
   Float and there is no exact answer to decide against - the one place
   where that excuse holds. Exact coefficients never come here.
 
+**Preflight for the sixth review** (23 Sept 2026, before it ran): the
+round-4 and round-5 machinery attacked from both section-4 lists by three
+probes; every wrong answer they found is fixed, with a test in
+`test/review6_preflight_test.rb`. What is worth remembering:
+
+- **An unknown slope is not harmless near a singular point.**
+  `Decide.function_bound`'s fallback `1e3*(|v| + 1)` said 1e18 where
+  gamma's slope at `-1 + 10**-15` is 1e30. `Decide::SINGULAR` lists where
+  each evalf-only function has poles or jumps; within the error there is no
+  bound, near it the bound grows like `1/d**2`. And `evalf` hands the
+  expression back when not one digit survives (`digitless?`) rather than a
+  Float whose sign is noise.
+- **Sampled zero needs every sample.** `Decide.identically_zero?` takes
+  the one-point *non*-zero proof first, then needs all points decided zero;
+  the denominators are primes above 100, because 2..11 is where
+  `sin(30*pi*x)` vanishes. Its old "true" for factorial sums came from the
+  samples that happened to be integers: `factorial_zero?` proves those now
+  (gamma as factorial, then the sum divided by one of its factorials).
+- **A pole is not something the tree may absorb.** `Numerics.caller_for`
+  falls back to the tree where the compiled lambda has no *real* value
+  (asin(1.5)); at `log(0)` the compiled lambda throws `POLE` and the tree is
+  not asked, because simplify turns `0*log(0)` into 0. `crossing` reads the
+  nearest decade as well as all seven (`side_kind`), and bisection hands a
+  sign change at exactly 0 where f has no value to `crossing` at 0.0.
+- **log|u| only where f is real on the range** (`real_on_range?`: each
+  domain condition proved on each piece by `sign_on_interval`). A partly
+  complex integrand stays an Integral: its principal antiderivative can
+  cross a branch cut inside the range.
+- **Families under `domain: RR`**: a non-affine family is kept only when
+  every member is real (`real_family?`), cut to its real members for
+  `c*A(k)**(+-1/q)` and `c/A(k)` (`power_real_members`, re-indexed over NN
+  by `non_negative_part`), and refused otherwise - never handed on whole.
+  `ComplexParts` splits a reciprocal now (`reciprocal_parts`), which is
+  what `(-2)**x = 4` needed.
+- **A principal root has a range** (`principal_power_reaches?`): `u**(1/n)`
+  reaches only `|arg| < pi/n`, so `sqrt(exp(x)) = -1` is `[]`, not a family
+  that `verify` never looks at. The radical route passes `all:` down and
+  checks its families at six indices (`verified_families`).
+- **Float roots**: `verify` checks a Float equation against the running
+  error bound, as `Equation#holds?` does. Durand-Kerner clusters by
+  `10*(eps*k)**(1/m)` of the root scale for multiplicity m - the only
+  radius that is right for both a triple root and two distinct roots 1e-6
+  apart - where k is the size of the scaled coefficients.
+- **Special parameter values are complete**: a family of them (`sin(a) =
+  0`) is one branch on the condition `d = 0`, its integrand found by
+  replacing the one function the denominator is linear in (`atom_value`);
+  a value where the integrand has no value is no branch.
+
 Left open, with the reason: exclusion lists for ImageSet
 (`{pi*k | k in ZZ, k != 0}`) wait for the reviewer, because the round-3
 test `test_every_family_member_lies_in_the_domain` evaluates `at(k)` for
@@ -1270,6 +1318,11 @@ every k of the family's domain; `nintegrate` split at non-linear kinks
 (D11); the `factor(expand((x+y+z)**6 - 1))` cliff (53 s); merging the
 linear solvers and the Newton interpolations, deferred until after the
 next verification round so that it does not move the code under it.
+From the preflight: nsolve on a Float-noisy root (`expand((x - 1)**9)`)
+or a root so flat that f underflows round it; an undecided *constant*
+pivot counted non-zero (`log(6) - log(2) - log(3)`, the generic-pivot
+policy reaching where no generic reading exists); special values in two
+parameters and for definite integrals; `4**x - 3*2**x + 2 = 0` refused.
 
 ## Traps we have hit (so you do not hit them again)
 
