@@ -178,7 +178,7 @@ lib/rcas/vector.rb          VectorSpace (QQ**3), Vector
 lib/rcas/matrix.rb          MatrixSpace (QQ**[2,3]), Matrix, Elimination (rref, det, cofactor), eigen*
 lib/rcas/poly_matrix.rb     PolyDet/RatDet/PolyLinearSolve/nullspace (Horn 2008 ch. 6): degree bound, rational evaluation, Newton interpolation; Matrix falls back to Elimination when it returns nil
 lib/rcas/scalar.rb          entry arithmetic with Num fast paths; zero? (exact via Algebraic, then Decide; a non-constant entry is zero when it expands, cancels or trigsimps to 0 - `identically_zero?`)
-lib/rcas/decide.rb          Decide.sign/zero?/identically_zero?: the one numeric decision procedure (exact, then two precisions, then a Float clear of its rounding; nil = undecided)
+lib/rcas/decide.rb          Decide.sign/zero?/identically_zero?: the one numeric decision procedure (exact, then precisions measured against an error bound, then a Float with a running error bound; a zero only by root separation or a normal form; nil = undecided)
 lib/rcas/hold.rb            hold { } via RubyVM::AbstractSyntaxTree; sets RubyVM.keep_script_lines = true; a qualified RCAS.integrate(...) call inside the block is treated like the bare one
 lib/rcas/steps.rb           Step/Derivation and Steps: worked solutions (diff, integrate, solve, factor, apart, rref, gcd, discuss). Each narrator names the rule and asks the library for the piece, so the working cannot disagree with the answer; the fallback line says no textbook rule applies
 lib/rcas/functions.rb       the top-level functions (bare in irb, RCAS.x elsewhere); Functions.fold
@@ -305,15 +305,17 @@ MANUAL.md                   the user manual (usage); README.md (setup only); ass
    `variables` and `replace_with` to carry them along, and
    `Piecewises.hoist` pulls a piecewise out of a surrounding expression
    (2*pw is piecewise(c => 2*v)) before integration and limits.
-8. **`Scalar.zero?`** decides zero for matrix entries: exact for Num, exact
-   via `Algebraic.exact` for constants in one radical/RootOf or two square
-   roots, otherwise numeric (1e-12) *confirmed at two precisions*
-   (`vanishes?`, 19 Sept 2026): a true zero is cancellation and shrinks as
-   the digits rise, `exp(-100)` sits at 3.7e-44 and is not zero. A complex
-   value has no arbitrary-precision route here, so there the float
-   tolerance still decides. Symbolic pivots that are not
-   identically zero are assumed non-zero (generic case) and this is
-   documented.
+8. **`Scalar.zero?`** decides zero for matrix entries: exact for Num; a
+   Float with a running error bound that stands clear of 0 is not zero
+   (`Decide.float_nonzero?`, asked first because it is cheap); then exact
+   via `Algebraic.exact`, then `Decide.zero?`, and only a decided zero is
+   zero (fourth review: numerics prove non-zero, a root separation bound
+   or a normal form proves zero). A non-constant entry is zero when one
+   exact rational point does not show otherwise and it expands, cancels
+   or trigsimps to 0 (`identically_zero?`). Symbolic pivots that are not
+   shown to be zero are assumed non-zero (generic case) and this is
+   documented; a symbolic matrix of full rank at one rational point has
+   full rank.
 9. **Ruby folds before rcas sees anything**: `1/2` is 0, `2**(1/3r)` is a
    Float. Hence `1/2r`, `root(2, 3)`, `cbrt`, and `hold { }` for keeping
    input structure. Never assume a literal reached us unevaluated.
@@ -583,7 +585,14 @@ Load-bearing details, most of them found the hard way:
   `Functions.math_value` leaves the node alone instead. A divergent sum
   used to come back as "Numerical argument is out of domain - log".
 - **`NotImplementedError` is a ScriptError**, not a StandardError: a bare
-  `rescue` does not catch it (this bit while testing).
+  `rescue` does not catch it (this bit while testing). That is why rcas's
+  own refusals are `RCAS::Unsupported < StandardError` since the fourth
+  review, and why `guard!` passes an `Unsupported` on (a broad rescue must
+  not turn "cannot" into "none"): a rescue that takes a refusal on purpose
+  names `NotImplementedError, RCAS::Unsupported` and calls
+  `guard!(e, refused: true)`. Inside `module Precision` a bare
+  `Unsupported` is `Precision::Unsupported`, a different class: always
+  write `RCAS::Unsupported`.
 
 ### The FPS algorithm (fps.rb)
 
@@ -1016,9 +1025,9 @@ causes are seven mistakes repeated, so the fixes are policies:
 - **`Decide` (decide.rb) is the one numeric decision procedure.**
   `Decide.sign(e)` (:positive/:negative/:zero/nil) and `Decide.zero?(e)`
   (true/false/nil) try a Num, then `Algebraic.exact`, then
-  `Precision.evalf` at 30/60(/120) digits - a zero shrinks with the
-  precision, a small value stays put - and last a Float, believed only
-  well clear of the rounding of the largest intermediate value. A complex
+  `Precision.evalf` at 30/60/120 digits, and last a Float. What each of
+  them may conclude was corrected by the fourth review (below): numerics
+  prove a value *non-zero*, never zero. A complex
   constant is split by `ComplexParts.parts` and each part decided. **nil
   is undecided and must be treated so**; never write a private tolerance
   again. `Solve.verify` (which substituted the literal `x:` and was a
@@ -1050,9 +1059,8 @@ causes are seven mistakes repeated, so the fixes are policies:
   `nintegrate` refuses a non-numeric integrand and never counts an
   undefined sample as 0 (Simpson returns nil, tanh-sinh calls `hole`,
   which is a removable point or a NoConvergence); Petkovsek's truncated
-  divisor search raises `TooMany`. The refusal is NotImplementedError,
-  because the review tests accept exactly that; the single
-  `RCAS::Unsupported < StandardError` the review proposed was not made.
+  divisor search raises `TooMany`. The refusal was NotImplementedError
+  then; it is `RCAS::Unsupported` since the fourth review (see the traps).
 - **Poles are read off the equation as written** (`Analysis.denominators`
   of the unsimplified target): `Solve.solve` takes them out of points,
   families (`family_off_poles`, member by member through the index, which
@@ -1093,6 +1101,90 @@ causes are seven mistakes repeated, so the fixes are policies:
   Float evalf the principal one), real_domain of expressions with complex
   intermediate values (`real_domain(I*sqrt(x))` refuses today), and
   whether solve is complete over CC.
+
+## The fourth review (23 Sept 2026): proofs, not agreement
+
+`review/round4/` (gitignored) checked the round-3 fixes with variants, on
+both revisions, and brought 78 failing tests, 22 of them regressions
+(answers users had and lost). The passing ones live in
+`test/review4_<area>_test.rb`, unchanged except that their refusal
+rescues accept `RCAS::Unsupported` next to `NotImplementedError`;
+`test/review4_followups_test.rb` holds the controls and the fixes on the
+way. The lessons, each a policy now:
+
+- **Numerics prove "not zero", never "zero".** `Decide.precise` measures
+  a value against an error bound - the largest magnitude met in the walk
+  (`Precision.evalf_with_scale`) times 10**-digits - and believes it only
+  above that and consistent across two levels; two exact zeros at 30 and
+  60 digits are what exp(10**-100) - 1 looks like. A zero is proved by a
+  root separation bound for an algebraic constant (`algebraic_zero?`: the
+  annihilating polynomial's p(0) = 0 and the value below Cauchy's bound
+  for the other roots; three radicals are beyond Algebraic.exact) or by a
+  normal form (`symbolic_zero?`: simplify, expand, cancel, the
+  Pythagorean identity). `Scalar.vanishes?` is `Decide.zero? == true`:
+  undecided is not zero, it is the generic pivot.
+- **The Float route is a running error bound** (`Decide.float_bound`):
+  exact numbers half an ulp, sums add errors, products relative ones, a
+  function its slope over the interval times the argument's error. It is
+  asked first everywhere (`float_nonzero?`), because an exact field test
+  can cost a factorization over a number field; the scale-only version
+  took sqrt(2)/92160 for a possible cancellation. `evalf` uses it too: a
+  constant Float that lost its digits (`cancelled?`) is taken again in
+  arbitrary precision - 1 - cdf(30) of Poisson(2) is exact as written.
+  Certified `Precision.evalf` no longer certifies two zeros as 0 (only
+  zero to 600 digits, at the last two guards).
+- **"Decided" had to become "proved" in other places too.** A sign on a
+  box is an interval enclosure (`Analysis.enclosure`, `sign_on_box`);
+  periodicity is an identity f(x + T) = f(x), not four samples; a
+  potential is its own proof of conservativity when it is singular only
+  where the field is (`global_potential`); which numeric roots are real is
+  Sturm's count; the parametric inequality solver, `compare`, `sort` and
+  `normalize` order exactly or refuse; `Piecewises.decide` decides by
+  `Decide` and knows `k in ZZ`.
+- **A refusal where a decision was available is a regression.** The
+  table of REVIEW.md 2.2, each with a control in the followups test:
+  roots of positive constants are real (`Infer.positive_base?`), a kink
+  has one-sided series (`one_sided_kink`, only inside `one_sided`), -a is
+  negative under a > 0 (`sign_of` for Neg/Sub/Div), a start index holds
+  only where the recurrence builds the same sequence (`propagates?`),
+  independence is refused only when the Casoratian is decided zero,
+  binomial(k, c) is a polynomial, the compiled numeric lambda falls back
+  to the tree, `crossing` tells a root (|f| shrinks towards it, however
+  steeply) from a pole (grows) and a jump (stays), log of a square that
+  may be 0 is in CC.
+- **ImageSet#between counts a family by its crossings.** Affine families
+  exactly; any other by the solutions of expr(k) = lo and = hi and the
+  edges of its real domain, one sample per piece; nil for infinitely many.
+  It keeps to the family's own domain. The kinks of |sin(x**2)| are
+  sqrt(k*pi).
+- **Limits**: through exp(l*x) (`through_exponential`, the logistic
+  function) and log(x) (`through_logarithm`); erf at infinity as 1 - erfc;
+  a function of a cancelling argument re-expands it until its constant
+  term is known (`known_argument` - only the constant, the adaptive loop
+  does the rest; the full order cost seconds). Asymptotes refuse a limit
+  they did not take; discuss keeps each kind of asymptote apart and a
+  periodic f has no horizontal one.
+- **discuss lists every row over [0, T)** for the period T of f
+  (`one_period`, from the complete solutions): the principal solutions of
+  g are one period of g, which need not be f's.
+- **Supports**: a discrete distribution's pmf and cdf at a symbolic point
+  keep the support and the integers (`mass` is the formula, `pdf`/`cdf`
+  wrap it; `on_support?` drops the wrapper when the assumptions settle
+  it). A symbolic range may turn out reversed (piecewise, 0). Upper tails
+  are tails: `between` as survival differences above the median, the
+  Normal through erfc on one side, StudentT(1, 2) in closed form, Float
+  discrete tails summed from the top; upper quantiles solve the survival
+  function; exact discrete quantiles are exact.
+- **Slow spots found by the review**: a symbolic matrix of full rank at
+  one rational point has full rank (`full_rank_at_a_point`); the one-point
+  exact evaluation (`nonzero_somewhere?`) comes before the normal forms in
+  `Scalar.identically_zero?`; a radical of a quadratic with real constant
+  coefficients is normalized by completing the square
+  (`normalized_radical`), which is what made the surface of revolution of
+  sin(2*pi*x) exact; heurisch refuses a symbolic system of more than
+  `MAX_SYMBOLIC_UNKNOWNS`.
+- One review expectation is wrong and was raised with the user, not
+  loosened: `(x**2 + x)/x < 0` is x < -1, so -1/2 is not inside.
 
 ## Traps we have hit (so you do not hit them again)
 
