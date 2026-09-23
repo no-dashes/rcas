@@ -115,29 +115,35 @@ module RCAS
     def -(other) = zip_with(other, :-) { |a, b| Scalar.sub(a, b) }
     def -@ = space.unchecked(map_entries { |e| Scalar.neg(e) })
 
+    # The product goes through MatrixMultiply: Integer and Rational entries
+    # on the bare numbers, Strassen for large ones (MatrixMultiply.algorithm
+    # chooses; `multiply` names the algorithm for one product).
     def *(other)
       case other
-      when Matrix
-        raise ArgumentError, "shape mismatch: #{space} * #{other.space}" unless cols == other.rows
-        product = Array.new(rows) do |i|
-          Array.new(other.cols) do |j|
-            (0...cols).map { |k| Scalar.mul(self[i, k], other[k, j]) }.reduce { |s, x| Scalar.add(s, x) } || Num.new(0)
-          end
-        end
-        MatrixSpace.new(base.join(other.base), rows, other.cols).unchecked(product)
+      when Matrix then multiply(other)
       when Vector
         raise ArgumentError, "shape mismatch: #{space} * #{other.space}" unless cols == other.dim
-        VectorSpace.new(base.join(other.base), rows).unchecked(entries.map { |r| row_dot(r, other.entries) })
+        column = other.entries.map { |e| [e] }
+        product = MatrixMultiply.product(entries, column, :schoolbook, columns: 1).map(&:first)
+        VectorSpace.new(base.join(other.base), rows).unchecked(product)
       else
         scale(other)
       end
     end
 
+    # a.multiply(b, algorithm: :strassen): the product by :schoolbook,
+    # :strassen [Str69], [Win71] or :auto, for comparing them.
+    def multiply(other, algorithm: nil)
+      raise TypeError, "can't multiply a Matrix by #{other.class} with an algorithm" unless other.is_a?(Matrix)
+      raise ArgumentError, "shape mismatch: #{space} * #{other.space}" unless cols == other.rows
+      product = MatrixMultiply.product(entries, other.entries, algorithm || MatrixMultiply.algorithm, columns: other.cols)
+      MatrixSpace.new(base.join(other.base), rows, other.cols).unchecked(product)
+    end
+
     def self.row_times(vector, matrix)
       raise ArgumentError, "shape mismatch: #{vector.space} * #{matrix.space}" unless vector.dim == matrix.rows
-      VectorSpace.new(vector.base.join(matrix.base), matrix.cols).unchecked(
-        (0...matrix.cols).map { |j| vector.entries.each_with_index.map { |v, i| Scalar.mul(v, matrix[i, j]) }.reduce { |s, x| Scalar.add(s, x) } }
-      )
+      product = MatrixMultiply.product([vector.entries], matrix.entries, :schoolbook, columns: matrix.cols).first
+      VectorSpace.new(vector.base.join(matrix.base), matrix.cols).unchecked(product)
     end
 
     def /(scalar)
@@ -418,8 +424,6 @@ module RCAS
     private
 
     def map_entries(&block) = entries.map { |r| r.map(&block) }
-
-    def row_dot(a, b) = a.zip(b).map { |x, y| Scalar.mul(x, y) }.reduce { |s, x| Scalar.add(s, x) } || Num.new(0)
 
     def zip_with(other, op)
       raise TypeError, "can't apply #{op} to Matrix and #{other.class}" unless other.is_a?(Matrix)

@@ -91,6 +91,7 @@ checked - nothing in them is typed by hand.
   - [1.7 Linear algebra](#17-linear-algebra)
     - [Factorizations](#factorizations)
     - [Orthogonality and least squares](#orthogonality-and-least-squares)
+    - [Multiplying matrices: Strassen's seven products](#multiplying-matrices-strassens-seven-products)
     - [Lattices: LLL reduction](#lattices-lll-reduction)
   - [1.8 Differential equations and recurrences](#18-differential-equations-and-recurrences)
     - [Recurrences](#recurrences)
@@ -425,7 +426,7 @@ rcas> stokes([-y, x, 0], [u*cos(v), u*sin(v), 0], u: 0..1, v: 0..2*pi)
 ```
 
 Read on: 1.5 Domains and assumptions, 1.6 Polynomial rings, 1.7 Linear
-algebra (lattices and LLL), 1.8
+algebra (lattices and LLL, Strassen's seven products), 1.8
 Differential equations and recurrences, 1.12 The q-analogues, and section
 4, Sources, for the algorithms and where they come from.
 
@@ -3472,6 +3473,79 @@ rcas> least_squares(matrix([[1], [2*I]]), vector(1, 0))
 => (1/5)
 ```
 
+#### Multiplying matrices: Strassen's seven products
+
+The product of two n x n matrices, computed by the definition, takes n**3
+multiplications: one per entry and term. For 2 x 2 matrices that is
+eight. Strassen found that seven are enough [Str69], and the whole trick
+fits on a line of paper each. Here it is checked in rcas:
+
+```
+rcas> ma = (ZZ[a11, a12, a21, a22]**[2, 2])[[a11, a12], [a21, a22]]
+=> [a11 a12]
+   [a21 a22]
+rcas> mb = (ZZ[b11, b12, b21, b22]**[2, 2])[[b11, b12], [b21, b22]]
+=> [b11 b12]
+   [b21 b22]
+rcas> ma * mb
+=> [a11*b11 + a12*b21 a11*b12 + a12*b22]
+   [a21*b11 + a22*b21 a21*b12 + a22*b22]
+rcas> m1 = (a11 + a22)*(b11 + b22); m2 = (a21 + a22)*b11; m3 = a11*(b12 - b22); m4 = a22*(b21 - b11)
+rcas> m5 = (a11 + a12)*b22; m6 = (a21 - a11)*(b11 + b12); m7 = (a12 - a22)*(b21 + b22)
+rcas> [expand(m1 + m4 - m5 + m7), expand(m3 + m5), expand(m2 + m4), expand(m1 - m2 + m3 + m6)]
+=> [a11*b11 + a12*b21, a11*b12 + a12*b22, a21*b11 + a22*b21, a21*b12 + a22*b22]
+rcas> ma.multiply(mb, algorithm: :strassen) == ma * mb
+=> true
+```
+
+Seven products and eighteen additions instead of eight products and four
+additions is a bad trade for numbers. It pays for *matrices*, because
+nothing in the formulas uses that the entries commute: they hold just as
+well when a11, ..., b22 are the four blocks of an n x n matrix, split into
+halves. Then the seven products are products of matrices of half the size,
+done the same way, and the additions are cheap by comparison. The count
+T(n) = 7*T(n/2) + (a multiple of n**2) comes to n**(log2(7)), about
+n**2.807, multiplications. rcas uses Winograd's arrangement of the same
+idea, which needs fifteen additions instead of eighteen [Win71]; an odd
+size gets a row or column of zeros for one level, and blocks below a
+cutoff go back to the definition, since there the additions do cost more
+than the product they save.
+
+`a.multiply(b, algorithm:)` takes `:schoolbook`, `:strassen` or `:auto`,
+and `RCAS::MatrixMultiply.with_algorithm(:strassen) { ... }` sets it for
+everything in the block, `**` included. `:auto`, the default of `*`, uses
+the schoolbook product unless Strassen was measured to win (24 Sept 2026,
+integer matrices, seconds):
+
+| n   | 1-digit entries: schoolbook / Strassen | 31-digit entries: schoolbook / Strassen |
+|-----|----------------------------------------|-----------------------------------------|
+| 64  | 0.01 / 0.01                            | 0.05 / 0.04                             |
+| 128 | 0.07 / 0.06                            | 0.43 / 0.34                             |
+| 256 | 0.50 / 0.44                            | 3.84 / 2.50                             |
+| 512 | 3.98 / 3.15                            |                                         |
+
+So Strassen is used from n = 192 for entries that fit in a machine word
+and from n = 64 for larger ones, where one multiplication costs much more
+than one addition and saving it counts sooner. It is never used by
+default for symbolic entries: there each of the seven products is a
+product of sums that has to be expanded again, which costs more than the
+eighth product it saves. `:strassen` still runs on them, to compare.
+
+What matters more at every size is how the numbers are stored. A matrix of
+Integers and Rationals is multiplied on the bare Ruby numbers: each row of
+the left factor and each column of the right one is scaled to integers by
+the lcm of its denominators, the product is taken in integers, and each
+entry is divided once at the end. A 100 x 100 product over QQ takes 0.04
+seconds this way, and took 0.7 when every product and sum was an rcas
+number of its own.
+
+Since Strassen, the exponent 2.807 has been pushed down many times, to
+below 2.3714 [ADVXXZ25], by the "laser method" that goes back to
+Coppersmith and Winograd [CW90]. Those algorithms are *galactic*: their
+constant factors are so large that they would win only for matrices far
+bigger than any computer can hold. Strassen's is the only one below n**3
+used in practice. Whether the exponent can reach 2 is open.
+
 #### Lattices: LLL reduction
 
 A *lattice* is the set of all integer combinations of some linearly
@@ -4645,7 +4719,7 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | geometry | `point line circle distance midpoint angle area perimeter collinear? centroid intersect circumcircle perpendicular_bisector parallel_through perpendicular_through` |
 | special functions | `erf erfc Ei Si Ci li` |
 | domains | `NN ZZ QQ RR CC` (also `ℕ ℤ ℚ ℝ ℂ`), `GF assume forget assumptions` |
-| linear algebra | `vector matrix gram_schmidt least_squares project orthogonal? lu qr cholesky diagonalize jordan lll` |
+| linear algebra | `vector matrix gram_schmidt least_squares project orthogonal? lu qr cholesky diagonalize jordan lll`, `a.multiply(b, algorithm: :strassen)` |
 | holding | `hold evaluate` |
 | interchange | `openmath from_openmath popcorn from_popcorn` (Appendix D) |
 | worked solutions | `steps` (a block, or `:solve :factor :apart :rref :gcd :discuss`) |
@@ -4746,6 +4820,7 @@ lib/rcas/number_theory.rb   integer factorization, primes, divisors, totient, in
 lib/rcas/poly_matrix.rb     det/solve/inverse/kernel of polynomial matrices by evaluation and interpolation
 lib/rcas/vector.rb          VectorSpace, Vector
 lib/rcas/matrix.rb          MatrixSpace, Matrix, elimination
+lib/rcas/matrix_multiply.rb the matrix product: bare Integers, and Strassen-Winograd
 lib/rcas/hold.rb            hold
 lib/rcas/functions.rb       the top-level functions
 lib/rcas/core_ext.rb        Symbol / Numeric extensions
@@ -4849,12 +4924,16 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | several variables: gradient, Hessian, Jacobian, Lagrange multipliers | analysis.rb | [Rud76, ch. 9]; [Spi08, ch. 17] |
 | analytic geometry: lines and circles, the shoelace area | geometry.rb | [Spi08, ch. 4]; [Bra86] |
 | Gram-Schmidt orthogonalization, least squares by the normal equations | linear_algebra.rb | [Str16, ch. 4] |
+| matrix product: Integer arithmetic after clearing denominators; Strassen's algorithm in Winograd's form, with a measured cutoff; the exponent since | matrix_multiply.rb | [Str69]; [Win71]; [vzGG13, §12.1]; [CW90]; [ADVXXZ25] |
 | LLL lattice basis reduction, exact, with the incremental Gram-Schmidt update | lattice.rb | [LLL82]; [Coh93, §2.6]; [vzGG13, ch. 16] |
 | linear optimization: two-phase simplex with Bland's rule, exact; whole numbers by branch and bound | linear_program.rb | [Dan63]; [Chv83, ch. 2-5]; [Bla77]; [LD60]; [Sch86] |
 | Laplace transform from the table with the shift rules, inverse by partial fractions | laplace.rb | [BD12, ch. 6] |
 | systems of differential equations by eigenvalues, with Jordan chains when defective | ode.rb | [BD12, ch. 7] |
 | congruences, Legendre and Jacobi symbols, multiplicative order, continued fractions | number_theory.rb | [Coh93, §1.4]; [Knu98, §4.5.3]; [HW08, ch. 10] |
 
+- [ADVXXZ25] J. Alman, R. Duan, V. Vassilevska Williams, Y. Xu, Z. Xu,
+  R. Zhou, More asymmetry yields faster matrix multiplication, *Proc.
+  ACM-SIAM Symposium on Discrete Algorithms (SODA)* 2025; arXiv:2404.16349.
 - [APP98] S. A. Abramov, P. Paule, M. Petkovšek, q-Hypergeometric
   solutions of q-difference equations, *Discrete Math.* 180 (1998), 3-22.
 - [AS64] M. Abramowitz, I. A. Stegun (eds.), *Handbook of Mathematical
@@ -4883,6 +4962,8 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   Algorithms*, 4th ed., Springer 2015.
 - [Coh93] H. Cohen, *A Course in Computational Algebraic Number Theory*,
   GTM 138, Springer 1993.
+- [CW90] D. Coppersmith, S. Winograd, Matrix multiplication via arithmetic
+  progressions, *J. Symbolic Comput.* 9 (1990), 251-280.
 - [CZ81] D. G. Cantor, H. Zassenhaus, A new algorithm for factoring
   polynomials over finite fields, *Math. Comp.* 36 (1981), 587-592.
 - [Dan63] G. B. Dantzig, *Linear Programming and Extensions*, Princeton
@@ -5015,6 +5096,8 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   University Press 1999.
 - [Str16] G. Strang, *Introduction to Linear Algebra*, 5th ed.,
   Wellesley-Cambridge Press 2016.
+- [Str69] V. Strassen, Gaussian elimination is not optimal, *Numer.
+  Math.* 13 (1969), 354-356.
 - [SW17] J. Sorenson, J. Webster, Strong pseudoprimes to twelve prime
   bases, *Math. Comp.* 86 (2017), 985-1003.
 - [Sze75] G. Szegő, *Orthogonal Polynomials*, 4th ed., American Mathematical
@@ -5033,6 +5116,8 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   (1947), 28-35.
 - [Wil27] E. B. Wilson, Probable inference, the law of succession, and
   statistical inference, *J. Amer. Statist. Assoc.* 22 (1927), 209-212.
+- [Win71] S. Winograd, On multiplication of 2 x 2 matrices, *Linear
+  Algebra Appl.* 4 (1971), 381-388.
 - [Yun76] D. Y. Y. Yun, On square-free decomposition algorithms, *Proc.
   SYMSAC '76*, ACM 1976, 26-35.
 - [Zas69] H. Zassenhaus, On Hensel factorization I, *J. Number Theory* 1

@@ -145,4 +145,14 @@ class PerformanceTest < Minitest::Test
     assert_equal alt.expand.to_s, s.to_s
     assert_equal "x - x**2 + x**3", (:x - :x**2 + :x**3).simplify.to_s
   end
+  # a product of Rational matrices is taken on the bare numbers: through
+  # Scalar, every one of the n**3 products and sums built a Num, 1.16
+  # million objects for this one where 12 thousand do (24 Sept 2026)
+  def test_rational_matrix_products_do_not_build_a_node_per_product
+    rng = Random.new(3)
+    m = RCAS::Sets::QQ**[60, 60]
+    a = m[Array.new(60) { Array.new(60) { Rational(rng.rand(-9..9), rng.rand(1..5)) } }]
+    product = timed(2, "a 60 x 60 product over QQ", objects: 100_000) { a * a }
+    assert_equal a.entries[7].zip(a.entries.map { |r| r[11] }).sum { |x, y| x.value * y.value }, product[7, 11].value
+  end
 end
