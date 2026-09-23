@@ -1311,18 +1311,70 @@ probes; every wrong answer they found is fixed, with a test in
   replacing the one function the denominator is linear in (`atom_value`);
   a value where the integrand has no value is no branch.
 
-Left open, with the reason: exclusion lists for ImageSet
-(`{pi*k | k in ZZ, k != 0}`) wait for the reviewer, because the round-3
-test `test_every_family_member_lies_in_the_domain` evaluates `at(k)` for
-every k of the family's domain; `nintegrate` split at non-linear kinks
-(D11); the `factor(expand((x+y+z)**6 - 1))` cliff (53 s); merging the
-linear solvers and the Newton interpolations, deferred until after the
-next verification round so that it does not move the code under it.
-From the preflight: nsolve on a Float-noisy root (`expand((x - 1)**9)`)
-or a root so flat that f underflows round it; an undecided *constant*
-pivot counted non-zero (`log(6) - log(2) - log(3)`, the generic-pivot
-policy reaching where no generic reading exists); special values in two
-parameters and for definite integrals; `4**x - 3*2**x + 2 = 0` refused.
+**Closing the round (23 Sept 2026, evening).** Four of the preflight's
+leftovers were fixed, with tests in `test/review6_closing_test.rb`:
+
+- **Powers of one base** (`Solve.common_power`, `power_base`):
+  `4**x - 3*2**x + 2` is a polynomial in `t = 2**x`. The twin of
+  `common_exponential`. Each positive rational base is written `r**e` with
+  r not a perfect power (and `1/8` as `2**-3`), bases must share r, and
+  `replace_atom` asks for *whole* powers only, as it does for exp. A whole
+  power is safe over CC because `b**w = exp(w*log(b))` with a real
+  `log(b)`. Bases with no common root (`2**x = 3**x`) still refuse.
+- **Logs of rationals are decided** (`Decide.log_zero?`, inside
+  `symbolic_zero?`): each `log(p/q)` is rewritten over its primes, and the
+  logs of distinct primes are independent over QQ, so `simplify` reaching
+  0 is a proof. `log(6) - log(2) - log(3)` is a decided zero pivot now.
+- **nsolve**: the bisection's sign test was `value * flo > 0`, which
+  underflows to 0 for two values near 1e-165, so `(x - 1)**41` "changed
+  sign" at 0.9999 and was called a jump. It is `same_sign?` now,
+  everywhere in numerics.rb, and **never write a sign test as a product
+  again**. And a bracketed root of an *exact* f is `certified`: the signs
+  either side are decided exactly (`Decide.sign` at rational points). If
+  they do not differ, the bisection runs again on decided signs alone,
+  which is what puts `expand((x - 1)**9)` back at 1 instead of the 0.985
+  the Float noise led to. Float input and undecided signs keep the Float
+  answer. The Newton path (`nsolve(f, x, guess)`) is not certified.
+- **Special values in several parameters and for definite integrals**:
+  `special_values` solves a denominator in several parameters for the
+  first one it has roots in (`values_of`), so `sin(a*x)*cos(b*x)` has the
+  branches `a.eq(b)` and `a.eq(-b)`. Such a branch goes through
+  `with_special_cases` again (one parameter fewer, so it ends) and prints
+  as a nested piecewise. `definite_with_special_cases` is the public
+  definite integrate: `cos(a*x)` over `0..pi` is `pi` at a = 0. A family
+  of special values of a definite integral is a branch holding the
+  unevaluated Integral.
+
+**Still open after the round, to raise with the reviewer or the user:**
+
+- *Design questions (not ours to decide):*
+  - **Convergence conditions** for definite integrals with parameters.
+    `integrate(x**a, x, 0, 1)` is `1/(1 + a)` for every a but -1, and the
+    integral diverges for a < -1. That is a wrong answer for part of the
+    parameter space. Mathematica answers `ConditionalExpression[..., Re[a]
+    > -1]`, Maple asks with `assuming`, and MuPAD gives a piecewise. The
+    manual lists it as a gap.
+  - **The generic-pivot policy for undecided constants.** Logs of rationals
+    are decided now, but `atan(1/2) + atan(1/3) - pi/4` and
+    `exp(log(2) + log(3)) - 6` are still undecided, and an undecided
+    constant pivot counts as non-zero. The "generic" reading only makes
+    sense for a symbolic entry. The alternatives are refusing, or
+    returning a case split.
+  - **Exclusion lists for ImageSet** (`{pi*k | k in ZZ, k != 0}`). These
+    wait for the reviewer, because the round-3 test
+    `test_every_family_member_lies_in_the_domain` evaluates `at(k)` for
+    every k of the family's domain. We proposed an
+    `each_member`/`member_indices` the helper could use.
+  - **The reply's narrower reading of decision 5** (the component-count
+    rule only when none of x, y, z occurs) is waiting for confirmation.
+- *Deferred work (ours):*
+  - D11: `nintegrate` split at non-linear kinks and on infinite ranges.
+  - The `factor(expand((x+y+z)**6 - 1))` cliff (53 s).
+  - Merging the linear solvers and the Newton interpolations, deferred
+    until after round 6 so that it does not move the code under the
+    reviewer.
+  - `2**x = 3**x` (bases with no common root, the log route over CC).
+  - Certifying the Newton path of `nsolve`.
 
 ## Traps we have hit (so you do not hit them again)
 
