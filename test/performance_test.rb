@@ -73,6 +73,23 @@ class PerformanceTest < Minitest::Test
   # The performance cliffs of the third review (22 Sept 2026), each tens
   # of seconds to minutes before and well under one now; the bounds are
   # generous, so only a return of the cliff fails.
+  # Found by the fourth review (23 Sept 2026): a full-rank symbolic matrix
+  # is decided at one point, the even chi-square cdf is a term recurrence,
+  # and the Weierstrass integral's series coefficients are not zero-tested
+  # in a number field when a Float already shows they are not 0.
+  def test_the_fourth_reviews_slow_spots_stay_fast
+    syms = (1..36).map { |i| RCAS::Var.new(:"a#{i}") }
+    RCAS.assume(**syms.to_h { |s| [s.name, RCAS::QQ] }) do
+      m = RCAS.matrix(Array.new(6) { |i| Array.new(6) { |j| syms[6 * i + j] } })
+      timed(1, "rank of a generic 6x6") { assert_equal 6, m.rank }
+    end
+    timed(5, "ChiSquare(10**4).cdf(10**4)") { RCAS::Distributions::ChiSquare.new(10**4).cdf(10**4) }
+    x = RCAS::Var.new(:x)
+    timed(3, "integrate(1/(sin**4 + cos**4), x, 0, 2*pi)") do
+      assert_equal "2*2**(1/2)*pi", RCAS.integrate(1 / (RCAS.sin(x)**4 + RCAS.cos(x)**4), x, 0, 2 * RCAS::PI).to_s
+    end
+  end
+
   def test_the_third_reviews_cliffs_stay_flat
     x = RCAS::Var.new(:x)
     y = RCAS::Var.new(:y)

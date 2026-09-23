@@ -196,11 +196,40 @@ module RCAS
     # inside the point's own neighbourhood; when even that cannot decide,
     # the answer is "undecided" and not "no inflection".
     def inflection_at?(second, x, point, others)
-      found = vanishing(second, x, point)
+      found = begin
+        vanishing(second, x, point)
+      rescue NotImplementedError
+        # a parameter decides the order, but maybe not its parity: f'' =
+        # 6*a*x + 20*x**3 vanishes to order 1 for a != 0 and 3 for a = 0,
+        # an inflection either way (the review's S22 had "6*a decides")
+        parities = possible_orders(second, x, point)&.map(&:odd?)&.uniq
+        return parities.first if parities&.size == 1
+        raise
+      end
       return found.first.odd? if found
       change = sign_change(second, x, point, step: safe_step(point, others))
       return change != :saddle if change
       raise NotImplementedError, "inflections: whether the curvature changes at #{point} is not decided here"
+    end
+
+    # The orders g could vanish to at the point, over the parameters: each
+    # derivative whose value there depends on a parameter is where it
+    # stops if that value is not 0, and the search goes on for the case
+    # that it is; a constant that is not 0 ends it. nil when undecided.
+    def possible_orders(g, x, point)
+      orders = []
+      vanishing_limit(g, x).times do |k|
+        g = g.diff(x)
+        value = g.subs(x => point).simplify
+        if value.variables.empty?
+          sign = Decide.sign(value)
+          return nil if sign.nil?
+          next if sign == :zero
+          return orders << k + 1
+        end
+        orders << k + 1 unless Scalar.zero?(value)
+      end
+      nil
     end
 
     # The smallest k >= 1 with g^(k)(point) != 0, or nil.

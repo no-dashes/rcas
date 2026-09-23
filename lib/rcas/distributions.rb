@@ -813,7 +813,19 @@ class ChiSquare < Distribution
     return Num.new(Special.gamma_p(numeric(k, "cdf") / 2.0, x.value / 2.0)) if x.is_a?(Num) && x.value.is_a?(Float)
     if k.is_a?(Num) && k.value.is_a?(Integer) && k.value.even? && k.value.positive?
       half = (x / 2).simplify
-      tail = (0...k.value / 2).map { |m| half**m / RCAS.factorial(m) }.reduce(:+)
+      tail = if half.is_a?(Num) && (half.value.is_a?(Integer) || half.value.is_a?(Rational))
+               # term by term, t(m + 1) = t(m)*half/(m + 1), in Rationals: the
+               # powers and factorials one by one took 12 s at k = 10**4
+               term = 1r
+               sum = 0r
+               (0...k.value / 2).each do |m|
+                 sum += term
+                 term = term * half.value / (m + 1)
+               end
+               Num.new(Simplify.normalize_number(sum))
+             else
+               (0...k.value / 2).map { |m| half**m / RCAS.factorial(m) }.reduce(:+)
+             end
       return (1 - Fn.new(:exp, [-half]) * tail).simplify
     end
     Num.new(Special.gamma_p(numeric(k, "cdf") / 2.0, numeric(x, "cdf") / 2.0))

@@ -751,7 +751,7 @@ module RCAS
       case [fn.name, arg]
       in [_, Num => n] if n.value.is_a?(Float) && MATH_NAMES.include?(fn.name) then math_value(fn, n.value)
       in [_, Num => n] if n.value.is_a?(Complex) && (n.value.real.is_a?(Float) || n.value.imaginary.is_a?(Float)) && CMath_lite::NAMES.include?(fn.name)
-        Num.new(CMath_lite.public_send(fn.name, n.value))
+        complex_value(fn.name, n.value) || fn
       in [:sin, Num => n] if n.zero? then Num.new(0)
       in [:cos, Num => n] if n.zero? then Num.new(1)
       in [:tan, Num => n] if n.zero? then Num.new(0)
@@ -917,10 +917,42 @@ module RCAS
   # imaginary part in (-pi, pi], the inverse functions through log and
   # sqrt of complex numbers. evalf of log, tan and the rest at a complex
   # point used to stay symbolic (third review, C7).
+  module Functions
+    module_function
+
+    # A complex Float value, or no value: atan(i) is the pole of the
+    # arctangent, and its Float came out as (0 + Infinity*i) (fourth
+    # review, C7).
+    def complex_value(name, z)
+      v = CMath_lite.public_send(name, z)
+      return nil if v.nil?
+      finite = v.is_a?(Complex) ? v.real.to_f.finite? && v.imaginary.to_f.finite? : v.to_f.finite?
+      finite ? Num.new(v) : UNDEFINED
+    end
+  end
+
   module CMath_lite
-    NAMES = %i[exp sin cos log tan sinh cosh asin acos atan].freeze
+    NAMES = %i[exp sin cos log tan sinh cosh asin acos atan erf erfc].freeze
 
     module_function
+
+    # erf by its power series, where that does not cancel away the digits
+    # (|z| <= 3); nil beyond, and the node stays (fourth review, C7)
+    def erf(z)
+      return nil if z.abs > 3
+      term = z
+      sum = z
+      square = z * z
+      (1..200).each do |n|
+        term *= -square / n
+        piece = term / (2 * n + 1)
+        sum += piece
+        break if piece.abs < 1e-17 * sum.abs
+      end
+      sum * 2 / Math.sqrt(Math::PI)
+    end
+
+    def erfc(z) = (value = erf(z)) && 1 - value
 
     def exp(z) = Complex(Math.exp(z.real) * Math.cos(z.imaginary), Math.exp(z.real) * Math.sin(z.imaginary))
     def sin(z) = Complex(Math.sin(z.real) * Math.cosh(z.imaginary), Math.cos(z.real) * Math.sinh(z.imaginary))

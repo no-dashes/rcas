@@ -410,6 +410,30 @@ class Review4FollowupsTest < Minitest::Test
     assert refused { RCAS::Distributions::Normal.new(0, 1).quantile(RCAS.sqrt(2)) }
   end
 
+  # ---- smaller findings of the fourth review --------------------------------------------------
+
+  # atan has no value at i; erf has one at 1 + i (the series, |z| <= 3).
+  def test_complex_values_of_atan_and_erf
+    assert_equal RCAS::UNDEFINED, RCAS.atan(@x).evalf(x: Complex(0, 1))
+    v = RCAS.erf(@x).evalf(x: Complex(1, 1))
+    assert_in_delta 1.3161512816979477, v.real, 1e-14
+    assert_in_delta 0.19045346923783471, v.imaginary, 1e-14
+  end
+
+  # A factor free of t is a constant of the Laplace transform (L7).
+  def test_laplace_of_a_parameter_times_a_function
+    t, s, b = %i[t s b].map { |v| RCAS::Var.new(v) }
+    assert_equal (@a / (1 + s**2)).simplify, RCAS.laplace(@a * RCAS.sin(t), t, s)
+    assert_equal (@a * s / (b**2 + s**2)).simplify, RCAS.laplace(@a * RCAS.cos(b * t), t, s)
+  end
+
+  # 0 is an inflection of a*x**3 + x**5 for every a: the order of vanishing
+  # of f'' is 1 or 3, odd either way (S22); for a*x**3 + x**4 it is 1 or 2.
+  def test_an_inflection_whose_parity_does_not_depend_on_the_parameter
+    assert RCAS::Analysis.inflection_at?((@a * @x**3 + @x**5).diff(@x, 2), @x, n(0), [])
+    assert refused { RCAS::Analysis.inflection_at?((@a * @x**3 + @x**4).diff(@x, 2), @x, n(0), []) }
+  end
+
   # Poisson pmf in Floats keeps its digits too: e**-2 * 2**3/3!.
   def test_a_float_poisson_pmf_keeps_its_digits
     assert_in_delta Math.exp(-2) * 8 / 6, RCAS::Distributions::Poisson.new(2.0).pdf(3).value, 1e-17

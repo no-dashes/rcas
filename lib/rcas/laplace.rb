@@ -31,8 +31,12 @@ module RCAS
       constant, terms = Simplify.termize(f, simplify: true)
       result = Scalar.zero?(Num.new(constant)) ? Num.new(0) : (Num.new(constant) / s)
       terms.each do |factors, coefficient|
-        term = Simplify.rebuild_product(1, factors)
-        result += Num.new(coefficient) * term_transform(term, t, s)
+        # a factor free of t is a constant of the transform: a*sin(t) is
+        # a/(1 + s**2) (the fourth review, L7, found it refused)
+        constants, moving = factors.partition { |base, exp| !base.variables.include?(t.name) && !Expression.lift(exp).variables.include?(t.name) }
+        term = Simplify.rebuild_product(1, moving.to_h)
+        scale = Simplify.rebuild_product(coefficient, constants.to_h)
+        result += scale * term_transform(term, t, s)
       end
       result.simplify
     end

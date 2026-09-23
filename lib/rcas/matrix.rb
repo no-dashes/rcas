@@ -185,6 +185,8 @@ module RCAS
     # the exact elimination found the -5.6e-17 left of 0.3 - 3*0.1 (fourth
     # review, L10).
     def rank
+      found = full_rank_at_a_point
+      return found if found
       return Elimination.rref(entries).last.size unless floating?
       rows = Matrix.float_rows(entries)
       Matrix.float_eliminate(rows, Matrix.float_scale(rows) * FLOAT_TOLERANCE).last.size
@@ -339,6 +341,24 @@ module RCAS
     end
 
     FLOAT_TOLERANCE = 1e-9
+
+    # The rank of a symbolic matrix is the generic one, and full rank at a
+    # single rational point proves it: a maximal minor that is not 0 there
+    # is not the zero function. The elimination over rational functions
+    # swells (a generic 5x5 ran for minutes: fourth review, section 4), so
+    # it is left for a matrix that is deficient at the point. nil otherwise.
+    def full_rank_at_a_point
+      return nil if floating?
+      names = entries.flatten.flat_map { |e| Expression.lift(e).variables }.uniq
+      return nil if names.empty?
+      point = names.each_with_index.to_h { |name, i| [name, Num.new(Rational(Scalar::PRIMES[i % Scalar::PRIMES.size] + i, 7 + 2 * i))] }
+      values = entries.map { |row| row.map { |e| Expression.lift(e).subs(point).simplify } }
+      return nil unless values.flatten.all? { |v| v.is_a?(Num) && (v.value.is_a?(Integer) || v.value.is_a?(Rational)) }
+      full = [rows, cols].min
+      Elimination.rref(values).last.size == full ? full : nil
+    rescue ZeroDivisionError
+      nil
+    end
 
     def self.float_rows(entries) = entries.map { |row| row.map { |e| Complex(Expression.lift(e).evalf) } }
     def self.float_scale(rows) = rows.flatten.map(&:abs).max || 0.0
