@@ -204,7 +204,11 @@ module RCAS
 
       # int dx / ((x - alpha)^k sqrt(Q)) with x - alpha = 1/t:
       #   Q(x) = (Q(alpha) t^2 + Q'(alpha) t + a) / t^2 =: Qt(t) / t^2
-      #   integrand -> -t^(k-1) / sqrt(Qt) dt, and sqrt(Qt) = sqrt(Q) / (x - alpha) afterwards.
+      #   integrand -> -sign(t) t^(k-1) / sqrt(Qt) dt, and sqrt(Qt) = sqrt(Q)*|t|.
+      # The sign is the part that is easy to lose: sqrt(Q) = sqrt(Qt)/|t|,
+      # not sqrt(Qt)/t, and without it the antiderivative had the wrong sign
+      # left of alpha (the fourth review, D1: int_{-3}^{-1} dx/((2x + 1)
+      # sqrt(x**2 + 1)) came out positive).
       def linear_denominator(alpha, k, root, abc, x, depth)
         a, b, c = abc
         t = Var.new(:"_t#{depth}")
@@ -215,8 +219,8 @@ module RCAS
         r = Integrate.attempt(g, t, depth + 1)
         return nil unless r && Integrate.complete?(r)
         shifted = (x - Num.new(alpha)).simplify
-        r = replace_root(r, qt, root**Rational(1, 2) / shifted, 2)
-        r.subs(t => 1 / shifted).simplify
+        r = replace_root(r, qt, root**Rational(1, 2) / Fn.new(:abs, [shifted]), 2)
+        (Fn.new(:sign, [shifted]) * r.subs(t => 1 / shifted)).simplify
       end
 
       # Replace base**e by root**(n e) (root stands for base**(1/n)) and a bare

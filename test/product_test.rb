@@ -43,7 +43,11 @@ class ProductTest < Minitest::Test
     assert_product 3**K, 0, "3**(n*(1 + n)/2)"
     assert_equal "a**(n*(1 + n)/2)", product(RCAS::Var.new(:a)**K, 1, N).to_s
     assert_equal "x**n", product(RCAS::Var.new(:x), 1, N).to_s
-    assert_equal "0", product(K, 0, N).to_s
+    # 0 from n = 0 on, but the empty product 1 at n = -1: no one closed form
+    # (the fourth review's product(k - 1, k, 1, n) at n = 0), so it stays
+    # formal, and each n gives its value
+    assert_equal "product(k, k, 0, n)", product(K, 0, N).to_s
+    assert_equal "0", product(K, 0, N).subs(n: 3).doit.to_s
   end
 
   def test_numeric_and_formal

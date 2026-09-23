@@ -47,7 +47,31 @@ module RCAS
       to = Expression.lift(to)
       whole_bounds!(from, to)
       return UNDEFINED if pole_in_range?(f, k, from, to)
+      # a fixed pole past the lower bound is inside the range for every upper
+      # bound beyond it: sum(1/((k - 3)*(k - 2)), k, 0, n) has no value from
+      # n = 2 on, and the telescoped closed form was finite there (fourth
+      # review, S4); the sum stays formal and says so at any number
+      return Sum.new(f, k, from, to) if pole_past_start?(f, k, from, to)
       hypergeometric_form(summed(f, k, from, to), to)
+    end
+
+    def pole_past_start?(f, k, from, to)
+      return false unless from.is_a?(Num) && from.value.is_a?(Integer)
+      return false if to.variables.empty? || to.variables.include?(k.name)
+      integer_poles(f, k).any? { |p| p >= from.value }
+    end
+
+    def integer_poles(f, k)
+      Analysis.denominators(f, k).flat_map do |d|
+        roots = begin
+          Solve.solve(d, k)
+        rescue StandardError, NotImplementedError => rescued
+          RCAS.guard!(rescued) if rescued.is_a?(StandardError)
+          next []
+        end
+        next [] unless roots.is_a?(Array)
+        roots.filter_map { |r| r.value if r.is_a?(Num) && r.value.is_a?(Integer) }
+      end
     end
 
     # A sum runs over integers: sum(k, k, 1.5, 3) was 5.625, which is
@@ -69,16 +93,7 @@ module RCAS
       return false unless from.is_a?(Num) && from.value.is_a?(Integer)
       upper = Limits.infinite?(to) ? Float::INFINITY : (to.is_a?(Num) && to.value.is_a?(Integer) ? to.value : nil)
       return false if upper.nil?
-      Analysis.denominators(f, k).any? do |d|
-        roots = begin
-          Solve.solve(d, k)
-        rescue StandardError, NotImplementedError => rescued
-          RCAS.guard!(rescued)
-          next false
-        end
-        next false unless roots.is_a?(Array)
-        roots.any? { |r| r.is_a?(Num) && r.value.is_a?(Integer) && r.value >= from.value && r.value <= upper }
-      end
+      integer_poles(f, k).any? { |p| p >= from.value && p <= upper }
     end
 
     def summed(f, k, from, to)

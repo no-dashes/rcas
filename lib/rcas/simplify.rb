@@ -252,6 +252,22 @@ module RCAS
       [coeff, factors]
     end
 
+    # sign(u)*|u|**e is u**e for an odd e, since |u| = u*sign(u) and
+    # sign(u)**2 = 1 wherever the product has a value: sign(x)/abs(x) is
+    # 1/x, which an antiderivative valid on both sides of a point writes.
+    def sign_times_abs(factors)
+      factors.each do |base, exp|
+        next unless base.is_a?(Fn) && base.name == :sign && exp == 1
+        modulus = Fn.new(:abs, base.args)
+        power = factors[modulus]
+        next unless power.is_a?(Integer) && power.odd?
+        rest = factors.reject { |b, _| b == base || b == modulus }
+        add_factor(rest, base.args.first, power)
+        return rest
+      end
+      factors
+    end
+
     def rebuild_product(coeff, factors)
       coeff = normalize_number(coeff)
       # 0*oo and oo/oo have no value either (the second reaches here as an
@@ -261,6 +277,7 @@ module RCAS
       coeff, factors = absorb_infinity(coeff, factors) if factors.key?(OO)
       return Num.new(0) if factors.nil?
       return Num.new(coeff) if factors.all? { |_, exp| exp.is_a?(Numeric) && exp.zero? }
+      factors = sign_times_abs(factors) if factors.keys.any? { |b| b.is_a?(Fn) && b.name == :sign }
       # (-1)**(k/2) is i**k: sqrt(-1/4) came out as (-1)**(1/2)/2 while
       # sqrt(-4) was 2*i (third review, 3.3)
       minus_one = Num.new(-1)

@@ -42,11 +42,20 @@ module RCAS
     def product(f, k, from, to)
       f = Expression.lift(f).simplify
       k = Expression.lift(k)
-      from = Expression.lift(from)
-      to = Expression.lift(to)
+      # -1 + 3 is the bound 2 (what subs leaves), and 5/2 is no bound at all:
+      # a product steps over integers, as a sum does (fourth review, S11)
+      from = Expression.lift(from).simplify
+      to = Expression.lift(to).simplify
       raise ArgumentError, "product: the index must be a symbol, got #{k}" unless k.is_a?(Var)
+      [from, to].each do |b|
+        next unless b.is_a?(Num) && b.value.is_a?(Numeric) && b.value.real? && b.value != b.value.round
+        raise ArgumentError, "product: the bounds must be integers, got #{b}"
+      end
       count = (to - from + 1).simplify
       return (f**count).simplify unless f.variables.include?(k.name)
+      # a factor with no value makes a product with none: 1/k at k = 0
+      return UNDEFINED if Summation.pole_in_range?(f, k, from, to)
+      return Product.new(f, k, from, to) if Summation.pole_past_start?(f, k, from, to)
       return Product.new(f, k, from, to) if Limits.infinite?(to) || Limits.infinite?(from)
 
       closed_form(f, k, from, to, count) || direct(f, k, from, to) || Product.new(f, k, from, to)
@@ -102,7 +111,11 @@ module RCAS
       if lower.is_a?(Num) && lower.value.is_a?(Integer) && lower.value <= 0
         upper = (to + Num.new(r)).simplify
         return Num.new(0) if upper.is_a?(Num) && upper.value >= 0
-        return Num.new(0) unless upper.is_a?(Num) # symbolic upper bound: the range reaches the zero
+        # a symbolic upper bound reaches the zero only from some n on:
+        # product(k - 3, k, 1, n) is 1, -2, 2 at n = 0, 1, 2 and was 0 for
+        # every n, and product(k - 1, k, 1, n) is the empty product 1 at
+        # n = 0 (fourth review); no single closed form says both
+        return nil unless upper.is_a?(Num)
       end
       if r.denominator == 1
         RCAS.factorial((to + Num.new(r)).simplify) / RCAS.factorial((from + Num.new(r) - 1).simplify)

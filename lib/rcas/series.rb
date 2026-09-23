@@ -156,6 +156,14 @@ module RCAS
       if infinite?(a) && (through = through_exponential(f, x, a))
         return through
       end
+      # erf(u) = 1 - erfc(u): as a constant up to an exponentially small tail
+      # erf lost that tail, which exp(x**2) multiplies back - x*(1 - erf(x))*
+      # exp(x**2) came out as oo, not 1/sqrt(pi) (fourth review, D4)
+      if infinite?(a) && f.each_node.any? { |n| n.is_a?(Fn) && n.name == :erf }
+        tail = f.subs(f.each_node.select { |n| n.is_a?(Fn) && n.name == :erf }.uniq.to_h { |n| [n, Num.new(1) - Fn.new(:erfc, n.args)] }).simplify
+        found = limit(tail, x, a, dir)
+        return found unless found.is_a?(Limit)
+      end
       if (through = through_logarithm(f, x, a, dir))
         return through
       end
@@ -639,12 +647,31 @@ module RCAS
       raise SeriesError, "#{f} has no series where its argument is #{c}" if at_kink
     end
 
+    # The argument's series to the order asked for: a cancellation costs
+    # known terms (sqrt(x**2 + x) - x at infinity is 1/2 - 1/(8x) + ...,
+    # and at order 3 nothing of it was known), and a function of it then
+    # read an unknown constant term as 0 - exp of it came out as 1 + O(1/x**3)
+    # instead of starting with e**(1/2) (fourth review, D6).
+    # Only the constant term has to be known for the answer to be right; a
+    # shorter known order is carried by the result, and the adaptive loop at
+    # the top asks again for more.
+    def known_argument(argument, order)
+      s = expand(argument, order)
+      extra = order
+      4.times do
+        break if s.order >= 1
+        extra += 2 - s.order
+        s = expand(argument, extra)
+      end
+      s.order > order ? s.truncate(order) : s
+    end
+
     def function(f, order)
       raise SeriesError, "#{f.name} takes one argument" unless f.args.size == 1
       name = f.name
       return expand(Fn.new(:sin, f.args) / Fn.new(:cos, f.args), order) if name == :tan
 
-      s = expand(f.args.first, order)
+      s = known_argument(f.args.first, order)
       return Series.constant(Fn.new(name, [s.constant_term]).simplify, order) if s.zero? || (s.terms.keys - [0]).empty?
 
       if name == :log

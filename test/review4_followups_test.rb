@@ -270,6 +270,58 @@ class Review4FollowupsTest < Minitest::Test
     assert_equal "(-oo, -1)", RCAS.solve((@x**2 + @x) / @x < 0, @x).to_s
   end
 
+  # ---- the Float route of Decide -----------------------------------------------------------
+
+  # A running error bound: a quotient cancels nothing (sqrt(2)/92160 is
+  # plainly not 0), a difference of close terms carries their errors, and a
+  # function of a large argument inherits the argument's error.
+  def test_a_float_is_believed_well_above_its_error_bound
+    assert RCAS::Decide.float_nonzero?(RCAS.sqrt(2) / 92_160)
+    refute RCAS::Decide.float_nonzero?(RCAS.sqrt(2) * RCAS.sqrt(3) - RCAS.sqrt(6))
+    refute RCAS::Decide.float_nonzero?(RCAS.sin(n(10)**20))
+    refute RCAS::Decide.float_nonzero?(n(10)**30 * (RCAS.sqrt(2)**2 - 2))
+    assert RCAS::Decide.float_nonzero?(RCAS.asin(n(2))) # complex, clear of 0
+  end
+
+  # sign(u)*|u|**e is u**e for an odd e.
+  def test_a_sign_times_a_modulus
+    assert_equal (1 / @x).simplify, (RCAS.sign(@x) / RCAS.abs(@x)).simplify
+    assert_equal @x, (RCAS.sign(@x) * RCAS.abs(@x)).simplify
+    assert_equal "abs(x)**2*sign(x)", (RCAS.sign(@x) * RCAS.abs(@x)**2).simplify.to_s # even: unchanged
+  end
+
+  # The antiderivative through t = 1/(x - alpha) holds on both sides of
+  # alpha: checked by differentiating left and right of -1/2.
+  def test_a_linear_factor_under_a_radical_on_both_sides
+    f = 1 / ((2 * @x + 1) * RCAS.sqrt(@x**2 + 1))
+    r = RCAS.integrate(f, @x)
+    [-2.0, -0.7, 0.3, 2.0].each { |p| assert_in_delta 0, (r.diff(@x) - f).evalf(x: p), 1e-12 }
+  end
+
+  # erf(u) at infinity through erfc: the tail that exp(x**2) multiplies back.
+  def test_limits_of_erf_at_infinity
+    assert_equal n(1), RCAS.limit(RCAS.erf(@x), @x, RCAS::OO)
+    assert_equal n(-1), RCAS.limit(RCAS.erf(@x), @x, -RCAS::OO)
+    assert_equal n(0), RCAS.limit(RCAS.erf(@x) / @x, @x, RCAS::OO)
+  end
+
+  # Products: a factor with a pole makes an undefined product, a bound that
+  # is no integer is refused, a zero past the start keeps the product formal.
+  def test_products_with_poles_zeros_and_fractional_bounds
+    assert_equal RCAS::UNDEFINED, RCAS.product(1 / @k, @k, 0, 3)
+    assert_equal n(1r / 6), RCAS.product(1 / @k, @k, 1, 3)
+    assert refused { RCAS.product(@k, @k, 1, 5r / 2) }
+    assert_kind_of RCAS::Product, RCAS.product(@k - 3, @k, 1, @n)
+    assert_equal n(0), RCAS.product(@k - 3, @k, 1, 5)
+  end
+
+  # A fixed pole past the start leaves a sum with a symbolic bound formal;
+  # a pole before the start does not.
+  def test_a_sum_past_a_fixed_pole
+    assert_kind_of RCAS::Sum, RCAS.sum(1 / ((@k - 3) * (@k - 2)), @k, 0, @n)
+    assert_equal (@n / (1 + @n)).simplify, RCAS.sum(1 / (@k * (@k + 1)), @k, 1, @n)
+  end
+
   # Poisson pmf in Floats keeps its digits too: e**-2 * 2**3/3!.
   def test_a_float_poisson_pmf_keeps_its_digits
     assert_in_delta Math.exp(-2) * 8 / 6, RCAS::Distributions::Poisson.new(2.0).pdf(3).value, 1e-17

@@ -114,4 +114,75 @@ class Review2SummationTest < Minitest::Test
     result = RCAS.rsolve(eqn, :u, @n, init: { 0 => 1, 1 => 2 })
     (0..7).each { |m| assert_equal (1..m + 1).reduce(1, :*), value(result.rhs, n: m), "u(#{m})" }
   end
+
+  # PRE-EXISTING. A Product whose bounds are numbers not yet folded (what subs
+  # leaves: -1 + 3) never evaluates - doit, simplify and evalf all hand it back -
+  # while a Sum with the same bounds does. prod_{k=0}^{2} (1 + k**2) = 1*2*5 = 10.
+  # This is why rsolve's product answers could not be evaluated at any n.
+  def test_a_product_with_unfolded_numeric_bounds_evaluates
+    pr = RCAS::Product.new(1 + @k**2, @k, n(0), RCAS::Add.new(n(-1), n(3)))
+    assert_equal 10, value(pr.doit)
+  end
+
+  # NOT FIXED (S4 for a symbolic upper bound). pole_in_range? gives up when the
+  # upper bound is not a number, but a pole at a fixed integer >= the lower
+  # bound lies inside the range for every n past it: sum_{k=0}^{n}
+  # 1/((k-3)(k-2)) has no value for n >= 2, and rcas answers (-1/3 - n/3)/(n - 2),
+  # which is 1/6 ... finite at n = 5. From k = -5 the poles -1 and 0 are inside
+  # for n >= -1. From k = 0 the pole at 0 even raises ZeroDivisionError.
+  def test_a_fixed_pole_below_a_symbolic_upper_bound_is_in_the_range
+    [[1 / ((@k - 3) * (@k - 2)), 0, 5], [1 / (@k * (@k + 1)), -5, 2], [1 / (@k * (@k + 1)), 0, 3]].each do |term, lo, m|
+      result = begin
+        RCAS.sum(term, @k, lo, @n)
+      rescue NotImplementedError, ArgumentError
+        next
+      end
+      next if declined?(result) || result.is_a?(RCAS::Piecewise)
+      refute finite_number?(RCAS::Expression.lift(result).subs(n: m)),
+             "sum(#{term}, k, #{lo}, n) = #{result} is finite at n = #{m}, where the range holds a pole"
+    end
+  end
+
+  # NOT FIXED (S2 at the boundary). atan(x)/x = sum (-1)^k x^(2k)/(2k+1) has
+  # radius 1, and within_radius? admits |x| = 1 - but at x = +-i the series is
+  # sum 1/(2k+1), which diverges (atan has its poles there). rcas answers
+  # -i*atan(i) for sum 1/(2k+1) and -2*i*atan(i) for sum 1/(k + 1/2).
+  def test_the_arctangent_series_diverges_at_its_singular_boundary_points
+    [1 / (2 * @k + 1), 1 / (@k + Rational(1, 2))].each do |term|
+      result = begin
+        RCAS.sum(term, @k, 0, RCAS::OO)
+      rescue ArgumentError, NotImplementedError
+        next
+      end
+      assert declined?(result), "sum(#{term}, k, 0, oo) = #{result}, but the terms behave like 1/(2k) and the series diverges"
+    end
+  end
+
+  # NOT FIXED (S11 for products). Sums refuse a non-integer bound now; products
+  # still run Gamma at it: product(k, k, 1, 5/2) is 15*sqrt(pi)/8, but the
+  # factors of k = 1, 2 multiply to 2. A refusal or the stepped value is fine.
+  def test_products_step_over_integers_too
+    [[Rational(5, 2), 2], [2.5, 2]].each do |hi, stepped|
+      result = begin
+        RCAS.product(@k, @k, 1, hi)
+      rescue ArgumentError
+        next
+      end
+      assert_in_delta stepped, RCAS::Expression.lift(result).evalf.to_f, 1e-12, "product(k, k, 1, #{hi}) = #{result}"
+    end
+  end
+
+  # PRE-EXISTING (missed in round 3). prod_{k=1}^{n} (k - 3) is 1, -2, 2 for
+  # n = 0, 1, 2 and 0 only from n = 3 on; rcas answers 0 for every n. The same
+  # for prod_{k=1}^{n} (k - 1), which is 1 at n = 0.
+  def test_a_product_through_a_zero_is_zero_only_past_it
+    [[@k - 3, 3], [@k - 1, 1]].each do |term, root|
+      result = RCAS.product(term, @k, 1, @n)
+      next if result.is_a?(RCAS::Product) || result.is_a?(RCAS::Piecewise)
+      (0...root).each do |m|
+        want = (1..m).reduce(1r) { |acc, j| acc * (j - root) }
+        assert_equal want, value(result, n: m), "product(#{term}, k, 1, n) at n = #{m}"
+      end
+    end
+  end
 end

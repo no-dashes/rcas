@@ -200,11 +200,16 @@ module RCAS
       false
     end
 
+    # log(0), oo, and atan(+-i): the arctangent series has radius 1 and its
+    # singularities at +-i, where sum 1/(2k + 1) diverges (fourth review).
     def divergent?(value)
       value.each_node.any? do |n|
-        (n.is_a?(Fn) && n.name == :log && n.args.first.is_a?(Num) && n.args.first.zero?) || n == OO
+        (n.is_a?(Fn) && n.name == :log && n.args.first.is_a?(Num) && n.args.first.zero?) || n == OO ||
+          (n.is_a?(Fn) && n.name == :atan && plus_minus_i?(n.args.first.simplify))
       end
     end
+
+    def plus_minus_i?(u) = u.is_a?(Num) && u.value.is_a?(Complex) && u.value.real.zero? && u.value.imaginary.abs == 1
 
     # sqrt(e) when e is a perfect square (x**2, 4*y**2); any sqrt when not exact_only.
     def root_of(e, exact_only)

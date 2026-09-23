@@ -34,9 +34,6 @@ module RCAS
     # Two precisions agree on a value when they differ by less than this
     # relative amount.
     AGREE = BigDecimal("1e-10")
-    # A Float is believed when it exceeds rounding at the largest
-    # intermediate magnitude by this factor.
-    FLOAT_MARGIN = 1e-9
 
     # :positive, :negative or :zero for a real constant; nil when that is
     # not decided (not constant, not real, or beyond the routes above).
@@ -242,44 +239,161 @@ module RCAS
     end
 
     def float_sign(e)
-      v, scale = float_with_scale(e)
-      return nil unless v.is_a?(Float) && v.finite?
-      return nil unless v.abs > scale * Float::EPSILON / FLOAT_MARGIN
+      v, error = float_with_error(e)
+      return nil unless v.is_a?(Float) && v.abs > ERROR_MARGIN * error
       v.positive? ? :positive : :negative
     end
 
     # A complex Float that stands clear of rounding is not zero; nothing
     # smaller is decided.
-    def complex_float_zero?(e)
-      v, scale = float_with_scale(e)
-      return nil unless v.is_a?(Numeric) && v.abs.finite?
-      v.abs > scale * Float::EPSILON / FLOAT_MARGIN ? false : nil
+    def complex_float_zero?(e) = float_nonzero?(e) ? false : nil
+
+    # The value as a Float or Complex and a bound on its rounding error, in
+    # one walk: an exact number is off by half an ulp, a sum by the errors
+    # of its terms, a product relatively, a function by its derivative
+    # times the error of its argument (a first-order running error bound).
+    # A value well above its bound is not rounding. nil when there is no
+    # number. (The largest intermediate magnitude stood in for the bound
+    # before, which counted the 92160 of sqrt(2)/92160 as a magnitude that
+    # might have cancelled; and it evaluated every node separately.)
+    def float_with_error(e)
+      float_bound(e)
+    rescue ZeroDivisionError, Math::DomainError, FloatDomainError
+      nil
     end
 
-    # The value as a Float or Complex, and the largest magnitude of any
-    # subexpression on the way to it: a result far above the rounding of
-    # that magnitude is not rounding. nil when there is no number.
-    def float_with_scale(e)
-      nodes = e.each_node.to_a
-      return [nil, 0.0] if nodes.size > 400
-      scale = 0.0
-      value = nil
-      nodes.each do |node|
-        v = begin
-          node.evalf
-        rescue StandardError, Math::DomainError => rescued
-          RCAS.guard!(rescued)
-          nil
+    # A Float that stands clear of its rounding error is not 0: the quick
+    # half of every zero test, asked before the exact routes, which can cost
+    # a factorization over a number field.
+    def float_nonzero?(e)
+      value, error = float_with_error(e)
+      !value.nil? && value.abs > ERROR_MARGIN * error
+    end
+
+    # How far above its error bound a value has to be (the bound is first
+    # order, and the functions' derivatives are taken at the value).
+    ERROR_MARGIN = 64
+    EPS = Float::EPSILON
+
+    def float_bound(e)
+      value, error =
+        case e
+        when Num
+          x = e.value
+          case x
+          when Integer, Rational then [x.to_f, x.to_f.abs * EPS]
+          when Float then [x, x.abs * EPS]
+          when Complex then [Complex(x.real.to_f, x.imaginary.to_f), x.abs.to_f * EPS]
+          end
+        when Const then e.name == :pi ? [Math::PI, Math::PI * EPS] : nil
+        when Neg
+          a, ea = float_bound(e.arg)
+          a && [-a, ea]
+        when Add, Sub, Mul, Div
+          a, ea = float_bound(e.left)
+          return nil if a.nil?
+          b, eb = float_bound(e.right)
+          return nil if b.nil?
+          case e
+          when Add then (v = a + b) && [v, ea + eb + v.abs * EPS]
+          when Sub then (v = a - b) && [v, ea + eb + v.abs * EPS]
+          when Mul then (v = a * b) && [v, a.abs * eb + b.abs * ea + ea * eb + v.abs * EPS]
+          else
+            return nil if b.abs <= eb
+            v = a / b
+            [v, (ea + v.abs * eb) / (b.abs - eb) + v.abs * EPS]
+          end
+        when Pow then power_bound(e)
+        when Fn
+          return nil unless e.args.size == 1
+          a, ea = float_bound(e.args.first)
+          a && function_bound(e.name, a, ea)
         end
-        v = v.value if v.is_a?(Num)
-        v = v.to_f if v.is_a?(Decimal)
-        next unless v.is_a?(Numeric) && v.abs.to_f.finite?
-        value = v if node.equal?(e)
-        scale = [scale, v.abs.to_f].max
+      return nil unless value.is_a?(Numeric) && value.abs.finite? && error.finite?
+      [value, error]
+    end
+
+    def power_bound(e)
+      a, ea = float_bound(e.base)
+      return nil if a.nil?
+      n = e.exponent
+      if n.is_a?(Num) && n.value.is_a?(Integer)
+        k = n.value
+        return nil if k.negative? && a.abs <= ea
+        v = a**k
+        return [v, v.abs * EPS] if ea.zero?
+        # |d(a**k)| = |k|*|a|**(k - 1)*|da|, over the whole interval a +- ea
+        reach = k.negative? ? a.abs - ea : a.abs + ea
+        return [v, k.abs * reach**(k - 1) * ea + v.abs * EPS * (k.abs.bit_length + 1)]
       end
-      value = Complex(value.real.to_f, value.imaginary.to_f) if value.is_a?(Complex)
-      value = value.to_f if value.is_a?(Numeric) && !value.is_a?(Complex)
-      [value, scale]
+      b, eb = float_bound(n)
+      return nil if b.nil? || a.abs <= ea
+      v = complex_power(a, b)
+      logs = Math.log(a.abs).abs + Math::PI
+      [v, v.abs * (b.abs * ea / (a.abs - ea) + logs * eb + 4 * EPS)]
+    end
+
+    def complex_power(a, b)
+      return a**b if a.is_a?(Float) && a.positive? && b.is_a?(Float)
+      CMath_lite.exp(Complex(b) * CMath_lite.log(Complex(a)))
+    end
+
+    # [f(a), error] from the error of a: |f'| over a +- ea bounds the step.
+    def function_bound(name, a, ea)
+      v = function_value(name, a)
+      return nil if v.nil?
+      imaginary = a.is_a?(Complex) ? a.imaginary.abs : 0.0
+      slope =
+        case name
+        when :re, :im, :conj, :abs then 1.0
+        when :arg then a.abs > ea ? 1.0 / (a.abs - ea) : nil
+        when :sign then a.abs > ea ? 0.0 : nil
+        when :sin, :cos then Math.cosh(imaginary + ea)
+        when :erf, :erfc then imaginary.zero? ? 1.2 : nil
+        when :atan
+          # 1/(1 + z**2), bounded away from the poles at +-i
+          room = (1 + a * a).abs - 2 * a.abs * ea - ea * ea
+          room.positive? ? 1.0 / room : nil
+        when :exp then Math.exp(a.real + ea)
+        when :sinh, :cosh then Math.cosh(a.real.abs + ea) + 1
+        when :log then a.abs > ea ? 1.0 / (a.abs - ea) : nil
+        when :tan
+          c = Math.cos(a.real).abs
+          c > ea ? 1.0 / (c - ea)**2 : nil
+        when :asin, :acos
+          # 1/sqrt(1 - z**2), bounded away from +-1 (asin(2) is fine)
+          room = (1 - a * a).abs - 2 * a.abs * ea - ea * ea
+          room.positive? ? 1.0 / Math.sqrt(room) : nil
+        else
+          # re, im, gamma, ... by evalf: a slope we do not know is only
+          # harmless when the argument carries no error beyond an ulp
+          ea <= a.abs * 4 * EPS ? 1e3 * (v.abs + 1) : nil
+        end
+      return nil if slope.nil?
+      [v, slope * ea + v.abs * 8 * EPS]
+    end
+
+    def function_value(name, a)
+      if a.is_a?(Float)
+        case name
+        when :exp then return Math.exp(a)
+        when :sin, :cos, :atan, :sinh, :cosh, :tan, :erf, :erfc then return Math.public_send(name, a)
+        when :log then return a.positive? ? Math.log(a) : CMath_lite.log(Complex(a))
+        when :abs then return a.abs
+        when :sign then return (a <=> 0).to_f
+        when :asin, :acos then return Math.public_send(name, a) if a.abs <= 1
+        end
+      end
+      return a.abs if name == :abs
+      return a.real.to_f if name == :re
+      return a.imaginary.to_f if name == :im
+      return a.conj if name == :conj
+      return Math.atan2(a.imaginary.to_f, a.real.to_f) if name == :arg
+      return CMath_lite.public_send(name, Complex(a)) if CMath_lite::NAMES.include?(name)
+      # re, im, gamma, ...: evalf takes the function of the number
+      v = Fn.new(name, [Num.new(a)]).evalf
+      v = v.value if v.is_a?(Num)
+      v.is_a?(Numeric) ? (v.is_a?(Complex) ? Complex(v.real.to_f, v.imaginary.to_f) : v.to_f) : nil
     end
   end
 end

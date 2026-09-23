@@ -28,6 +28,10 @@ module RCAS
       return a.value.zero? if a.is_a?(Num)
       return identically_zero?(a) if a.is_a?(Expression) && !a.constant?
       return false unless a.is_a?(Expression) && a.constant? && a.each_node.none? { |n| n.is_a?(Integral) || n.is_a?(Derivative) }
+      # a value clear of its own rounding is no zero, and saying so costs a
+      # walk; the exact field arithmetic below cost seconds on the series
+      # coefficients of a Weierstrass antiderivative (fourth review)
+      return false if Decide.float_nonzero?(a)
       exact = Algebraic.exact(a)
       return exact.zero? if exact
       v = begin

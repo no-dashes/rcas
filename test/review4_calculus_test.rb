@@ -101,4 +101,59 @@ class Review2CalculusTest < Minitest::Test
     assert_equal n(0), RCAS.diff(RCAS.sqrt(@x - @x), @x).simplify
     assert_equal n(0), RCAS.diff(RCAS.sqrt(@x**2 - @x**2), @x).simplify
   end
+
+  # D1 was fixed only right of the pole. t = 1/(x - alpha) writes
+  # sqrt(x**2 + 1)/(x - alpha) as sqrt((x**2 + 1)/(x - alpha)**2), which is
+  # |...|: left of alpha = -1/2 the antiderivative has the wrong sign.
+  # int_{-3}^{-1} dx/((2x + 1) sqrt(x**2 + 1)) = -0.41907172842763...
+  # (quadrature; the integrand is negative on the whole range).
+  def test_linear_factor_under_a_radical_left_of_its_root
+    r = RCAS.integrate(1 / ((2 * @x + 1) * RCAS.sqrt(@x**2 + 1)), @x, -3, -1)
+    assert_integral(-0.4190717284276364, r)
+    r = RCAS.integrate(1 / ((3 * @x - 1) * RCAS.sqrt(@x**2 + @x + 1)), @x, -2, 0)
+    assert_integral(-0.6516882738978566, r)
+  end
+
+  # D4 was fixed for erfc; 1 - erf(x) is the same function and still meets
+  # log(0): x*(1 - erf(x))*exp(x**2) -> 1/sqrt(pi) [AS64, 7.1.23], and
+  # (erf(x) - 1)*exp(x**2)*x -> -1/sqrt(pi).
+  def test_one_minus_erf_has_the_erfc_tail
+    [[1 - RCAS.erf(@x), 1], [RCAS.erf(@x) - 1, -1]].each do |tail, sign|
+      r = RCAS.limit(@x * tail * RCAS.exp(@x**2), @x, RCAS::OO)
+      next if formal?(r)
+      assert_in_delta sign / Math.sqrt(Math::PI), value(r), 1e-12, "got #{r}"
+    end
+  end
+
+  # D6 fixed Series.compose, but a function of an argument that is zero to
+  # its known order still takes that zero as the constant term:
+  # sqrt(x**2 + x) - x = 1/2 - 1/(8x) + ..., so exp of it tends to e**(1/2)
+  # and log of it to log(1/2); the series said 1 + O(1/x**3) and
+  # log(0) + O(1/x**3) (limit gets both right).
+  def test_a_series_through_a_cancelling_argument_keeps_its_constant
+    u = RCAS.sqrt(@x**2 + @x) - @x
+    begin
+      s = RCAS.series(RCAS.exp(u), @x, RCAS::OO, 3)
+      refute_includes s.to_s, 'log(0)'
+      assert_in_delta Math.exp(0.5), value(RCAS.limit(RCAS.exp(u), @x, RCAS::OO)), 1e-12
+      refute_equal '1 + O(1/x**3)', s.to_s, 'the constant term is e**(1/2), not 1'
+      l = RCAS.series(RCAS.log(u), @x, RCAS::OO, 3)
+      refute_includes l.to_s, 'log(0)'
+    rescue RCAS::SeriesError
+      pass
+    end
+  end
+
+  # Performance regression of the D2 fix: the atan denominators bring break
+  # points whose one-sided limits take seconds each; the integral of
+  # 1/(sin**4 + cos**4) over 0..pi (= sqrt(2)*pi, right now) went from 0.9 s
+  # (wrong) to 13 s. A school integral should take well under two seconds.
+  def test_performance_weierstrass_definite_integral
+    r = Timeout.timeout(2, TooSlow) do
+      RCAS.integrate(1 / (RCAS.sin(@x)**4 + RCAS.cos(@x)**4), @x, 0, RCAS::PI)
+    end
+    assert_in_delta Math.sqrt(2) * Math::PI, value(r), 1e-12
+  rescue TooSlow
+    flunk 'integrate(1/(sin(x)**4 + cos(x)**4), x, 0, pi) took more than 2 s'
+  end
 end
