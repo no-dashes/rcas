@@ -152,11 +152,24 @@ class LatexWrapTest < Minitest::Test
     assert_equal '\left[1,\; x\right]', [1, x].to_latex(wrap: 50)
   end
 
+  # A stand-in for a terminal of a given size.
+  Terminal = Struct.new(:columns) do
+    def tty? = true
+    def winsize = [40, columns]
+  end
+
   def test_render_derives_the_width_from_the_terminal
     saved = ENV["COLUMNS"]
     ENV["COLUMNS"] = "100"
+    # not a terminal: COLUMNS decides
     assert_equal 52, RCAS::Render.wrap_width(StringIO.new)
-    assert_equal poly.to_latex(wrap: 52), RCAS::Render.latex(poly, wrap: :auto)
+    # a terminal's own width wins over COLUMNS, which is often stale
+    assert_equal 63, RCAS::Render.wrap_width(Terminal.new(120))
+    # :auto takes whatever the real $stdout measures. Comparing with 52 held
+    # only when $stdout was no terminal - it failed in a terminal once
+    # another test had loaded io/console (which gives IO#winsize), so it
+    # depended on the seed and never showed in a piped run
+    assert_equal poly.to_latex(wrap: RCAS::Render.wrap_width), RCAS::Render.latex(poly, wrap: :auto)
     assert_equal poly.to_latex, RCAS::Render.latex(poly)
     ENV["COLUMNS"] = "400"
     assert_equal 200, RCAS::Render.wrap_width(StringIO.new)

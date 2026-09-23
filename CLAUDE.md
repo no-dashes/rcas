@@ -379,6 +379,14 @@ MANUAL.md                   the user manual (usage); README.md (setup only); ass
 - **Run the suite under Ruby 4 too** before a review round:
   `RCAS_STRICT=1 /opt/homebrew/opt/ruby@4/bin/ruby -Ilib -Itest -e 'Dir["test/**/*_test.rb"].sort.each { |f| require File.expand_path(f) }'`
   (Homebrew's; its default parser is Prism and its Hash#inspect is the 3.4 one). Both were green on 23 Sept 2026: 1184 runs, 4 skips under Ruby 4 (the chat tests without the anthropic gem).
+- **Run the suite in a terminal now and then, not only piped**: a
+  session's output is piped, the user's is a tty, and code that asks the
+  terminal (`Render.wrap_width` reads `IO#winsize` once `io/console` is
+  loaded by some other test) behaves differently. `script -q /dev/null sh
+  -c 'stty cols 120 rows 40; ruby -S rake'` gives it a sized pseudo-terminal
+  (without `stty` the size is 0 and the fallback hides the difference).
+  A failure that shows only for the user and only under some seeds was
+  this (24 Sept 2026).
 - Smoke-test interactively with piped input:
   `printf 'x + 1\n' | ruby bin/rcas` (no `=> ` prefix without a tty) or
   `printf '/settings\n' | RCAS_HOME=/tmp/h ruby bin/rcas-chat`.
