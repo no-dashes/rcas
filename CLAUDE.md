@@ -169,7 +169,8 @@ lib/rcas/domains.rb         NN ZZ QQ RR CC, assumptions, Infer (domain inference
 lib/rcas/polynomial.rb      ring elements: {exponent vector => coefficient}
 lib/rcas/coefficients.rb    degree/ldegree/lcoeff/tcoeff/coeff/coeffs/collect on expressions (via Expand.table)
 lib/rcas/gcd.rb             primitive PRS gcd (multivariate over ZZ/QQ), xgcd, lcm
-lib/rcas/factor.rb          Zassenhaus over ZZ (Dense integer arrays), Kronecker for multivariate, Factorization
+lib/rcas/factor.rb          Zassenhaus over ZZ (Dense integer arrays), Kronecker for multivariate, Factorization; `recombine` is the subset search, kept beside van Hoeij for comparison
+lib/rcas/van_hoeij.rb       Factor::VanHoeij: recombination by LLL [vHo02] on the coefficients of f*g'/g [HvHN11], bounded through Fujiwara's root bound [Fuj16]. Rounds of two columns each (smallest bound first); after LLL, cut at the last |b*_s|**2 <= r + columns; stop when the rref of the 0/1 part is a partition and every candidate divides; else double the precision (MAX_RAISES) and then fall back to the subsets. `Factor.recombination` (thread-local, `with_recombination`, nil inherits) is :auto/:van_hoeij/:zassenhaus; :auto takes the lattice from VAN_HOEIJ_FROM = 20 modular factors, measured (the subsets win below: their trailing-coefficient filter prunes nearly everything)
 lib/rcas/fraction.rb        cancel (rational normal form), rationalize
 lib/rcas/rational_function.rb  numer/denom (integral normal form), apart (xgcd splitting + p-adic expansion over QQ or Frac(QQ[params])[x]), gcd/lcm/quo/rem/divmod on expressions
 lib/rcas/number_theory.rb   integer factor (trial division, Miller-Rabin, Pollard-Brent rho), isprime, next/prevprime, divisors, totient, invmod, chrem; IntegerFactorization
@@ -1630,7 +1631,7 @@ non-polynomial parts, number fields with more than two generators,
 polynomials over a non-commutative base (a matrix ring: `Domain#scalar?` is
 false for `MatrixSpace`/`VectorSpace` and `PolynomialRing` refuses them,
 since `Polynomial`'s coefficients are Expressions),
-infinite products, LLL of a dependent generating set (MLLL; `lll` wants a basis), the dual of a linear program, sensitivity analysis and parametric linear programs, formal power series whose
+infinite products, LLL of a dependent generating set (MLLL; `lll` wants a basis), a faster van Hoeij (its time is exact-rational LLL: 1.9 of 2.9 s on SD(6); Hart-van Hoeij-Novocin keep only the top bits of each trace column, which needs its own error bound - an integral lattice instead of a rational one gained nothing, tried 24 Sept 2026; quadratic Hensel lifting would halve the rest), the dual of a linear program, sensitivity analysis and parametric linear programs, formal power series whose
 coefficients are not hypergeometric (`tan`, `exp(x)/(1 - x)`, Fibonacci
 generating functions: `fps` refuses rather than guesses). Conway polynomials
 for GF(p^n) (we take the lexicographically smallest irreducible). Of

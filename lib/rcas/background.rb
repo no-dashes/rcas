@@ -22,7 +22,7 @@ module RCAS
       },
       factor: {
         maths: "Write a polynomial as a unit times powers of irreducible factors, over the integers or rationals (or an algebraic extension), or an integer as a product of primes. The factorization is unique.",
-        method: "Squarefree decomposition [Yun76], factoring modulo a prime by Cantor-Zassenhaus [CZ81], Hensel lifting of that factorization and recombination [Zas69]; several variables by Kronecker substitution [Knu98]; over QQ(alpha) by Trager's norm trick [Tra76]; integers by trial division and Pollard-Brent rho [Bre80]."
+        method: "Squarefree decomposition [Yun76], factoring modulo a prime by Cantor-Zassenhaus [CZ81], Hensel lifting of that factorization and recombination - by subsets [Zas69], or for many modular factors by van Hoeij's lattice [vHo02]; several variables by Kronecker substitution [Knu98]; over QQ(alpha) by Trager's norm trick [Tra76]; integers by trial division and Pollard-Brent rho [Bre80]."
       },
       cancel: {
         maths: "The rational normal form p/q with p and q coprime: nothing is lost, and a zero numerator is visible.",

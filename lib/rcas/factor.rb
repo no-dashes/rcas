@@ -7,7 +7,9 @@ module RCAS
   # Univariate: numeric content, squarefree decomposition (Yun), then for
   # every squarefree part Zassenhaus' algorithm - factor modulo a small
   # prime with Cantor-Zassenhaus, Hensel-lift to a modulus beyond the
-  # Mignotte bound, recombine subsets of the modular factors.
+  # Mignotte bound, recombine the modular factors: by van Hoeij's lattice
+  # (van_hoeij.rb) when there are many, by subsets otherwise, and by
+  # subsets whenever the lattice leaves the question open.
   #
   # Multivariate: pull out the content in the main variable (factored
   # recursively), squarefree-decompose, then reduce each part to one
@@ -431,6 +433,9 @@ module RCAS
         while m <= 2 * bound
           m *= p
           k += 1
+        end
+        if Factor.van_hoeij?(modular.size) && (found = VanHoeij.recombine(f, modular, p, k))
+          return found
         end
         lifted = hensel_lift_leading(f, modular, p, k)
         recombine(f, lifted, m).sort_by { |g| [Dense.deg(g), g] }

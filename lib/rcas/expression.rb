@@ -247,7 +247,7 @@ module RCAS
     # Factor over ZZ or QQ and return the product as an expression.
     #
     #   (:x**2 - 1).factor   # => (-1 + x)*(1 + x)
-    def factor(extension: nil) = to_poly.factor(extension: extension).to_expr
+    def factor(extension: nil, recombination: nil) = Factor.with_recombination(recombination) { to_poly.factor(extension: extension).to_expr }
 
     # Minimal polynomial over QQ of a constant algebraic expression.
     def minpoly(var = :x) = Algebraic.minpoly_of(self, var).to_expr

@@ -170,11 +170,13 @@ module RCAS
       v.positive? ? OO : Neg.new(OO)
     end
 
-    # factor(x**2 - 1), factor(360), factor(f, extension: sqrt(2))
-    def factor(obj, extension: nil)
+    # factor(x**2 - 1), factor(360), factor(f, extension: sqrt(2)); recombination: :van_hoeij, :zassenhaus or :auto
+    def factor(obj, extension: nil, recombination: nil)
       value = obj.is_a?(Num) ? obj.value : obj
       return NumberTheory.factor(value) if value.is_a?(Integer) || value.is_a?(Rational)
-      obj.is_a?(Polynomial) ? obj.factor(extension: extension) : Expression.lift(obj).factor(extension: extension)
+      Factor.with_recombination(recombination) do
+        obj.is_a?(Polynomial) ? obj.factor(extension: extension) : Expression.lift(obj).factor(extension: extension)
+      end
     end
     # minpoly(sqrt(2) + 1, x): the minimal polynomial of an algebraic number
     def minpoly(expr, var = :x) = Expression.lift(expr).minpoly(var)

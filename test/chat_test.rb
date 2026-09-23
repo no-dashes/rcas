@@ -403,7 +403,7 @@ class ChatHelpTest < Minitest::Test
 
   def test_one_name
     out = repl("/help factor\n")
-    assert_includes out, "factor(obj, extension: nil)"
+    assert_includes out, "factor(obj, extension: nil, recombination: nil)"
     assert_includes out, "factor(x**2 - 1)"
     assert_includes out, "also: e.factor"
     assert_includes out, "manual:"

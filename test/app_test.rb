@@ -91,7 +91,7 @@ class AppWorksheetTest < Minitest::Test
   def test_help_for_a_name_carries_the_documentation
     cell = @sheet.submit("/help factor")
     assert_equal "doc", cell[:kind]
-    assert_equal "factor(obj, extension: nil)", cell[:signature]
+    assert_equal "factor(obj, extension: nil, recombination: nil)", cell[:signature]
     refute_empty cell[:lines]
     assert(cell[:background].any? { |entry| entry[:label] == :maths })
     assert(cell[:reading].any? { |link| link.start_with?("https://") })

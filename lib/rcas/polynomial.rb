@@ -312,7 +312,8 @@ module RCAS
     # Factorization over ZZ or QQ into irreducibles.
     #
     #   QQ[:x].(:x**4 - 1).factor   # => (-1 + x)*(1 + x)*(1 + x**2)
-    def factor(extension: nil)
+    def factor(extension: nil, recombination: nil)
+      return Factor.with_recombination(recombination) { factor(extension: extension) } if recombination
       return FiniteFieldFactor.factor(self) if ring.base.is_a?(FiniteField)
       return Factor.factor(self) if extension.nil?
       field = extension.is_a?(AlgebraicField) ? extension : Algebraic.adjoin(extension)

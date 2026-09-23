@@ -90,6 +90,16 @@ class PerformanceTest < Minitest::Test
     end
   end
 
+  # A Swinnerton-Dyer polynomial of degree 64 is irreducible and splits into
+  # 32 quadratics modulo every prime: more than three minutes of subsets,
+  # about three seconds of van Hoeij's lattice (24 Sept 2026). :auto has to
+  # take the lattice here.
+  def test_van_hoeij_recombines_what_the_subsets_cannot
+    x = RCAS::Var.new(:x)
+    f = RCAS::Poly.swinnerton_dyer(6, x)
+    timed(30, "factor(Poly.swinnerton_dyer(6, x))") { assert RCAS::ZZ[:x].(f).factor.irreducible? }
+  end
+
   def test_the_third_reviews_cliffs_stay_flat
     x = RCAS::Var.new(:x)
     y = RCAS::Var.new(:y)

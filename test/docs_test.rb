@@ -6,7 +6,7 @@ class DocsTest < Minitest::Test
   def test_a_function
     d = RCAS.doc(:factor)
     assert_equal :function, d.kind
-    assert_equal "factor(obj, extension: nil)", d.signature
+    assert_equal "factor(obj, extension: nil, recombination: nil)", d.signature
     assert_includes d.lines.first, "factor(x**2 - 1)"
     assert_equal "e.factor", d.also
     refute_empty d.sections, "the manual sections that cover it"

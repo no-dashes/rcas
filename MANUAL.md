@@ -80,6 +80,7 @@ checked - nothing in them is typed by hand.
     - [Linear optimization](#linear-optimization)
   - [1.5 Domains and assumptions](#15-domains-and-assumptions)
   - [1.6 Polynomial rings](#16-polynomial-rings)
+    - [How the factors are found](#how-the-factors-are-found)
     - [gcd and division of expressions](#gcd-and-division-of-expressions)
     - [Gröbner bases](#gröbner-bases)
     - [Degree and coefficients](#degree-and-coefficients)
@@ -2801,7 +2802,8 @@ rcas> R.((x + 1)**2 * (x - 1)**3 * x).squarefree_decomposition
 `factor` returns a factorization object with `unit`, `factors` (pairs of
 polynomial and multiplicity), `expand` and `to_expr`. Factorization is
 exact over ZZ and QQ (squarefree decomposition, Cantor-Zassenhaus, Hensel
-lifting, recombination; Kronecker substitution for several variables). gcd
+lifting, recombination by subsets or by lattice reduction; Kronecker
+substitution for several variables). gcd
 over ZZ and QQ works in any number of variables.
 
 ```
@@ -2812,6 +2814,45 @@ rcas> [fact.unit, fact.factors.size, fact.expand]
 rcas> ZZ[x, y].(x**2 * y - y).gcd(x * y**2 - y**2)
 => -y + x*y
 ```
+
+#### How the factors are found
+
+A polynomial over ZZ is factored modulo a small prime p first, where it is
+easy. The factors are lifted to p**k by Hensel's lemma, so that every true
+factor over ZZ is a product of some of the lifted ones, and the last step
+is to find out which ones. Zassenhaus's method [Zas69] tries products of
+one, two, three, ... factors in turn. That is fast when the factors mod p
+match the factors over ZZ, but the number of products grows like
+2**(number of factors).
+
+A Swinnerton-Dyer polynomial shows the worst case. The one below is
+irreducible over ZZ, yet it splits into 8 quadratics modulo every prime,
+and the one of degree 64 splits into 32. Van Hoeij's method [vHo02]
+replaces the search by a lattice. Each true factor g gives a 0/1 vector
+that says which modular factors it contains, and a short vector next to
+it: the coefficients of f*g'/g, which are small for a true factor
+[HvHN11]. LLL (section 1.7) finds all those vectors at once. Every
+candidate is checked by dividing, so the lattice only has to find the
+answer, never prove it.
+
+```
+rcas> sd = Poly.swinnerton_dyer(4, x)
+=> 46225 - 5596840*x**2 + 13950764*x**4 - 7453176*x**6 + 1513334*x**8 - 141912*x**10 + 6476*x**12 - 136*x**14 + x**16
+rcas> ZZ[x].(sd).factor.irreducible?
+=> true
+rcas> twice = expand(sd * subs(sd, x, x + 1))
+rcas> ZZ[x].(twice).factor.size
+=> 2
+rcas> factor(twice, recombination: :van_hoeij) == factor(twice, recombination: :zassenhaus)
+=> true
+```
+
+`factor` uses Zassenhaus's method for fewer than 20 modular factors, where
+it is the faster of the two, and van Hoeij's from 20 on. `recombination:
+:van_hoeij` or `:zassenhaus` picks one, for comparing them. On this
+machine, both took about 0.2 s at 16 modular factors, van Hoeij's was
+twice as fast at 24, and at 32 (the Swinnerton-Dyer polynomial of degree
+64) it took 3 s while Zassenhaus's had not finished after three minutes.
 
 #### gcd and division of expressions
 
@@ -4727,7 +4768,8 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 |---|---|---|
 | canonical form, expansion on term tables | simplify.rb, expand.rb | own design; Mathematica-style ordering |
 | squarefree decomposition (Yun) | factor.rb | [Yun76]; [vzGG13, §14.6] |
-| factoring over ZZ: Cantor-Zassenhaus mod p, Hensel lifting, Mignotte bound, recombination | factor.rb | [Zas69]; [CZ81]; [Mig74]; [GCL92, ch. 8]; [vzGG13, ch. 15] |
+| factoring over ZZ: Cantor-Zassenhaus mod p, Hensel lifting, Mignotte bound, recombination by subsets | factor.rb | [Zas69]; [CZ81]; [Mig74]; [GCL92, ch. 8]; [vzGG13, ch. 15] |
+| recombination by lattice reduction (van Hoeij), with the coefficients of the logarithmic derivative and Fujiwara's root bound | van_hoeij.rb | [vHo02]; [HvHN11]; [Fuj16]; [LLL82] |
 | multivariate factoring by Kronecker substitution | factor.rb | [Knu98, §4.6.2]; [vzGG13, §8.4] |
 | x**n - 1 and x**n + 1 as products of cyclotomic polynomials | factor.rb | [Lan02, VI §3] |
 | polynomial gcd: Euclid, primitive pseudo-remainder sequences | gcd.rb | [Knu98, §4.6.1, Algorithm E]; [GCL92, ch. 7] |
@@ -4837,6 +4879,9 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   University Press, 1963.
 - [FDO14] freedesktop.org, *Desktop Entry Specification*, version 1.1
   (2014), https://specifications.freedesktop.org/desktop-entry-spec/
+- [Fuj16] M. Fujiwara, Über die obere Schranke des absoluten Betrages der
+  Wurzeln einer algebraischen Gleichung, *Tôhoku Math. J.* 10 (1916),
+  167-171.
 - [GCL92] K. O. Geddes, S. R. Czapor, G. Labahn, *Algorithms for Computer
   Algebra*, Kluwer 1992.
 - [GKP94] R. L. Graham, D. E. Knuth, O. Patashnik, *Concrete Mathematics*,
@@ -4865,6 +4910,9 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 - [HR09] P. Horn, D. Roozemond, OpenMath in SCIEnce: SCSCP and POPCORN,
   in *Intelligent Computer Mathematics (CICM 2009)*, LNCS 5625, Springer
   2009, 474-479.
+- [HvHN11] W. Hart, M. van Hoeij, A. Novocin, Practical polynomial
+  factoring in polynomial time, in: *Proc. ISSAC 2011*, ACM, 2011,
+  163-170.
 - [HW08] G. H. Hardy, E. M. Wright, *An Introduction to the Theory of
   Numbers*, 6th ed., Oxford University Press 2008.
 - [Kar81] M. Karr, Summation in finite terms, *J. ACM* 28 (1981),
@@ -4966,6 +5014,8 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 - [Tra76] B. M. Trager, Algebraic factoring and rational function
   integration, *Proc. SYMSAC '76*, ACM 1976, 219-226.
 - [Tuk77] J. W. Tukey, *Exploratory Data Analysis*, Addison-Wesley 1977.
+- [vHo02] M. van Hoeij, Factoring polynomials and the knapsack problem,
+  *J. Number Theory* 95 (2002), 167-189.
 - [vzGG13] J. von zur Gathen, J. Gerhard, *Modern Computer Algebra*, 3rd
   ed., Cambridge University Press 2013.
 - [Wel47] B. L. Welch, The generalization of 'Student's' problem when
