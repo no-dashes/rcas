@@ -92,6 +92,7 @@ checked - nothing in them is typed by hand.
     - [Factorizations](#factorizations)
     - [Orthogonality and least squares](#orthogonality-and-least-squares)
     - [Multiplying matrices: Strassen's seven products](#multiplying-matrices-strassens-seven-products)
+    - [Determinants modulo many primes](#determinants-modulo-many-primes)
     - [Lattices: LLL reduction](#lattices-lll-reduction)
   - [1.8 Differential equations and recurrences](#18-differential-equations-and-recurrences)
     - [Recurrences](#recurrences)
@@ -3546,6 +3547,77 @@ constant factors are so large that they would win only for matrices far
 bigger than any computer can hold. Strassen's is the only one below n**3
 used in practice. Whether the exponent can reach 2 is open.
 
+#### Determinants modulo many primes
+
+Gaussian elimination over QQ is exact, but its numbers grow as it goes:
+the entries after k steps are quotients of k x k minors, and each of the
+n**3 operations pays for their length and for a gcd. Modulo a prime p
+every number is small, and a determinant modulo p is quick. So rcas
+computes an integer determinant modulo several primes and puts the answer
+together with the Chinese remainder theorem. Done by hand:
+
+```
+rcas> hm = matrix([[2, 7, 1], [8, 2, 8], [1, 8, 2]])
+=> [2 7 1]
+   [8 2 8]
+   [1 8 2]
+rcas> res = [5, 7, 11, 13].map { |pr| matrix(GF(pr), hm.to_a).det }
+=> [1, 5, 7, 3]
+rcas> chrem(res, [5, 7, 11, 13])
+=> 4891
+rcas> [4891 - 5*7*11*13, hm.det]
+=> [-114, -114]
+```
+
+The residues only say what the determinant is modulo 5005, so there has
+to be a reason it lies between -2502 and 2502. That reason is Hadamard's
+inequality [Had93]: |det A| is at most the product of the lengths of the
+rows (and of the columns), because the volume of a box is at most the
+product of its sides.
+
+```
+rcas> hm.row_vectors.map(&:norm).reduce(:*).evalf
+=> 701.3073505960135
+```
+
+With three primes, 5*7*11 = 385, the reconstruction could not be trusted,
+since 701 is more than half of 385. With four it is a proof. rcas uses
+primes just below 2**31, so that the product of two residues is still one
+machine word, and takes as many as the bound asks for: about one per 31
+bits of the bound.
+
+An inverse and the solution of `a.solve(b)` come the same way, through
+Cramer's rule: det(A) times A**-1 is the adjugate, an integer matrix whose
+entries are determinants too, so Hadamard's inequality bounds them as
+well. A prime that divides det A gives no inverse modulo p, and is simply
+skipped for those; only finitely many primes divide it. Rational entries
+are scaled to integers row by row first. Measured on random integer
+matrices (24 Sept 2026, seconds, elimination / primes):
+
+| n, entries        | det           | inverse       | solve         |
+|-------------------|---------------|---------------|---------------|
+| 40, one digit     | 0.039 / 0.007 | 0.22 / 0.03   | 0.086 / 0.008 |
+| 60, one digit     | 0.16 / 0.034  | 0.97 / 0.16   | 0.41 / 0.037  |
+| 100, one digit    | 1.09 / 0.24   | 5.9 / 1.14    | 2.45 / 0.25   |
+| 30, 21 digits     | 0.078 / 0.035 | 0.41 / 0.18   | 0.16 / 0.041  |
+| 40, fractions     | 0.063 / 0.019 | 0.35 / 0.10   | 0.15 / 0.024  |
+
+The primes were faster at every size, a 2 x 2 matrix included, so every
+matrix of integers and fractions goes to them. `algorithm: :elimination`
+on `det`, `inverse` and `solve` still takes the old route, to compare:
+
+```
+rcas> big = matrix((1..12).map { |i| (1..12).map { |j| binomial(i + j, i) } })
+rcas> [big.det, big.det(algorithm: :elimination)]
+=> [13, 13]
+```
+
+A singular system that has solutions (free variables set to zero, as
+before) goes to the elimination, since there is no inverse to build.
+Floats, algebraic numbers and symbols keep their own routes as well. The
+method is in [vzGG13, §5.5]; Dixon's p-adic lifting [Dix82] would be the
+next step for a single system, and is not implemented.
+
 #### Lattices: LLL reduction
 
 A *lattice* is the set of all integer combinations of some linearly
@@ -4719,7 +4791,7 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | geometry | `point line circle distance midpoint angle area perimeter collinear? centroid intersect circumcircle perpendicular_bisector parallel_through perpendicular_through` |
 | special functions | `erf erfc Ei Si Ci li` |
 | domains | `NN ZZ QQ RR CC` (also `ℕ ℤ ℚ ℝ ℂ`), `GF assume forget assumptions` |
-| linear algebra | `vector matrix gram_schmidt least_squares project orthogonal? lu qr cholesky diagonalize jordan lll`, `a.multiply(b, algorithm: :strassen)` |
+| linear algebra | `vector matrix gram_schmidt least_squares project orthogonal? lu qr cholesky diagonalize jordan lll`, `a.multiply(b, algorithm: :strassen)`, `a.det(algorithm: :elimination)` |
 | holding | `hold evaluate` |
 | interchange | `openmath from_openmath popcorn from_popcorn` (Appendix D) |
 | worked solutions | `steps` (a block, or `:solve :factor :apart :rref :gcd :discuss`) |
@@ -4750,7 +4822,8 @@ coefficients are not hypergeometric (`tan`, `exp(x)/(1 - x)`), iterated
 integrals (a definite integral inside another one stays formal),
 lattice reduction of a dependent generating set (`lll` reduces a basis),
 the dual of a linear program and its sensitivity analysis, linear
-programs with parameters,
+programs with parameters, Dixon's p-adic solution of a linear system and
+fast (Strassen-based) elimination,
 convergence conditions on the parameters of a definite integral
 (`integrate(x**a, x, 0, 1)` is `1/(1 + a)` also where it diverges), the sign
 of an expression on a box of *several* parameter ranges that is not a
@@ -4821,6 +4894,7 @@ lib/rcas/poly_matrix.rb     det/solve/inverse/kernel of polynomial matrices by e
 lib/rcas/vector.rb          VectorSpace, Vector
 lib/rcas/matrix.rb          MatrixSpace, Matrix, elimination
 lib/rcas/matrix_multiply.rb the matrix product: bare Integers, and Strassen-Winograd
+lib/rcas/multimodular.rb    det, inverse and solve of integer and rational matrices modulo many primes
 lib/rcas/hold.rb            hold
 lib/rcas/functions.rb       the top-level functions
 lib/rcas/core_ext.rb        Symbol / Numeric extensions
@@ -4925,6 +4999,7 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | analytic geometry: lines and circles, the shoelace area | geometry.rb | [Spi08, ch. 4]; [Bra86] |
 | Gram-Schmidt orthogonalization, least squares by the normal equations | linear_algebra.rb | [Str16, ch. 4] |
 | matrix product: Integer arithmetic after clearing denominators; Strassen's algorithm in Winograd's form, with a measured cutoff; the exponent since | matrix_multiply.rb | [Str69]; [Win71]; [vzGG13, §12.1]; [CW90]; [ADVXXZ25] |
+| determinant, inverse and square systems of integer and rational matrices modulo many primes, with Hadamard's bound and Cramer's rule | multimodular.rb | [vzGG13, §5.5]; [Had93] |
 | LLL lattice basis reduction, exact, with the incremental Gram-Schmidt update | lattice.rb | [LLL82]; [Coh93, §2.6]; [vzGG13, ch. 16] |
 | linear optimization: two-phase simplex with Bland's rule, exact; whole numbers by branch and bound | linear_program.rb | [Dan63]; [Chv83, ch. 2-5]; [Bla77]; [LD60]; [Sch86] |
 | Laplace transform from the table with the shift rules, inverse by partial fractions | laplace.rb | [BD12, ch. 6] |
@@ -4968,6 +5043,8 @@ used in the source code comments (`# [GCL92, ch. 8]`).
   polynomials over finite fields, *Math. Comp.* 36 (1981), 587-592.
 - [Dan63] G. B. Dantzig, *Linear Programming and Extensions*, Princeton
   University Press, 1963.
+- [Dix82] J. D. Dixon, Exact solution of linear equations using p-adic
+  expansions, *Numer. Math.* 40 (1982), 137-141.
 - [FDO14] freedesktop.org, *Desktop Entry Specification*, version 1.1
   (2014), https://specifications.freedesktop.org/desktop-entry-spec/
 - [Fuj16] M. Fujiwara, Über die obere Schranke des absoluten Betrages der
@@ -4987,6 +5064,8 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 - [GS89] K. O. Geddes, L. Y. Stefanus, On the Risch-Norman integration
   method and its implementation in Maple, *Proc. ISSAC '89*, ACM 1989,
   212-217.
+- [Had93] J. Hadamard, Résolution d'une question relative aux
+  déterminants, *Bull. Sci. Math.* 17 (1893), 240-246.
 - [Har16] G. H. Hardy, *The Integration of Functions of a Single Variable*,
   2nd ed., Cambridge Tracts in Mathematics 2, Cambridge University Press
   1916.

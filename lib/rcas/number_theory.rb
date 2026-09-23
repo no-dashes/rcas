@@ -369,7 +369,9 @@ module RCAS
       x = 0
       m = 1
       residues.zip(moduli).each do |r, mod|
+        mod = mod.value if mod.is_a?(Num)
         raise ArgumentError, "chrem: the moduli must be positive integers" unless mod.is_a?(Integer) && mod.positive?
+        r = residue(r, mod)
         g, s, = extended_gcd(m, mod)
         diff = r - x
         raise ArgumentError, "chrem: no solution, #{x} mod #{m} and #{r} mod #{mod} are incompatible" unless (diff % g).zero?
@@ -378,6 +380,18 @@ module RCAS
         m = lcm
       end
       x
+    end
+
+    # An Integer, the rcas number holding one, or an element of GF(mod) -
+    # what a determinant over GF(p) is (it was a NoMethodError, 24 Sept 2026).
+    def residue(r, mod)
+      r = r.value if r.is_a?(Num)
+      if r.is_a?(Mod)
+        raise ArgumentError, "chrem: #{r.value} is a residue modulo #{r.p}, not modulo #{mod}" unless r.p == mod
+        r = r.value
+      end
+      raise ArgumentError, "chrem: the residues must be integers, got #{r.inspect}" unless r.is_a?(Integer)
+      r
     end
 
     def integer_or_rational(n, name)

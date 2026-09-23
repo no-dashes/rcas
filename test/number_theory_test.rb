@@ -80,6 +80,19 @@ class NumberTheoryTest < Minitest::Test
     assert_raises(ArgumentError) { chrem([1], []) }
   end
 
+  # a determinant over GF(p) is an element of GF(p), and chrem answered it
+  # with a NoMethodError (24 Sept 2026)
+  def test_chrem_takes_elements_of_finite_fields_and_rcas_numbers
+    rows = [[2, 7, 1], [8, 2, 8], [1, 8, 2]]
+    residues = [5, 7, 11].map { |p| RCAS.matrix(RCAS.GF(p), rows).det }
+    assert_equal 271, chrem(residues, [5, 7, 11])
+    assert_equal 271, chrem(residues.map(&:to_i), [5, 7, 11])
+    assert_equal 8, chrem([RCAS::Num.new(2), 3], [3, RCAS::Num.new(5)])
+    error = assert_raises(ArgumentError) { chrem([RCAS::Mod.new(1, 5)], [7]) }
+    assert_match(/modulo 5, not modulo 7/, error.message)
+    assert_raises(ArgumentError) { chrem([1/2r], [3]) }
+  end
+
   def test_integer_factorization_latex
     assert_equal RCAS::LaTeX.of((2**3 * 3**2 * 5).then { factor(360).to_expr }), factor(360).to_latex
   end

@@ -198,21 +198,28 @@ module RCAS
       Matrix.float_eliminate(rows, Matrix.float_scale(rows) * FLOAT_TOLERANCE).last.size
     end
 
-    # Numeric: Gaussian elimination. Polynomial or rational-function entries
-    # in one indeterminate: evaluation and interpolation (PolyMatrix).
-    # Anything else: cofactor expansion.
-    def det
+    # Integer and Rational entries: modulo many primes (Multimodular), or
+    # Gaussian elimination with algorithm: :elimination, to compare. Other
+    # numbers: Gaussian elimination. Polynomial or
+    # rational-function entries in one indeterminate: evaluation and
+    # interpolation (PolyMatrix). Anything else: cofactor expansion.
+    def det(algorithm: :auto)
       raise ArgumentError, "determinant needs a square matrix" unless square?
+      return Num.new(Multimodular.det(entries)) if Multimodular.use?(entries, algorithm)
       return Elimination.det(entries) if numeric?
       PolyMatrix.det(entries) || Elimination.cofactor_det(entries).expand
     end
 
-    # Numeric matrices are inverted by row reduction, symbolic ones through
-    # the adjugate so the entries come out as cofactor/det.
-    def inverse
+    # Integer and Rational matrices are inverted modulo many primes (as det
+    # is), other numeric ones by row reduction, symbolic ones through the
+    # adjugate so the entries come out as cofactor/det.
+    def inverse(algorithm: :auto)
       raise ArgumentError, "inverse needs a square matrix" unless square?
       target = space.over(base.fraction_field)
-      if numeric?
+      if Multimodular.use?(entries, algorithm)
+        inv = Multimodular.inverse(entries) or raise DomainError, "matrix is singular"
+        target.unchecked(inv)
+      elsif numeric?
         augmented = entries.each_with_index.map { |r, i| r + Array.new(rows) { |j| Num.new(i == j ? 1 : 0) } }
         reduced, pivots = Elimination.rref(augmented)
         raise DomainError, "matrix is singular" unless pivots.first(rows) == (0...rows).to_a
@@ -241,9 +248,14 @@ module RCAS
     def invertible? = square? && rank == rows
 
     # Solve A*x = b. Free variables are set to zero; use #kernel for the rest.
-    def solve(b)
+    # A square Integer or Rational A that is not singular goes to the primes.
+    def solve(b, algorithm: :auto)
       b = b.entries if b.is_a?(Vector)
       raise ArgumentError, "right-hand side needs #{rows} entries" unless b.size == rows
+      if square? && Multimodular.use?(entries, algorithm) && MatrixMultiply.rational_values([b]) &&
+         (y = Multimodular.solve(entries, b))
+        return VectorSpace.new(base.fraction_field, cols).unchecked(y)
+      end
       if square? && !numeric? && (y = PolyMatrix.solve(entries, b.map { |e| Scalar.lift(e) }))
         return VectorSpace.new(base.fraction_field, cols).unchecked(y)
       end

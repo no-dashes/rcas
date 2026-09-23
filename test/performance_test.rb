@@ -155,4 +155,13 @@ class PerformanceTest < Minitest::Test
     product = timed(2, "a 60 x 60 product over QQ", objects: 100_000) { a * a }
     assert_equal a.entries[7].zip(a.entries.map { |r| r[11] }).sum { |x, y| x.value * y.value }, product[7, 11].value
   end
+  # the inverse of an integer matrix is taken modulo many primes: the
+  # elimination over QQ built 2.6 million objects for this one, and the
+  # primes build 125 thousand (24 Sept 2026)
+  def test_integer_inverses_go_through_the_primes
+    rng = Random.new(3)
+    m = (RCAS::Sets::QQ**[40, 40])[Array.new(40) { Array.new(40) { rng.rand(-9..9) } }]
+    inverse = timed(3, "the inverse of a 40 x 40 integer matrix", objects: 600_000) { m.inverse }
+    assert_equal (RCAS::Sets::QQ**[40, 40]).identity, m * inverse
+  end
 end
