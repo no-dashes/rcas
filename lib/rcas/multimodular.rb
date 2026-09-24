@@ -60,9 +60,27 @@ module RCAS
     # The bare numbers of a square matrix of Integers and Rationals, or nil.
     def values(rows) = MatrixMultiply.rational_values(rows)
 
-    def use?(rows, algorithm)
-      raise ArgumentError, "algorithm must be one of #{ALGORITHMS.join(', ')}" unless ALGORITHMS.include?(algorithm)
+    def use?(rows, algorithm, allowed = ALGORITHMS)
+      raise ArgumentError, "algorithm must be one of #{allowed.join(', ')}" unless allowed.include?(algorithm)
       algorithm != :elimination && !rows.empty? && !values(rows).nil?
+    end
+
+    # A system has one algorithm more: Dixon's, for one right-hand side.
+    SOLVE_ALGORITHMS = %i[auto multimodular dixon elimination].freeze
+
+    # Measured on random systems (24 Sept 2026): Dixon and the primes are
+    # level at n = 24-30 and Dixon is ahead from 32 on, whatever the size of
+    # the entries - 1.2x at 32 with one digit, 2x with five, 3-6x at
+    # n = 100-150. Below it the one elimination and the reconstruction
+    # attempts cost what a few more primes would.
+    DIXON_MIN = 32
+
+    # Multimodular, Dixon or nil (elimination) for A*x = b.
+    def solver(rows, b, algorithm)
+      return nil unless use?(rows, algorithm, SOLVE_ALGORITHMS) && MatrixMultiply.rational_values([b])
+      return Dixon if algorithm == :dixon
+      return self if algorithm == :multimodular
+      rows.size >= DIXON_MIN ? Dixon : self
     end
 
     # det of a square matrix of Integers and Rationals.
@@ -98,10 +116,21 @@ module RCAS
       [a.each_with_index.map { |r, i| r.map { |v| (v * scales[i]).to_i } }, scales]
     end
 
-    # [det A, det(A)*A**-1*B] for an Integer matrix A and Integer columns B
-    # (rows of B, possibly none), by the Chinese remainder theorem over as
-    # many primes as Hadamard's bounds ask for.
-    def crt_solve(a, b)
+    # [d, N] with A**-1*B = N/d, for an Integer matrix A and Integer columns
+    # B (rows of B, possibly none), by the Chinese remainder theorem; [0,
+    # nil] when A is singular. With no columns, d is det A.
+    #
+    # Two ways to stop. The bound: once the primes multiply past twice
+    # Hadamard's bound for det A (all primes) and for the Cramer numerators
+    # det(A)*A**-1*B (the primes not dividing det A), d = det A and N are
+    # proved. And early (`early:`): after 1, 2, 4, ... usable primes the
+    # residues of A**-1*B are read back as fractions with one common
+    # denominator (rational reconstruction [vzGG13, §5.10]), and if A*N = d*B
+    # holds exactly, that is the solution - A is invertible, since it was
+    # modulo a prime, so there is no other. The bounds are for the worst
+    # matrix; a solution much smaller than its bound, as for a matrix of
+    # determinant 1, is found after a fraction of the primes.
+    def crt_solve(a, b, early: true)
       n = a.size
       return [1, b] if n.zero?
       det_bound = hadamard(a)
@@ -112,22 +141,71 @@ module RCAS
       det_modulus = 1
       x = Array.new(n) { Array.new(width, 0) }
       x_modulus = 1
+      usable = 0
+      attempt = 1
       (0..).each do |i|
-        det_done = det_modulus > 2 * det_bound
-        break if det_done && (width.zero? || symmetric(det, det_modulus).zero? || x_modulus > 2 * numerator_bound)
+        if det_modulus > 2 * det_bound
+          d = symmetric(det, det_modulus)
+          return [0, nil] if d.zero?
+          return [d, x.map { |r| r.map { |v| symmetric(v * d % x_modulus, x_modulus) } }] if width.zero? || x_modulus > 2 * numerator_bound
+        end
         p = prime(i)
         d_p, x_p = eliminate(a, b, p)
-        unless det_done
+        if det_modulus <= 2 * det_bound
           det = garner(det, det_modulus, d_p, p)
           det_modulus *= p
         end
-        next if x_p.nil? || width.zero? || x_modulus > 2 * numerator_bound
+        next if x_p.nil? || width.zero?
         x = x.each_with_index.map { |r, k| r.each_with_index.map { |v, j| garner(v, x_modulus, x_p[k][j], p) } }
         x_modulus *= p
+        usable += 1
+        next unless early && usable == attempt
+        attempt *= 2
+        found = verified(a, b, x, x_modulus) and return found
       end
-      det = symmetric(det, det_modulus)
-      return [0, nil] if det.zero?
-      [det, x.map { |r| r.map { |v| symmetric(v, x_modulus) } }]
+    end
+
+    # [d, N] with A*N = d*B exactly, read off the residues X of A**-1*B
+    # modulo m, or nil.
+    def verified(a, b, x, m)
+      found = reconstruct(x, m) or return nil
+      d, numerators = found
+      product = MatrixMultiply::INTEGER.leaf(a, numerators)
+      product.each_with_index.all? { |row, i| row.each_with_index.all? { |v, j| v == d * b[i][j] } } ? [d, numerators] : nil
+    end
+
+    # Rational reconstruction of a matrix of residues modulo m with one
+    # common denominator: [d, N] with N/d congruent to the residues and
+    # |N|, d <= sqrt(m/2), or nil. The denominator is grown entry by entry
+    # - an entry that is already a small numerator over it costs one
+    # multiplication, and the extended Euclidean algorithm runs only on the
+    # others [vzGG13, §5.10].
+    def reconstruct(x, m)
+      bound = Integer.sqrt(m / 2)
+      d = 1
+      x.each do |row|
+        row.each do |v|
+          next if symmetric(v * d % m, m).abs <= bound
+          fraction = rational(v * d % m, m, bound) or return nil
+          d *= fraction.denominator
+          return nil if d > bound
+        end
+      end
+      [d, x.map { |row| row.map { |v| symmetric(v * d % m, m) } }]
+    end
+
+    # The fraction r/t = u modulo m with |r|, |t| <= bound, by the extended
+    # Euclidean algorithm stopped halfway, or nil.
+    def rational(u, m, bound)
+      r0, r1 = m, u
+      t0, t1 = 0, 1
+      while r1 > bound
+        q = r0 / r1
+        r0, r1 = r1, r0 - q * r1
+        t0, t1 = t1, t0 - q * t1
+      end
+      return nil if t1.zero? || t1.abs > bound || r1.gcd(t1) != 1
+      Rational(r1, t1)
     end
 
     # The residue modulo m*p that is v modulo m and r modulo p (Garner).
@@ -157,7 +235,7 @@ module RCAS
       Integer.sqrt(rhs * cols.reduce(1, :*) / cols.min) + 1
     end
 
-    # det(A) mod p, and det(A)*A**-1*B mod p unless p divides det(A):
+    # det(A) mod p, and A**-1*B mod p unless p divides det(A):
     # elimination to a triangle, then substitution backwards.
     def eliminate(a, b, p)
       n = a.size
@@ -202,7 +280,7 @@ module RCAS
           s * inverse % p
         end
       end
-      [d, x.map { |r| r.map { |v| v * d % p } }]
+      [d, x]
     end
   end
 end

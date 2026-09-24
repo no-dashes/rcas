@@ -80,7 +80,7 @@ class MultimodularTest < Minitest::Test
       a = Array.new(5) { Array.new(5) { rng.rand(-20..20) } }
       d = MM.det(a)
       assert_operator MM.hadamard(a), :>=, d.abs
-      adjugate = MM.crt_solve(a, Array.new(5) { |i| Array.new(5) { |j| i == j ? 1 : 0 } }).last
+      adjugate = MM.crt_solve(a, Array.new(5) { |i| Array.new(5) { |j| i == j ? 1 : 0 } }, early: false).last
       assert_operator MM.cramer_bound(a, [[1]]), :>=, adjugate.flatten.map(&:abs).max if d.nonzero?
     end
   end

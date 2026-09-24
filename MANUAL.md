@@ -93,6 +93,7 @@ checked - nothing in them is typed by hand.
     - [Orthogonality and least squares](#orthogonality-and-least-squares)
     - [Multiplying matrices: Strassen's seven products](#multiplying-matrices-strassens-seven-products)
     - [Determinants modulo many primes](#determinants-modulo-many-primes)
+    - [Solving one system: Dixon's p-adic lifting](#solving-one-system-dixons-p-adic-lifting)
     - [Lattices: LLL reduction](#lattices-lll-reduction)
   - [1.8 Differential equations and recurrences](#18-differential-equations-and-recurrences)
     - [Recurrences](#recurrences)
@@ -427,7 +428,8 @@ rcas> stokes([-y, x, 0], [u*cos(v), u*sin(v), 0], u: 0..1, v: 0..2*pi)
 ```
 
 Read on: 1.5 Domains and assumptions, 1.6 Polynomial rings, 1.7 Linear
-algebra (lattices and LLL, Strassen's seven products), 1.8
+algebra (lattices and LLL, Strassen's seven products, p-adic lifting),
+1.8
 Differential equations and recurrences, 1.12 The q-analogues, and section
 4, Sources, for the algorithms and where they come from.
 
@@ -3594,13 +3596,13 @@ skipped for those; only finitely many primes divide it. Rational entries
 are scaled to integers row by row first. Measured on random integer
 matrices (24 Sept 2026, seconds, elimination / primes):
 
-| n, entries        | det           | inverse       | solve         |
-|-------------------|---------------|---------------|---------------|
-| 40, one digit     | 0.039 / 0.007 | 0.22 / 0.03   | 0.086 / 0.008 |
-| 60, one digit     | 0.16 / 0.034  | 0.97 / 0.16   | 0.41 / 0.037  |
-| 100, one digit    | 1.09 / 0.24   | 5.9 / 1.14    | 2.45 / 0.25   |
-| 30, 21 digits     | 0.078 / 0.035 | 0.41 / 0.18   | 0.16 / 0.041  |
-| 40, fractions     | 0.063 / 0.019 | 0.35 / 0.10   | 0.15 / 0.024  |
+| n, entries        | det           | inverse       |
+|-------------------|---------------|---------------|
+| 40, one digit     | 0.039 / 0.007 | 0.22 / 0.03   |
+| 60, one digit     | 0.16 / 0.034  | 0.97 / 0.16   |
+| 100, one digit    | 1.09 / 0.24   | 5.9 / 1.14    |
+| 30, 21 digits     | 0.078 / 0.035 | 0.41 / 0.18   |
+| 40, fractions     | 0.063 / 0.019 | 0.35 / 0.10   |
 
 The primes were faster at every size, a 2 x 2 matrix included, so every
 matrix of integers and fractions goes to them. `algorithm: :elimination`
@@ -3612,11 +3614,78 @@ rcas> [big.det, big.det(algorithm: :elimination)]
 => [13, 13]
 ```
 
+Hadamard's bound is for the worst matrix of its size, and most solutions
+are much smaller: the inverse of a matrix with determinant 1 has integer
+entries. So an inverse or a solution does not wait for the bound. After
+1, 2, 4, 8, ... primes the residues are read back as fractions (rational
+reconstruction, the extended Euclidean algorithm stopped halfway
+[vzGG13, §5.10]), and if the fractions solve the system exactly, they are
+the answer - the matrix is invertible, since it was modulo a prime, so
+there is no other solution. That check is what makes stopping early
+safe: from too few primes the reconstruction still produces fractions,
+only wrong ones. On the inverse of the cube of a random 60 x 60 matrix of
+determinant 1 the early stop needs a fifth of the time the bound asks for.
+A determinant has no such check, and always takes the bound.
+
 A singular system that has solutions (free variables set to zero, as
 before) goes to the elimination, since there is no inverse to build.
 Floats, algebraic numbers and symbols keep their own routes as well. The
-method is in [vzGG13, §5.5]; Dixon's p-adic lifting [Dix82] would be the
-next step for a single system, and is not implemented.
+method is in [vzGG13, §5.5].
+
+#### Solving one system: Dixon's p-adic lifting
+
+For one right-hand side there is a better way than many primes, each of
+which pays for a whole elimination. Dixon's method [Dix82] eliminates
+once, modulo one prime p, and then finds the solution one digit at a
+time - in base p, as long division finds the decimals of a fraction, only
+from the right. The numbers written this way are the p-adic numbers, and a
+fraction is one of them whenever p does not divide its denominator: 1/3 in
+base 5 is ...3132, since 3 times 417 leaves 1 modulo 625.
+
+```
+rcas> invmod(3, 5**4)
+=> 417
+rcas> invmod(3, 5**4).digits(5)
+=> [2, 3, 1, 3]
+rcas> RCAS::Multimodular.rational(417, 625, 17)
+=> (1/3)
+```
+
+The last line is rational reconstruction going back: 417 modulo 625 is
+the only fraction with numerator and denominator at most 17 that it can
+be.
+For a system A*x = b, with C = A**-1 modulo p computed once, each digit is
+two products of a matrix and a vector,
+
+    x_i = C*r mod p,   r <- (r - A*x_i)/p,   starting from r = b,
+
+where the division is exact because A*x_i = r modulo p. That is n**2 work
+per digit where each prime costs n**3. The fractions are read back after
+4, 8, 16, ... digits and checked exactly as above; Hadamard's bound says
+when they must come out, so the loop ends. Seconds, elimination / primes /
+Dixon, random systems (24 Sept 2026):
+
+| n, entries     | elimination | primes | Dixon |
+|----------------|-------------|--------|-------|
+| 20, one digit  | 0.007       | 0.001  | 0.001 |
+| 40, one digit  | 0.090       | 0.008  | 0.006 |
+| 60, one digit  | 0.39        | 0.037  | 0.019 |
+| 100, one digit | 2.38        | 0.26   | 0.078 |
+| 150, one digit | 10.5        | 1.30   | 0.25  |
+| 60, 5 digits   | 0.79        | 0.13   | 0.033 |
+| 40, 21 digits  | 0.48        | 0.11   | 0.077 |
+| 40, fractions  | 0.14        | 0.023  | 0.010 |
+
+The two are level around n = 30, and `a.solve(b)` takes Dixon from
+n = 32 on; `algorithm: :dixon` or `:multimodular` names one. An inverse
+is n systems at once, and lifting a whole matrix costs n**3 per digit,
+which is no better than the primes: `inverse` keeps them.
+
+```
+rcas> dm = matrix((1..40).map { |i| (1..40).map { |j| (i * j) % 7 + (i == j ? 7 : 0) } })
+rcas> dsol = dm.solve((1..40).to_a); [dsol == dm.solve((1..40).to_a, algorithm: :elimination), dm * dsol == vector((1..40).to_a)]
+=> [true, true]
+```
 
 #### Lattices: LLL reduction
 
@@ -4791,7 +4860,7 @@ Top-level functions (bare in `bin/rcas`, `RCAS.name` elsewhere):
 | geometry | `point line circle distance midpoint angle area perimeter collinear? centroid intersect circumcircle perpendicular_bisector parallel_through perpendicular_through` |
 | special functions | `erf erfc Ei Si Ci li` |
 | domains | `NN ZZ QQ RR CC` (also `ℕ ℤ ℚ ℝ ℂ`), `GF assume forget assumptions` |
-| linear algebra | `vector matrix gram_schmidt least_squares project orthogonal? lu qr cholesky diagonalize jordan lll`, `a.multiply(b, algorithm: :strassen)`, `a.det(algorithm: :elimination)` |
+| linear algebra | `vector matrix gram_schmidt least_squares project orthogonal? lu qr cholesky diagonalize jordan lll`, `a.multiply(b, algorithm: :strassen)`, `a.det(algorithm: :elimination)`, `a.solve(b, algorithm: :dixon)` |
 | holding | `hold evaluate` |
 | interchange | `openmath from_openmath popcorn from_popcorn` (Appendix D) |
 | worked solutions | `steps` (a block, or `:solve :factor :apart :rref :gcd :discuss`) |
@@ -4822,8 +4891,7 @@ coefficients are not hypergeometric (`tan`, `exp(x)/(1 - x)`), iterated
 integrals (a definite integral inside another one stays formal),
 lattice reduction of a dependent generating set (`lll` reduces a basis),
 the dual of a linear program and its sensitivity analysis, linear
-programs with parameters, Dixon's p-adic solution of a linear system and
-fast (Strassen-based) elimination,
+programs with parameters, fast (Strassen-based) elimination,
 convergence conditions on the parameters of a definite integral
 (`integrate(x**a, x, 0, 1)` is `1/(1 + a)` also where it diverges), the sign
 of an expression on a box of *several* parameter ranges that is not a
@@ -4895,6 +4963,7 @@ lib/rcas/vector.rb          VectorSpace, Vector
 lib/rcas/matrix.rb          MatrixSpace, Matrix, elimination
 lib/rcas/matrix_multiply.rb the matrix product: bare Integers, and Strassen-Winograd
 lib/rcas/multimodular.rb    det, inverse and solve of integer and rational matrices modulo many primes
+lib/rcas/dixon.rb           one square system by p-adic lifting
 lib/rcas/hold.rb            hold
 lib/rcas/functions.rb       the top-level functions
 lib/rcas/core_ext.rb        Symbol / Numeric extensions
@@ -4999,7 +5068,8 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | analytic geometry: lines and circles, the shoelace area | geometry.rb | [Spi08, ch. 4]; [Bra86] |
 | Gram-Schmidt orthogonalization, least squares by the normal equations | linear_algebra.rb | [Str16, ch. 4] |
 | matrix product: Integer arithmetic after clearing denominators; Strassen's algorithm in Winograd's form, with a measured cutoff; the exponent since | matrix_multiply.rb | [Str69]; [Win71]; [vzGG13, §12.1]; [CW90]; [ADVXXZ25] |
-| determinant, inverse and square systems of integer and rational matrices modulo many primes, with Hadamard's bound and Cramer's rule | multimodular.rb | [vzGG13, §5.5]; [Had93] |
+| determinant, inverse and square systems of integer and rational matrices modulo many primes, with Hadamard's bound and Cramer's rule; the early stop by rational reconstruction and an exact check | multimodular.rb | [vzGG13, §5.5, §5.10]; [Had93] |
+| one square system by Dixon's p-adic lifting | dixon.rb | [Dix82]; [vzGG13, §5.10] |
 | LLL lattice basis reduction, exact, with the incremental Gram-Schmidt update | lattice.rb | [LLL82]; [Coh93, §2.6]; [vzGG13, ch. 16] |
 | linear optimization: two-phase simplex with Bland's rule, exact; whole numbers by branch and bound | linear_program.rb | [Dan63]; [Chv83, ch. 2-5]; [Bla77]; [LD60]; [Sch86] |
 | Laplace transform from the table with the shift rules, inverse by partial fractions | laplace.rb | [BD12, ch. 6] |

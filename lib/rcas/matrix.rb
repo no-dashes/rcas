@@ -248,12 +248,13 @@ module RCAS
     def invertible? = square? && rank == rows
 
     # Solve A*x = b. Free variables are set to zero; use #kernel for the rest.
-    # A square Integer or Rational A that is not singular goes to the primes.
+    # A square Integer or Rational A that is not singular goes to the primes
+    # or to Dixon's p-adic lifting (Multimodular.solver chooses; algorithm:
+    # :multimodular, :dixon or :elimination names one).
     def solve(b, algorithm: :auto)
       b = b.entries if b.is_a?(Vector)
       raise ArgumentError, "right-hand side needs #{rows} entries" unless b.size == rows
-      if square? && Multimodular.use?(entries, algorithm) && MatrixMultiply.rational_values([b]) &&
-         (y = Multimodular.solve(entries, b))
+      if square? && (solver = Multimodular.solver(entries, b, algorithm)) && (y = solver.solve(entries, b))
         return VectorSpace.new(base.fraction_field, cols).unchecked(y)
       end
       if square? && !numeric? && (y = PolyMatrix.solve(entries, b.map { |e| Scalar.lift(e) }))
