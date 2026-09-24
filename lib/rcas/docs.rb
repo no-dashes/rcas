@@ -273,7 +273,8 @@ module RCAS
           current = nil
         end
       end
-      @bibliography = @bibliography.transform_values { |v| v.delete("*").sub(/\.\z/, "") }
+      # the manual writes links as <https://...> autolinks; a terminal wants them bare
+      @bibliography = @bibliography.transform_values { |v| v.delete("*").gsub(/<(https?:[^>]+)>/, '\1').sub(/\.\z/, "") }
     rescue SystemCallError, IOError
       @bibliography = {}
     end

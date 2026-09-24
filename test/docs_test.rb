@@ -115,6 +115,15 @@ class DocsTest < Minitest::Test
     assert RCAS::Docs.bibliography.size > 40, "the whole bibliography is read"
   end
 
+  # the manual links each work as a markdown autolink, <https://...>; the
+  # help in a terminal gives the bare address
+  def test_sources_carry_their_links_bare
+    entry = RCAS::Docs.bibliography["LLL82"]
+    assert entry.end_with?("515-534. https://pub.math.leidenuniv.nl/~lenstrahw/PUBLICATIONS/1982f/art.pdf"), entry
+    refute RCAS::Docs.bibliography.values.any? { |v| v.include?("<http") }
+    assert_includes RCAS.doc(:gcd).to_s, "https://www-cs-faculty.stanford.edu/~knuth/taocp.html"
+  end
+
   def test_reading_links
     links = RCAS.doc(:factor).reading
     assert_includes links, "https://en.wikipedia.org/wiki/Factorization_of_polynomials"

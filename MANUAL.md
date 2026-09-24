@@ -5079,203 +5079,291 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 - [ADVXXZ25] J. Alman, R. Duan, V. Vassilevska Williams, Y. Xu, Z. Xu,
   R. Zhou, More asymmetry yields faster matrix multiplication, *Proc.
   ACM-SIAM Symposium on Discrete Algorithms (SODA)* 2025; arXiv:2404.16349.
+  <https://arxiv.org/abs/2404.16349>
 - [APP98] S. A. Abramov, P. Paule, M. Petkovšek, q-Hypergeometric
   solutions of q-difference equations, *Discrete Math.* 180 (1998), 3-22.
+  <https://www3.risc.jku.at/publications/download/risc_2062/Abramov_PP_Petkovsek.pdf>
 - [AS64] M. Abramowitz, I. A. Stegun (eds.), *Handbook of Mathematical
   Functions*, National Bureau of Standards 1964, ch. 7 (error function).
+  <https://catalog.hathitrust.org/Record/000667883>
 - [BD12] W. E. Boyce, R. C. DiPrima, *Elementary Differential Equations and
   Boundary Value Problems*, 10th ed., Wiley 2012.
+  <https://search.worldcat.org/search?q=bn:9780470458310>
 - [Bla77] R. G. Bland, New finite pivoting rules for the simplex method,
   *Math. Oper. Res.* 2 (1977), 103-107.
+  <https://doi.org/10.1287/moor.2.2.103>
 - [BM80] R. P. Brent, E. M. McMillan, Some new algorithms for high-precision
   computation of Euler's constant, *Math. Comp.* 34 (1980), 305-312.
+  <https://maths-people.anu.edu.au/~brent/pub/pub049.html>
 - [Bra86] B. Braden, The surveyor's area formula, *College Mathematics
   Journal* 17 (1986), 326-337.
+  <https://doi.org/10.1080/07468342.1986.11972974>
 - [Bre80] R. P. Brent, An improved Monte Carlo factorization algorithm,
   *BIT* 20 (1980), 176-184.
+  <https://maths-people.anu.edu.au/~brent/pub/pub051.html>
 - [Bre65] J. E. Bresenham, Algorithm for computer control of a digital
   plotter, *IBM Systems Journal* 4 (1965), 25-30.
+  <https://doi.org/10.1147/sj.41.0025>
 - [Bro05] M. Bronstein, *Symbolic Integration I: Transcendental Functions*,
   2nd ed., Springer 2005.
+  <https://search.worldcat.org/search?q=bn:9783540214939>
 - [Buc65] B. Buchberger, *Ein Algorithmus zum Auffinden der Basiselemente des
   Restklassenringes nach einem nulldimensionalen Polynomideal*, Dissertation,
   Universität Innsbruck 1965; English translation in *J. Symbolic Comput.*
   41 (2006), 475-511.
+  <https://www3.risc.jku.at/people/buchberger/papers/1965-00-00-A.pdf> (dissertation),
+  <https://doi.org/10.1016/j.jsc.2005.09.007> (translation)
 - [Chv83] V. Chvátal, *Linear Programming*, W. H. Freeman, New York,
   1983.
+  <https://search.worldcat.org/search?q=bn:9780716711957>
 - [CLO15] D. Cox, J. Little, D. O'Shea, *Ideals, Varieties, and
   Algorithms*, 4th ed., Springer 2015.
+  <https://dacox.people.amherst.edu/iva.html>
 - [Coh93] H. Cohen, *A Course in Computational Algebraic Number Theory*,
   GTM 138, Springer 1993.
+  <https://search.worldcat.org/title/27810276>
 - [CW90] D. Coppersmith, S. Winograd, Matrix multiplication via arithmetic
   progressions, *J. Symbolic Comput.* 9 (1990), 251-280.
+  <https://doi.org/10.1016/S0747-7171(08)80013-2>
 - [CZ81] D. G. Cantor, H. Zassenhaus, A new algorithm for factoring
   polynomials over finite fields, *Math. Comp.* 36 (1981), 587-592.
+  <https://www.ams.org/journals/mcom/1981-36-154/S0025-5718-1981-0606517-5/>
 - [Dan63] G. B. Dantzig, *Linear Programming and Extensions*, Princeton
   University Press, 1963.
+  <https://www.rand.org/pubs/reports/R366.html>
 - [Dix82] J. D. Dixon, Exact solution of linear equations using p-adic
   expansions, *Numer. Math.* 40 (1982), 137-141.
+  <https://gdz.sub.uni-goettingen.de/download/pdf/PPN362160546_0040/LOG_0016.pdf>
 - [FDO14] freedesktop.org, *Desktop Entry Specification*, version 1.1
-  (2014), https://specifications.freedesktop.org/desktop-entry-spec/
+  (2014), <https://specifications.freedesktop.org/desktop-entry/1.1/>
 - [Fuj16] M. Fujiwara, Über die obere Schranke des absoluten Betrages der
   Wurzeln einer algebraischen Gleichung, *Tôhoku Math. J.* 10 (1916),
   167-171.
+  <https://www.jstage.jst.go.jp/article/tmj1911/10/0/10_0_167/_article>
 - [GCL92] K. O. Geddes, S. R. Czapor, G. Labahn, *Algorithms for Computer
   Algebra*, Kluwer 1992.
+  <https://search.worldcat.org/title/26212117>
 - [GKP94] R. L. Graham, D. E. Knuth, O. Patashnik, *Concrete Mathematics*,
   2nd ed., Addison-Wesley 1994.
+  <https://www-cs-faculty.stanford.edu/~knuth/gkp.html>
 - [Gos78] R. W. Gosper, Decision procedure for indefinite hypergeometric
   summation, *Proc. Natl. Acad. Sci. USA* 75 (1978), 40-42.
+  <https://pmc.ncbi.nlm.nih.gov/articles/PMC411178/>
 - [GR04] G. Gasper, M. Rahman, *Basic Hypergeometric Series*, 2nd ed.,
   Encyclopedia of Mathematics and its Applications 96, Cambridge University
   Press 2004.
+  <https://search.worldcat.org/title/54677790>
 - [Gru96] D. Gruntz, *On Computing Limits in a Symbolic Manipulation
   System*, Diss. ETH Zürich 1996.
+  <https://doi.org/10.3929/ethz-a-001631582>
 - [GS89] K. O. Geddes, L. Y. Stefanus, On the Risch-Norman integration
   method and its implementation in Maple, *Proc. ISSAC '89*, ACM 1989,
   212-217.
+  <https://doi.org/10.1145/74540.74567>
 - [Had93] J. Hadamard, Résolution d'une question relative aux
   déterminants, *Bull. Sci. Math.* 17 (1893), 240-246.
+  <https://gallica.bnf.fr/ark:/12148/bpt6k486252g/f395.item>
 - [Har16] G. H. Hardy, *The Integration of Functions of a Single Variable*,
   2nd ed., Cambridge Tracts in Mathematics 2, Cambridge University Press
   1916.
+  <https://search.worldcat.org/title/862693>
 - [Her72] C. Hermite, Sur l'intégration des fractions rationnelles, *Ann.
   Sci. École Norm. Sup.* (2) 1 (1872), 215-218.
+  <https://www.numdam.org/item/ASENS_1872_2_1__215_0/>
 - [HF96] R. J. Hyndman, Y. Fan, Sample quantiles in statistical packages,
   *The American Statistician* 50 (1996), 361-365.
+  <https://robjhyndman.com/papers/sample_quantiles.pdf>
 - [HK71] K. Hoffman, R. Kunze, *Linear Algebra*, 2nd ed., Prentice-Hall
   1971.
+  <https://search.worldcat.org/title/139865>
 - [Hor08] P. Horn, *Faktorisierung in Schief-Polynomringen*, Dissertation,
   Universität Kassel 2008, chapter 6 (Lineare Algebra mit Polynom-Matrizen).
+  <https://kobra.uni-kassel.de/handle/123456789/2009030226513>
 - [HR09] P. Horn, D. Roozemond, OpenMath in SCIEnce: SCSCP and POPCORN,
   in *Intelligent Computer Mathematics (CICM 2009)*, LNCS 5625, Springer
   2009, 474-479.
+  <https://magma.maths.usyd.edu.au/users/danr/site/pubs/0903popcorn.pdf>
 - [HvHN11] W. Hart, M. van Hoeij, A. Novocin, Practical polynomial
   factoring in polynomial time, in: *Proc. ISSAC 2011*, ACM, 2011,
   163-170.
+  <https://www.math.fsu.edu/~hoeij/papers/issac11/A.pdf>
 - [HW08] G. H. Hardy, E. M. Wright, *An Introduction to the Theory of
   Numbers*, 6th ed., Oxford University Press 2008.
+  <https://search.worldcat.org/title/214305907>
 - [Kar81] M. Karr, Summation in finite terms, *J. ACM* 28 (1981),
   305-350.
+  <https://doi.org/10.1145/322248.322255>
 - [Ker66] I. O. Kerner, Ein Gesamtschrittverfahren zur Berechnung der
   Nullstellen von Polynomen, *Numer. Math.* 8 (1966), 290-294.
+  <https://gdz.sub.uni-goettingen.de/download/pdf/PPN362160546_0008/LOG_0027.pdf>
 - [Knu98] D. E. Knuth, *The Art of Computer Programming, vol. 2:
   Seminumerical Algorithms*, 3rd ed., Addison-Wesley 1998.
+  <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>
 - [Lan02] S. Lang, *Algebra*, revised 3rd ed., Graduate Texts in
   Mathematics 211, Springer, 2002.
+  <https://search.worldcat.org/title/48176673>
 - [Len76] W. J. Lentz, Generating Bessel functions in Mie scattering
   calculations using continued fractions, *Applied Optics* 15 (1976),
   668-671.
+  <https://doi.org/10.1364/AO.15.000668>
 - [Koe92] W. Koepf, Power series in computer algebra, *J. Symbolic Comput.*
   13 (1992), 581-603.
+  <https://www.mathematik.uni-kassel.de/~koepf/Publikationen/Koepf1992.pdf>
 - [Koe14] W. Koepf, *Hypergeometric Summation: An Algorithmic Approach to
   Summation and Special Function Identities*, 2nd ed., Universitext,
   Springer 2014.
+  <http://www.hypergeometric-summation.org>
 - [Koo93] T. H. Koornwinder, On Zeilberger's algorithm and its q-analogue,
   *J. Comput. Appl. Math.* 48 (1993), 91-111.
+  <https://staff.fnwi.uva.nl/t.h.koornwinder/art/1993/zeilbalgo.pdf>
 - [LD60] A. H. Land, A. G. Doig, An automatic method of solving discrete
   programming problems, *Econometrica* 28 (1960), 497-520.
+  <https://doi.org/10.2307/1910129>
 - [LLL82] A. K. Lenstra, H. W. Lenstra, Jr., L. Lovász, Factoring
   polynomials with rational coefficients, *Math. Ann.* 261 (1982),
   515-534.
+  <https://pub.math.leidenuniv.nl/~lenstrahw/PUBLICATIONS/1982f/art.pdf>
 - [Loo83] R. Loos, Computing in algebraic extensions, in: B. Buchberger,
   G. E. Collins, R. Loos (eds.), *Computer Algebra: Symbolic and Algebraic
   Computation*, 2nd ed., Springer 1983, 173-187.
+  <https://doi.org/10.1007/978-3-7091-7551-4_12>
 - [LR90] D. Lazard, R. Rioboo, Integration of rational functions: rational
   computation of the logarithmic part, *J. Symbolic Comput.* 9 (1990),
   113-115.
+  <https://doi.org/10.1016/S0747-7171(08)80026-0>
 - [Mac75] D. Mack, On rational integration, Technical Report UCP-38,
   University of Utah 1975.
 - [Mig74] M. Mignotte, An inequality about factors of polynomials, *Math.
   Comp.* 28 (1974), 1153-1157.
+  <https://www.ams.org/mcom/1974-28-128/S0025-5718-1974-0354624-3/>
 - [Mil76] G. L. Miller, Riemann's hypothesis and tests for primality, *J.
   Comput. System Sci.* 13 (1976), 300-317.
+  <https://www.cs.cmu.edu/~glmiller/Publications/Papers/Mi76.pdf>
 - [DLMF] F. W. J. Olver et al. (eds.), *NIST Digital Library of
-  Mathematical Functions*, https://dlmf.nist.gov/ (§1.5(iv) for
+  Mathematical Functions*, <https://dlmf.nist.gov/> (§1.5(iv) for
   differentiation under the integral sign, §4.2(i) for the principal
   logarithm).
 - [MT00] G. Marsaglia, W. W. Tsang, A simple method for generating gamma
   variables, *ACM Trans. Math. Software* 26 (2000), 363-372.
+  <https://doi.org/10.1145/358407.358414>
 - [MT12] J. E. Marsden, A. Tromba, *Vector Calculus*, 6th ed., W. H.
   Freeman 2012.
+  <https://search.worldcat.org/search?q=bn:9781429215084>
 - [NM77] A. C. Norman, P. M. A. Moore, Implementing the new Risch
   integration algorithm, *Proc. 4th Int. Colloquium on Advanced Computing
   Methods in Theoretical Physics*, Marseille 1977, 99-110.
 - [NNS72] M. E. Newell, R. G. Newell, T. L. Sancha, A solution to the
   hidden surface problem, *Proc. ACM Annual Conference*, Boston 1972,
   443-450.
+  <https://doi.org/10.1145/800193.569954>
 - [FvDFH90] J. D. Foley, A. van Dam, S. K. Feiner, J. F. Hughes,
   *Computer Graphics: Principles and Practice*, 2nd ed., Addison-Wesley
   1990.
+  <https://search.worldcat.org/title/20131604>
 - [Pol75] J. M. Pollard, A Monte Carlo method for factorization, *BIT* 15
   (1975), 331-334.
+  <https://doi.org/10.1007/BF01933667>
 - [Pet92] M. Petkovšek, Hypergeometric solutions of linear recurrences
   with polynomial coefficients, *J. Symbolic Comput.* 14 (1992), 243-264.
+  <https://users.fmf.uni-lj.si/petkovsek/hyp.PS> (PostScript),
+  <https://doi.org/10.1016/0747-7171(92)90038-6>
 - [OM19] S. Buswell, O. Caprotti, D. P. Carlisle, M. C. Dewar, M.
   Gaetano, M. Kohlhase (eds.), *The OpenMath Standard, version 2.0*,
   revision of 2019-07-01, The OpenMath Society, together with the
-  official content dictionaries at openmath.org/cd.
+  official content dictionaries at <https://openmath.org/cd/>.
+  <https://openmath.org/standard/om20-2019-07-01/>
 - [PTVF07] W. H. Press, S. A. Teukolsky, W. T. Vetterling, B. P. Flannery,
   *Numerical Recipes*, 3rd ed., Cambridge University Press 2007.
+  <https://numerical.recipes/>
 - [PWZ96] M. Petkovšek, H. S. Wilf, D. Zeilberger, *A = B*, A K Peters
   1996.
+  <https://www2.math.upenn.edu/~wilf/AeqB.html>
 - [Rab80] M. O. Rabin, Probabilistic algorithms in finite fields, *SIAM J.
   Comput.* 9 (1980), 273-280.
+  <https://doi.org/10.1137/0209024>
 - [Rab80b] M. O. Rabin, Probabilistic algorithm for testing primality, *J.
   Number Theory* 12 (1980), 128-138.
+  <https://www.sciencedirect.com/science/article/pii/0022314X80900840>
 - [Ros14] S. M. Ross, *A First Course in Probability*, 9th ed., Pearson
   2014.
+  <https://search.worldcat.org/title/827003384>
 - [RFC9110] R. Fielding, M. Nottingham, J. Reschke (eds.), *HTTP
   Semantics*, RFC 9110, IETF 2022.
+  <https://www.rfc-editor.org/rfc/rfc9110>
 - [RFC9112] R. Fielding, M. Nottingham, J. Reschke (eds.), *HTTP/1.1*,
   RFC 9112, IETF 2022.
+  <https://www.rfc-editor.org/rfc/rfc9112>
 - [RT76] M. Rothstein, *Aspects of Symbolic Integration and Simplification
   of Exponential and Primitive Functions*, PhD thesis, University of
   Wisconsin-Madison 1976; B. M. Trager, Algebraic factoring and rational
   function integration, *Proc. SYMSAC '76*, ACM 1976, 219-226.
+  <https://www.cs.kent.edu/~rothstei/dis.pdf> (Rothstein),
+  <https://doi.org/10.1145/800205.806338> (Trager)
 - [Stu26] H. A. Sturges, The choice of a class interval, *J. Amer. Statist.
   Assoc.* 21 (1926), 65-66.
+  <https://doi.org/10.1080/01621459.1926.10502161>
 - [Rud76] W. Rudin, *Principles of Mathematical Analysis*, 3rd ed.,
   McGraw-Hill 1976.
+  <https://search.worldcat.org/title/1502474>
 - [Sch86] A. Schrijver, *Theory of Linear and Integer Programming*,
   Wiley, Chichester, 1986.
+  <https://search.worldcat.org/search?q=bn:0471908541>
 - [Spi08] M. Spivak, *Calculus*, 4th ed., Publish or Perish 2008.
+  <https://mathpop.com/products/calculus-4th-edition>
 - [Spi65] M. Spivak, *Calculus on Manifolds*, W. A. Benjamin 1965.
+  <https://search.worldcat.org/title/187146>
 - [Sta99] R. P. Stanley, *Enumerative Combinatorics, vol. 2*, Cambridge
   University Press 1999.
+  <https://math.mit.edu/~rstan/ec/>
 - [Str16] G. Strang, *Introduction to Linear Algebra*, 5th ed.,
   Wellesley-Cambridge Press 2016.
+  <https://math.mit.edu/~gs/linearalgebra/ila5/indexila5.html>
 - [Str69] V. Strassen, Gaussian elimination is not optimal, *Numer.
   Math.* 13 (1969), 354-356.
+  <https://gdz.sub.uni-goettingen.de/download/pdf/PPN362160546_0013/LOG_0038.pdf>
 - [SW17] J. Sorenson, J. Webster, Strong pseudoprimes to twelve prime
   bases, *Math. Comp.* 86 (2017), 985-1003.
+  <https://www.ams.org/mcom/2017-86-304/S0025-5718-2016-03134-8/>
 - [Sze75] G. Szegő, *Orthogonal Polynomials*, 4th ed., American Mathematical
   Society Colloquium Publications 23, AMS 1975.
+  <https://bookstore.ams.org/coll-23>
 - [TM74] H. Takahasi, M. Mori, Double exponential formulas for numerical
   integration, *Publ. RIMS Kyoto Univ.* 9 (1974), 721-741.
+  <https://ems.press/journals/prims/articles/2686>
 - [Tra76] B. M. Trager, Algebraic factoring and rational function
   integration, *Proc. SYMSAC '76*, ACM 1976, 219-226.
+  <https://doi.org/10.1145/800205.806338>
 - [Tuk77] J. W. Tukey, *Exploratory Data Analysis*, Addison-Wesley 1977.
+  <https://search.worldcat.org/title/3058187>
 - [vHo02] M. van Hoeij, Factoring polynomials and the knapsack problem,
   *J. Number Theory* 95 (2002), 167-189.
+  <https://www.math.fsu.edu/~hoeij/knapsack/paper/knapsack.pdf>
 - [vzGG13] J. von zur Gathen, J. Gerhard, *Modern Computer Algebra*, 3rd
   ed., Cambridge University Press 2013.
+  <https://cosec.bit.uni-bonn.de/science/mca/>
 - [Wel47] B. L. Welch, The generalization of 'Student's' problem when
   several different population variances are involved, *Biometrika* 34
   (1947), 28-35.
+  <https://doi.org/10.1093/biomet/34.1-2.28>
 - [Wil27] E. B. Wilson, Probable inference, the law of succession, and
   statistical inference, *J. Amer. Statist. Assoc.* 22 (1927), 209-212.
+  <https://doi.org/10.1080/01621459.1927.10502953>
 - [Win71] S. Winograd, On multiplication of 2 x 2 matrices, *Linear
   Algebra Appl.* 4 (1971), 381-388.
+  <https://doi.org/10.1016/0024-3795(71)90009-7>
 - [Yun76] D. Y. Y. Yun, On square-free decomposition algorithms, *Proc.
   SYMSAC '76*, ACM 1976, 26-35.
+  <https://doi.org/10.1145/800205.806320>
 - [Zas69] H. Zassenhaus, On Hensel factorization I, *J. Number Theory* 1
   (1969), 291-311.
+  <https://doi.org/10.1016/0022-314X(69)90047-X>
 - [Zei91] D. Zeilberger, The method of creative telescoping, *J. Symbolic
   Comput.* 11 (1991), 195-204.
+  <https://sites.math.rutgers.edu/~zeilberg/mamarimY/Zeilberger_y1991_p195.pdf>
 - [Zor15] V. A. Zorich, *Mathematical Analysis I*, 2nd ed., Universitext,
   Springer 2015, §5.7 (primitives of rational functions of x and a root,
   of exp, and of sin and cos).
+  <https://search.worldcat.org/search?q=bn:9783662487907>
 
 ## 5. License
 
