@@ -1,6 +1,6 @@
 <p align="center">
   <img src="assets/rcas-logo.jpeg" alt="rcas - Ruby Computer Algebra System" width="360"><br>
-  <em>Reinventing the wheel instead of building a CAS</em>™
+  <em>Computer Algebra To Fiddle Around With</em>™
 </p>
 
 # rcas manual
