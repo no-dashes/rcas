@@ -254,6 +254,7 @@ pre.stdout {
 .hint span { display: block; }
 .hint span:first-child { color: var(--link); }
 .note { color: var(--ink-faint); font-size: 12px; }
+.warning { color: var(--accent); font-family: var(--mono); font-size: 12px; margin-bottom: 3px; }
 .took { color: var(--ink-faint); font-size: 11px; font-family: var(--mono); }
 
 /* ---- tables: /help, /vars, /assumptions ---------------------------------- */

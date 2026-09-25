@@ -18,9 +18,10 @@ module RCAS
       # Lines to print under an error, or nil when there is nothing to say.
       # Only a plain ArgumentError counts: subclasses such as DomainError
       # describe the mathematics, not the call.
-      def hint(error)
+      # +user_frame+ is the file name the front end evaluates input under.
+      def hint(error, user_frame: USER_FRAME)
         return nil unless error.instance_of?(ArgumentError)
-        frame = entry_frame(error) or return nil
+        frame = entry_frame(error, user_frame) or return nil
         info = describe(frame.path, frame.lineno) or return nil
         lines = ["usage: #{info[:signature]}"]
         lines.concat(info[:doc].first(MAX_DOC_LINES))
@@ -28,9 +29,9 @@ module RCAS
       end
 
       # The outermost rcas frame that the user's code called directly.
-      def entry_frame(error)
+      def entry_frame(error, user_frame = USER_FRAME)
         locations = error.backtrace_locations or return nil
-        before_user = locations.take_while { |l| l.path != USER_FRAME }
+        before_user = locations.take_while { |l| l.path != user_frame }
         return nil if before_user.size == locations.size
         before_user.reverse.find { |l| l.path.start_with?(LIB) }
       end

@@ -9,10 +9,12 @@ rcas is a computer algebra system that lives inside Ruby. Symbols are
 indeterminates, the ordinary operators build expression trees, and irb is the
 REPL. This manual walks through everything that is finished. Every
 transcript in it is checked by `test/manual_test.rb`, so the outputs are
-exactly what the current code prints.
+exactly what the current code prints. What is *not* finished is listed in
+[What is not implemented](#what-is-not-implemented), and how rcas is built,
+and why, is in [DESIGN.md](DESIGN.md).
 
 <p align="center">
-  <a href="https://youtu.be/3Lm5DHgfwxo"><img src="https://img.youtube.com/vi/3Lm5DHgfwxo/maxresdefault.jpg" alt="Tour of rubyCAS: eight minutes, chapter by chapter" width="720"></a><br>
+  <a href="https://youtu.be/3Lm5DHgfwxo"><img src="https://img.youtube.com/vi/3Lm5DHgfwxo/maxresdefault.jpg" alt="The rcas tour: eight minutes, chapter by chapter" width="720"></a><br>
   <em>Watch the tour - eight minutes, chapter by chapter</em>
 </p>
 
@@ -28,7 +30,7 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
 `RCAS::Constants` to get the bare names used below.
 
 The tour above is on [YouTube](https://youtu.be/3Lm5DHgfwxo); the file itself is
-[rcas-tour.mp4](https://github.com/no-dashes/rubyCAS/releases/download/screencasts/rcas-tour.mp4)
+[rcas-tour.mp4](https://github.com/no-dashes/rcas/releases/download/screencasts/rcas-tour.mp4)
 with the releases, kept out of the repository so a clone stays small, and
 [assets/rcas-intro.gif](assets/rcas-intro.gif) is a one-minute version. All
 three are recorded from a real session by
@@ -117,6 +119,7 @@ checked - nothing in them is typed by hand.
   - [1.14 Random objects](#114-random-objects)
   - [1.15 Performance notes](#115-performance-notes)
 - [2. Reference](#2-reference)
+  - [What is not implemented](#what-is-not-implemented)
 - [3. Files](#3-files)
 - [4. Sources](#4-sources)
 - [5. License](#5-license)
@@ -181,6 +184,17 @@ object:
   one- and two-letter names only `p`, `pp` and (with the JSON library)
   `j`, `jj` are affected. rcas' own `eq`, `pi` and `oo` are reserved too;
   everything else short is free.
+- Ruby evaluates `1/3` before rcas sees it, and the answer is 0. Each line
+  is read before it runs, and a division of two integer literals that is
+  not whole draws a warning (`2**(1/2)` says the exponent became 0);
+  `hold { }` and `steps { }` keep the division as typed and are left
+  alone. `RCAS.lint = false` or `RCAS_LINT=0` turns the warning off.
+- An error that is an answer prints as one line: a refusal
+  (`RCAS::Unsupported`, "can't solve ... for x; nsolve ... finds a root
+  numerically"), a `DomainError`, and wrong arguments, which also show the
+  function's usage. An error that is a bug somewhere - a `NoMethodError`,
+  a `TypeError` - keeps irb's backtrace. `RCAS.backtrace = true` or
+  `RCAS_BACKTRACE=1` shows the backtrace for every error.
 
 **Caveat: the one thing rcas takes away from irb.** Everything above only
 *adds* to irb. The single exception is that Kernel's printers `p`, `pp`,
@@ -608,7 +622,11 @@ rcas> (x - x).simplify == 0
 ### 1.2 Numbers and constants
 
 Integers and rationals stay exact, floats stay floats. `1/2` in Ruby is
-integer division, so write `1/2r` (or `Rational(1, 2)`) for one half.
+integer division, so write `1/2r` (or `Rational(1, 2)`) for one half. The
+three front ends warn when a line divides two integer literals and the
+result is not whole, because by then `x + 1/3` is `x + 0` and nothing rcas
+does afterwards can tell. That line prints "warning: 1/3 is Ruby's integer
+division and gives 0; write 1/3r for the fraction" before its result.
 
 ```
 rcas> (x / 2 + x / 3).simplify
@@ -4872,7 +4890,12 @@ numer denom apart gcd lcm quo rem divmod subs call evalf to_f diff integrate
 series taylor limit solve eq variables degree ldegree lcoeff tcoeff coeff
 coeffs domain in in? to_poly to_sexp hold-related evaluate`.
 
-Not implemented: the complete Risch algorithm and special functions beyond
+### What is not implemented
+
+The gaps, as far as they are known. An input that needs one of them is
+refused or left unevaluated, never answered by a guess.
+
+The complete Risch algorithm and special functions beyond
 `erf`, `Ei`, `Si`, `Ci` and `li` (the dilogarithm, so `log(x)/(1 + x)`),
 analysis of variance and non-parametric tests,
 geometry in space, curves in space and surfaces that are given implicitly

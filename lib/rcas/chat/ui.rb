@@ -153,6 +153,7 @@ module RCAS
 
       def error(message) = puts(Style.red("  #{message}"))
       def info(message) = puts(Style.dim("  #{message}"))
+      def warning(message) = puts(Style.yellow("  warning: #{message}"))
 
       # A usage hint under an error: the first line in cyan, the rest dimmed.
       def hint(lines)

@@ -7,9 +7,7 @@
 #   e.expand                  # => 1 - x**2
 #   e.diff(:x)                # => -2*x
 #   e.call(x: 3)              # => -8
-module RCAS
-  VERSION = "0.2.0"
-end
+require_relative "rcas/version"
 
 require_relative "rcas/expression"
 require_relative "rcas/printer"
@@ -67,6 +65,7 @@ require_relative "rcas/decide"
 require_relative "rcas/finite_field"
 require_relative "rcas/discussion"
 require_relative "rcas/hold"
+require_relative "rcas/lint"
 require_relative "rcas/steps"
 require_relative "rcas/vector"
 require_relative "rcas/matrix"

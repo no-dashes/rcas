@@ -79,4 +79,27 @@ class IrbTest < Minitest::Test
     assert_includes out, "u(n + 1) + u(n)"
     assert out.grep(/undefined method [`']foo'/).any?, "other argument kinds still raise: #{out.join("\n")}"
   end
+  def test_refusals_print_one_line_with_the_usage
+    out, err, status = Open3.capture3(RbConfig.ruby, BIN, stdin_data: "solve(sin(x) - x**x, x)\nintegrate()\n")
+    assert status.success?, out + err
+    assert_includes out, "RCAS::Unsupported: can't solve sin(x) - x**x = 0 for x; nsolve(sin(x) - x**x, x: a..b) finds a root numerically"
+    assert_includes out, "ArgumentError: wrong number of arguments (given 0, expected 1..4)"
+    assert out.lines.any? { |l| l.start_with?("  usage: integrate(") }, out
+    refute_match(/solve\.rb:\d+/, out, "no backtrace for a refusal")
+  end
+
+  def test_bugs_and_the_flag_keep_the_backtrace
+    out, = Open3.capture3(RbConfig.ruby, BIN, stdin_data: "foo.bar\n")
+    assert_match(/NoMethodError/, out)
+    assert_match(/from /, out, "a NoMethodError is a bug and keeps its trace")
+    out, = Open3.capture3({ "RCAS_BACKTRACE" => "1" }, RbConfig.ruby, BIN, stdin_data: "solve(sin(x) - x**x, x)\n")
+    assert_match(/solve\.rb:\d+/, out, "RCAS_BACKTRACE=1 shows where a refusal came from")
+  end
+
+  def test_integer_division_is_warned
+    out, err, = Open3.capture3(RbConfig.ruby, BIN, stdin_data: "x + 1/3\nhold { 1/2 }\n")
+    assert_includes out, "x + 0"
+    assert_equal ["warning: 1/3 is Ruby's integer division and gives 0; write 1/3r for the fraction"],
+                 err.lines.map(&:chomp).grep(/^warning/)
+  end
 end

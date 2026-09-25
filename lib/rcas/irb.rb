@@ -1,8 +1,17 @@
 # frozen_string_literal: true
 
 require "irb"
+require_relative "chat/usage"
 
 module RCAS
+  # bin/rcas prints rcas's refusals as one line (RCAS::IRB::BRIEF); true
+  # gives every error irb's full backtrace again.
+  def self.backtrace? = @backtrace.nil? ? ENV["RCAS_BACKTRACE"] == "1" : @backtrace
+
+  def self.backtrace=(value)
+    @backtrace = value.nil? ? nil : !!value
+  end
+
   # irb integration. `RCAS::IRB.setup` prepares the session in which it is
   # called (normally the top-level `main` object in bin/rcas):
   #
@@ -72,18 +81,52 @@ module RCAS
     # number.
     module RecordInput
       def evaluate(statement, *args, **options)
-        RCAS::Results.record_input(statement.code, workspace.binding) if statement.is_a?(::IRB::Statement::Expression)
+        if statement.is_a?(::IRB::Statement::Expression)
+          RCAS::Results.record_input(statement.code, workspace.binding)
+          RCAS::Lint.warnings(statement.code).each { |message| warn "warning: #{message}" }
+        end
         super
+      end
+    end
+
+    # rcas's refusals and the errors of a call gone wrong are answers, and
+    # for them irb's backtrace through its own internals is noise: they
+    # print as one line, with the usage of the function when the arguments
+    # were wrong. Everything else - a NoMethodError, a TypeError - is a bug
+    # somewhere and keeps the whole backtrace. `RCAS.backtrace = true` (or
+    # RCAS_BACKTRACE=1) shows it for every error.
+    BRIEF = [
+      RCAS::Unsupported, NotImplementedError, ArgumentError, RCAS::SeriesError,
+      RCAS::Plot::Error, RCAS::Render::Error, RCAS::Docs::NotFound,
+      RCAS::OpenMath::ParseError, RCAS::OpenMath::EncodeError
+    ].freeze
+
+    def self.brief?(exception) = !RCAS.backtrace? && BRIEF.any? { |kind| exception.is_a?(kind) }
+
+    # The lines printed for a brief error.
+    def self.brief(exception)
+      first, *rest = exception.message.lines.map(&:rstrip)
+      lines = ["#{exception.class}: #{first}", *rest]
+      hint = RCAS::Chat::Usage.hint(exception, user_frame: "(irb)")
+      lines.concat(hint.map { |line| "  #{line}" }) if hint
+      lines
+    end
+
+    module BriefErrors
+      def handle_exception(exc)
+        return super unless RCAS::IRB.brief?(exc)
+        puts RCAS::IRB.brief(exc)
       end
     end
 
     # With RCAS.numbered the prompt carries the number of the line to come
     # (`rcas[3]> `); the results keep irb's `=>`. The internals we lean on
-    # here (Statement::Expression, Context#evaluate, prompt_i,
-    # return_format) are those of the irb bundled with Ruby 3.3.
+    # here (Statement::Expression, Context#evaluate, Irb#handle_exception,
+    # prompt_i, return_format) are those of the irb bundled with Ruby 3.3.
     def self.record_session(irb)
       ::IRB::Irb.prepend(RecordResult) unless ::IRB::Irb.include?(RecordResult)
       ::IRB::Context.prepend(RecordInput) unless ::IRB::Context.include?(RecordInput)
+      ::IRB::Irb.prepend(BriefErrors) unless ::IRB::Irb.include?(BriefErrors)
       plain = irb.context.return_format
       irb.context.define_singleton_method(:return_format) { RCAS::Results.return_format(plain) }
       prompt = irb.context.prompt_i

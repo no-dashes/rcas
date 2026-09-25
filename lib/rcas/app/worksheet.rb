@@ -111,13 +111,19 @@ module RCAS
       def evaluate(source)
         Results.record_input(source, @workspace.binding) # In[3] gives the line back held
         n = Results.index
+        warnings = Lint.warnings(source)
         started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         value, printed = @workspace.eval(source, capture: true)
         seconds = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
         Results.record(value) # Out[3] reaches the result of the session's third line
-        result(n, source, value, printed, seconds)
+        warned(result(n, source, value, printed, seconds), warnings)
       rescue StandardError, ScriptError, SystemStackError => e
-        error(n, source, e)
+        warned(error(n, source, e), warnings)
+      end
+
+      # `x + 1/3` is `x + 0` before rcas sees it; the cell says so (Lint).
+      def warned(cell, warnings)
+        warnings.nil? || warnings.empty? ? cell : cell.merge(warnings: warnings)
       end
 
       def result(n, source, value, printed, seconds)

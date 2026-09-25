@@ -164,6 +164,7 @@ module RCAS
 
       def evaluate(code)
         Results.record_input(code, @workspace.binding) # `In[3]` gives the line back held
+        Lint.warnings(code).each { |message| @ui.warning(message) }
         started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         value, = @ui.busy("computing") { @workspace.eval(code) }
         @ui.result(value)
