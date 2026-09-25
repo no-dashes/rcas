@@ -628,11 +628,11 @@ Integers and rationals stay exact, floats stay floats.
 **Why `1/2` is 0.** In Ruby, `/` between two Integers is *integer
 division*: the answer is again an Integer, the quotient rounded down,
 with `%` giving the remainder that goes with it (`7 == 2*(7/2) + 7 % 2`).
-That is not a bug but a deliberate rule, the same one C and Java have and
-Python spells `//`: arithmetic on integers stays in the integers, which
-is what counting, indexing and number theory want. Only when one side is
-not an Integer does `/` mean something else - a Float gives a Float, and
-a Rational gives the exact fraction. `2r` is Ruby's literal for the
+That is not a bug but a deliberate rule: arithmetic on integers stays in
+the integers, which is what counting, indexing and number theory want. C,
+Java and Python's `//` keep integer arithmetic in the integers too.
+Only when one side is not an Integer does `/` mean something else - a
+Float gives a Float, and a Rational gives the exact fraction. `2r` is Ruby's literal for the
 Rational 2, so `1/2r` is one half:
 
 ```
