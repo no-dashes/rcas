@@ -112,5 +112,8 @@ ten seconds or so - a fact about the recording, not about rcas.
   about a tenth of a second a frame; `magick` stays the fallback for a build
   of it that does have librsvg. `magick` is still needed either way, to
   measure the captured pictures.
+- **ffmpeg's GIF is every frame, whole.** The intro came out at 52 MB;
+  `magick -layers Optimize` stores only the rectangle each frame changes and
+  brings it to 1.4 MB, so `build.rb` runs it after ffmpeg (a minute or so).
 - **The pty hands back bytes, not UTF-8.** The banner, the rules and the
   prompt's chevron have to be re-encoded before any regexp touches them.

@@ -68,6 +68,10 @@ unless ARGV.include?("--no-gif")
       "-vf", "scale=840:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=96[p];" \
              "[b][p]paletteuse=dither=bayer:bayer_scale=3",
       "-loop", "0", GIF)
+  # ffmpeg writes every frame whole (52 MB for the intro); ImageMagick
+  # keeps only the rectangle that changed, which is what a mostly still
+  # terminal wants (1.4 MB).
+  run("magick", GIF, "-layers", "Optimize", GIF)
 end
 
 [MP4, GIF].each { |f| puts format("%-40s %s", f, File.exist?(f) ? "#{File.size(f) / 1024} KB" : "-") }
