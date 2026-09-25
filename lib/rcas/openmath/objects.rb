@@ -33,7 +33,7 @@ module RCAS
     # integral functions, RootOf). A cdbase is an identifier, not a URL that
     # has to resolve.
     CDBASE      = "http://www.openmath.org/cd"
-    RCAS_CDBASE = "https://github.com/no-dashes/rubyCAS/cd"
+    RCAS_CDBASE = "https://github.com/no-dashes/rcas/cd"
     RCAS_CD     = "rcas1"
 
     OBJECT_VERSION = "2.0"

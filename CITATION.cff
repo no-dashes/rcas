@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use rcas in your work, please cite it as below."
+type: software
+title: "rcas: a computer algebra system that lives inside Ruby"
+authors:
+  - family-names: Horn
+    given-names: Peter
+version: 0.2.0
+date-released: 2026-09-25
+license: MIT
+repository-code: "https://github.com/no-dashes/rcas"
+url: "https://github.com/no-dashes/rcas"
+keywords:
+  - computer algebra
+  - symbolic computation
+  - Ruby
+  - mathematics education

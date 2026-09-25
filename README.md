@@ -27,22 +27,43 @@ A minute of it, from exact arithmetic to typeset answers:
 </p>
 
 The longer tour through everything rcas can do is an eight-minute video,
-[Tour of rubyCAS](https://youtu.be/3Lm5DHgfwxo) on YouTube; the file itself is
-[rcas-tour.mp4](https://github.com/no-dashes/rubyCAS/releases/download/screencasts/rcas-tour.mp4),
+[on YouTube](https://youtu.be/3Lm5DHgfwxo); the file itself is
+[rcas-tour.mp4](https://github.com/no-dashes/rcas/releases/download/screencasts/rcas-tour.mp4),
 kept with the releases rather than in the repository, so a clone stays small.
 Both are built from a script of input lines by
 [tools/screencast](tools/screencast) - the script is replayed against a real
 session, so what you see is what rcas prints.
 
+Every function explains itself, with the mathematics, the method and the
+sources it follows:
+
+```
+rcas> doc(:factor)
+factor(obj, extension: nil, recombination: nil)
+  factor(x**2 - 1), factor(360), factor(f, extension: sqrt(2)); recombination: :van_hoeij, :zassenhaus or :auto
+  also: e.factor
+  maths: Write a polynomial as a unit times powers of irreducible factors,
+         over the integers or rationals (or an algebraic extension), or an
+         integer as a product of primes. The factorization is unique.
+  method: Squarefree decomposition [Yun76], factoring modulo a prime by
+          Cantor-Zassenhaus [CZ81], Hensel lifting of that factorization
+          and recombination - by subsets [Zas69], or for many modular
+          factors by van Hoeij's lattice [vHo02]; ...
+  sources: [Yun76] D. Y. Y. Yun, On square-free decomposition algorithms,
+           Proc. SYMSAC '76, ACM 1976, 26-35.
+           https://doi.org/10.1145/800205.806320
+           ...
+```
+
 This file covers installation and getting a session running. Everything
 about *using* rcas, from expressions and calculus to polynomial rings,
 finite fields, linear algebra and differential equations, is in
 [MANUAL.md](MANUAL.md), whose transcripts are checked by the test suite.
-
-*Beware*: This is a fun PoC project. It may deliver correct results, but
-it may give wrong answers. So I'd rather not base any important decisions
-on its results. So, don't blame me if your teacher says your homework
-was wrong or your rocket doesn't reach the moon in time.
+What rcas does *not* do is listed in
+[MANUAL.md, What is not implemented](MANUAL.md#what-is-not-implemented);
+how it is built and how it compares with Sage, SymPy, MuPAD and Maxima is
+in [DESIGN.md](DESIGN.md). How it was made, and how it was checked, is at
+the [end of this file](#how-and-why).
 
 ## Requirements
 
@@ -72,10 +93,21 @@ Optional, only for the typeset output and the chat front end:
   `bin/rcas-chat` also answers questions in plain language. Without them
   the chat is a plain CAS front end and shows nothing about it.
 
-## Running it
+## Installing and running it
+
+rcas is a gem with no dependencies beyond the Ruby it runs on (`irb` and
+`bigdecimal` are named because Ruby 3.4 and later bundle them rather than
+build them in):
 
 ```
-$ git clone <this repository> rcas && cd rcas
+$ gem build rcas.gemspec && gem install ./rcas-0.2.0.gem
+$ rcas              # the same three programs as below, on your PATH
+```
+
+or run it from a checkout, which is what the rest of this file assumes:
+
+```
+$ git clone https://github.com/no-dashes/rcas && cd rcas
 $ bin/rcas          # irb with rcas loaded: bare names are variables
 $ bin/rcas-chat     # terminal front end with typeset output
 $ bin/rcas-app      # a window: a worksheet of In/Out cells (--install for the Dock)
@@ -185,9 +217,14 @@ real `app.js`) needs `node`, and the parser test needs Ruby 3.4 or later.
 ## Documentation
 
 - [MANUAL.md](MANUAL.md): the user manual, with a table of contents,
-  worked examples for every feature, a reference of functions, and
-  appendices on typeset output, `rcas-chat` and `rcas-app`.
-- `LICENSE`: MIT.
+  worked examples for every feature, a reference of functions, the
+  [list of what is not implemented](MANUAL.md#what-is-not-implemented),
+  and appendices on typeset output, `rcas-chat` and `rcas-app`.
+- [DESIGN.md](DESIGN.md): the design - what `==` means, when rcas
+  rewrites, the canonical form, domains, how undecidable questions are
+  handled, a comparison with Sage, SymPy, MuPAD and Maxima, and the
+  invariants and algorithms behind it.
+- [CITATION.cff](CITATION.cff): how to cite rcas; `LICENSE`: MIT.
 
 ## How and why?
 
@@ -197,6 +234,34 @@ it again. And since I use ruby all the time, I considered implementing a
 CAS core in ruby, but never got past the playing around stage.
 
 With Claude, I now was able to outsource the nitty gritty details and only
-focus on my ideas on *how* such a thing could be built. So this project is
-mainly Claude-generated, I don't claim too much props, but I still hope
-that it could be useful or fun for others.
+focus on my ideas on *how* such a thing could be built. To be precise
+about who did what:
+
+- **Designed by me:** the shape of the system - a CAS that extends Ruby
+  instead of inventing a language, with Ruby symbols as the indeterminates,
+  Ruby operators building the trees and irb as the REPL; MuPAD's
+  `hold`/`eval` and domains as values; honest unevaluated answers instead
+  of guesses; the vocabulary; which features exist and in what order; and
+  the decisions where computer algebra systems disagree (principal roots
+  and `surd`, complete solutions over the complex numbers, Karr's
+  convention for reversed sums, and the others in
+  [DESIGN.md](DESIGN.md#settled-design-decisions)).
+- **Generated by Claude:** almost all of the code, the tests and the
+  manual, under that direction. 107 of the first 129 commits carry a
+  Claude co-author line.
+- **Checked by:** 1281 tests (`ruby -S rake`), with property checks
+  where the mathematics offers one - an antiderivative is differentiated
+  back, an ODE solution substituted, a closed-form sum evaluated at small
+  n; the manual itself, whose 961 `rcas>` lines the suite runs and compares
+  with the printed results line for line; rounds of outside review that
+  went looking for wrong answers, where every counterexample was
+  reproduced and now has a regression test of its own
+  (`test/review*_test.rb`); and sources: every non-trivial algorithm names
+  where it comes from in its code, and 87 of the 89 references in
+  [MANUAL.md, section 4](MANUAL.md#4-sources) carry a link (a DOI for 25
+  of them).
+
+**Beware:** this is a personal project, not a verified system. It is
+tested hard and it refuses rather than guesses where it can tell, but it
+can still give wrong answers. Check anything that matters by a second
+route.
