@@ -2296,7 +2296,12 @@ of the free ones. Polynomial systems with rational coefficients go through
 a lex Gröbner basis (see 1.6): it is triangular, so the last unknown has a
 univariate polynomial whose roots are substituted back one unknown at a
 time. A system with infinitely many solutions raises an error that shows
-the basis; two equations with parameters go through a resultant.
+the basis. Parameters - symbols that are not unknowns - make the basis one
+over `Frac(QQ[params])`, and the answer is the generic one, as for a
+linear system: it may not hold where a leading coefficient in the
+parameters vanishes (`y = a*x` below divides by `a`). Two equations whose
+coefficients are not rational, such as `sqrt(2)`, go through the resultant
+in the first unknown.
 
 ```
 rcas> solve([eq(x + y, 3), eq(x - y, 1)], [x, y])
@@ -2311,6 +2316,12 @@ rcas> solve([x**2 - y, y**2 - x], [x, y])
 => [{x=>1, y=>1}, {x=>0, y=>0}, {x=>-1/2 + i*3**(1/2)/2, y=>-1/2 - i*3**(1/2)/2}, {x=>-1/2 - i*3**(1/2)/2, y=>-1/2 + i*3**(1/2)/2}]
 rcas> solve([x**2 - 1, y - x, z**2 - x], [x, y, z])
 => [{x=>1, y=>1, z=>1}, {x=>1, y=>1, z=>-1}, {x=>-1, y=>-1, z=>-i}, {x=>-1, y=>-1, z=>i}]
+rcas> solve([x**2 + y**2 - 1, x + y - a], [x, y])
+=> [{x=>(2 - a**2)**(1/2)/2 + a/2, y=>-(2 - a**2)**(1/2)/2 + a/2}, {x=>-(2 - a**2)**(1/2)/2 + a/2, y=>(2 - a**2)**(1/2)/2 + a/2}]
+rcas> solve([x**2 + y**2 - 1, y - a*x], [x, y])
+=> [{x=>-(a**2 + a**4)**(1/2)/(a*(1 + a**2)), y=>-(a**2 + a**4)**(1/2)/(1 + a**2)}, {x=>(a**2 + a**4)**(1/2)/(a*(1 + a**2)), y=>(a**2 + a**4)**(1/2)/(1 + a**2)}]
+rcas> solve([x**2 + y**2 - 2, x - sqrt(2)*y], [x, y])
+=> [{x=>-2*3**(1/2)/3, y=>-6**(1/2)/3}, {x=>2*3**(1/2)/3, y=>6**(1/2)/3}]
 ```
 
 A trigonometric equation has infinitely many solutions, and a list of
@@ -3360,6 +3371,28 @@ rcas> matrix([[1, 2], [3, 4]]).space
 => ZZ**[2, 2]
 rcas> ZZ.matrix([[2, 0], [0, 2]]).inverse.space
 => QQ**[2, 2]
+```
+
+Entries in indeterminates nobody has declared put the matrix over the
+polynomial ring they generate, the way integer entries put it over `ZZ`:
+the smallest of `ZZ[...]`, `QQ[...]`, `RR[...]` and `CC[...]` that holds
+them, and past a polynomial its fraction field. A declared name
+(`x.in(RR)`, below) is a scalar of its own domain instead. An entry that
+is not a rational function, such as `sin(x)`, still needs one of the two.
+
+```
+rcas> sm = matrix([[x, y], [y, z]])
+=> [x y]
+   [y z]
+rcas> sm.space
+=> ZZ[x, y, z]**[2, 2]
+rcas> [sm.det, matrix([[x, 1/2r], [0, x]]).space, matrix([[1/x, 1], [1, x]]).space]
+=> [x*z - y**2, QQ[x]**[2, 2], Frac(QQ[x])**[2, 2]]
+rcas> sm.inverse
+=> [ z/(x*z - y**2) -y/(x*z - y**2)]
+   [-y/(x*z - y**2)  x/(x*z - y**2)]
+rcas> matrix([[x, 1], [1, x]]).eigenvectors
+=> [[1 + x, 1, [(1, 1)]], [-1 + x, 1, [(-1, 1)]]]
 ```
 
 Eigenvalues are the roots of the characteristic polynomial, exact whenever
@@ -5070,7 +5103,7 @@ used in the source code comments (`# [GCL92, ch. 8]`).
 | histogram bin count, box plot whiskers at 1.5 interquartile ranges | plot.rb | [Stu26]; [Tuk77] |
 | surfaces in space: parallel projection of a mesh, hidden surfaces by depth sort (the painter's algorithm) | plot3d.rb | [NNS72]; [FvDFH90, ch. 6, §15.5] |
 | Gaussian integrals: exp(quadratic) by completing the square, x**n exp(quadratic) by reduction | integrate_substitutions.rb | [AS64, §7.1, §7.4] |
-| polynomial systems: lex Gröbner basis and triangular back-substitution; resultants for two equations with parameters | solve.rb | [CLO15, ch. 2 §8, ch. 3 §1]; [GCL92, ch. 9-10] |
+| polynomial systems: lex Gröbner basis (over Frac(QQ[params]) with parameters) and triangular back-substitution; resultants for two equations with irrational coefficients | solve.rb | [CLO15, ch. 2 §8, ch. 3 §1]; [GCL92, ch. 9-10] |
 | Newton interpolation by divided differences | interpolate.rb | [Knu98, §4.6.4]; [vzGG13, ch. 5] |
 | named polynomial families: three-term recurrences, cyclotomic by exact division of x**n - 1, Swinnerton-Dyer by one conjugation per prime | named_polynomials.rb | [AS64, ch. 22-23]; [Sze75]; [GKP94, ch. 5-6]; [vzGG13, ch. 14]; [Coh93] |
 | Gröbner bases: Buchberger's algorithm with the product criterion, normal forms, reduced bases, the dimension test | groebner.rb | [Buc65]; [CLO15, ch. 2 §§3, 7, 9-10; ch. 5 §3]; [GCL92, ch. 10] |

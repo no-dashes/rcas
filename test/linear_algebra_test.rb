@@ -160,7 +160,8 @@ class LinearAlgebraTest < Minitest::Test
     assert_equal QQ**[1, 2], RCAS.matrix([[1, Rational(1, 2)]]).space
     assert_equal RR**2, RCAS.vector(1, 2.5).space
     assert_equal QQ**2, RCAS.vector(QQ, 1, 2).space
-    assert_raises(RCAS::DomainError) { RCAS.vector(:undeclared, 1) }
+    # an undeclared name is an indeterminate of the entries' ring
+    assert_equal ZZ[:undeclared]**2, RCAS.vector(:undeclared, 1).space
   end
 
   def test_complex_entries
@@ -240,5 +241,75 @@ class LinearAlgebraTest < Minitest::Test
     basis.combination(2) { |u, w| assert_equal "0", RCAS::LinearAlgebra.dot(u, w).to_s }
     vs.each { |v| assert_equal v, RCAS.project(v, onto: basis), "every generator is back in the span" }
     assert_equal 2, RCAS.gram_schmidt([RCAS.vector(1, 1, 0), RCAS.vector(2, 2, 0), RCAS.vector(0, 1, 1)]).size
+  end
+
+  # matrix([[a, b], [c, d]]) with nothing declared raised "can't infer a
+  # domain for a" (the fourth external review): the entries live in
+  # ZZ[a, b, c, d], as [[1, 2], [3, 4]] live in ZZ, and past a polynomial
+  # in the fraction field. The answers are those of RR.matrix after
+  # declaring every name real.
+  def test_a_symbolic_matrix_is_over_the_ring_of_its_indeterminates
+    a, b, c, d = %i[a b c d]
+    m = RCAS.matrix([[a, b], [c, d]])
+    assert_equal "ZZ[a, b, c, d]**[2, 2]", m.space.to_s
+    assert_equal "a*d - b*c", m.det.to_s
+    %i[det inverse rref rank adjugate eigenvalues].each do |op|
+      expected = RCAS.assume(a: RR, b: RR, c: RR, d: RR) { RCAS.matrix([[a, b], [c, d]]).public_send(op).to_s }
+      assert_equal expected, m.public_send(op).to_s, op
+    end
+    assert_equal "QQ[a]**[2, 2]", RCAS.matrix([[a, Rational(1, 2)], [0, a]]).space.to_s
+    assert_equal "Frac(QQ[a])**[2, 2]", RCAS.matrix([[1 / RCAS::Var.new(:a), 1], [1, a]]).space.to_s
+    assert_equal "RR[a]**[1, 2]", RCAS.matrix([[RCAS.sqrt(2) * a, 1]]).space.to_s
+    assert_equal "ZZ[a, b]**2", RCAS.vector([a, b]).space.to_s
+    # a numeric matrix keeps its number set
+    assert_equal "ZZ**[2, 2]", RCAS.matrix([[1, 2], [3, 4]]).space.to_s
+    assert_equal "QQ**[1, 2]", RCAS.matrix([[Rational(1, 2), 2]]).space.to_s
+    # a declared name is a scalar of its domain, not an indeterminate
+    RCAS.assume(x: RR) { assert_equal "RR[a]**[1, 2]", RCAS.matrix([[:x, a]]).space.to_s }
+  end
+
+  def test_a_matrix_that_is_no_rational_function_says_what_to_type
+    e = assert_raises(RCAS::DomainError) { RCAS.matrix([[RCAS.sin(:a), 1]]) }
+    assert_match(/a\.in\(RR\)/, e.message)
+    assert_match(/RR\.matrix/, e.message)
+  end
+
+  # Over a polynomial ring the charpoly lives in QQ[x, _l], where
+  # Polynomial#coeff(k) reads an exponent vector: eigenvalues were [] for
+  # QQ[x].matrix([[x, 1], [1, x]]).
+  def test_eigenvalues_over_a_polynomial_ring
+    m = QQ[:x].matrix([[:x, 1], [1, :x]])
+    assert_equal ["1 + x", "-1 + x"], m.eigenvalues.map(&:to_s)
+    assert_equal ["-1 + x**2", "1 + x**2"], RCAS.matrix([[:x**2, 1], [1, :x**2]]).eigenvalues.map(&:to_s)
+    assert_equal 2, RCAS.matrix([[:x**2, 1], [1, :x]]).eigenvalues.size
+  end
+
+  # A radical is an atom to cancel, so sqrt(x)**2 - x and its relatives
+  # were not seen to vanish; reduced modulo t**2 - x they are 0.
+  def test_a_radical_identity_is_a_zero_entry
+    r = RCAS.sqrt(:x)
+    assert RCAS::Scalar.zero?(r**2 - :x)
+    assert RCAS::Scalar.zero?((r + 1) * (r - 1) - :x + 1)
+    assert RCAS::Scalar.zero?(RCAS.sqrt(1 + r)**2 - r - 1)
+    refute RCAS::Scalar.zero?(r - 1)
+  end
+
+  # A - lambda*I at an eigenvalue of the generic 2x2 has a pivot that is
+  # zero only because lambda**2 = (a + d)*lambda - a*d + b*c, and it read
+  # as non-zero, so both eigenspaces came back empty (under RR too).
+  def test_the_eigenvectors_of_the_generic_two_by_two
+    a, b, c, d = %i[a b c d]
+    m = RCAS.matrix([[a, b], [c, d]])
+    pairs = m.eigenvectors
+    assert_equal 2, pairs.size
+    pairs.each do |value, multiplicity, vectors|
+      assert_equal 1, multiplicity
+      assert_equal 1, vectors.size, "an eigenvalue has an eigenvector"
+      v = vectors.first
+      residual = m * v - v.scale(value)
+      residual.entries.each { |r| assert RCAS::Scalar.zero?(r), "A*v = lambda*v: #{r}" }
+    end
+    pairs = RCAS.matrix([[RCAS.sqrt(2) * a, 1], [1, a]]).eigenvectors
+    assert_equal [1, 1], pairs.map { |_, _, vs| vs.size }
   end
 end

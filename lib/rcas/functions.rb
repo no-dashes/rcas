@@ -635,10 +635,29 @@ module RCAS
     end
 
     def self.infer_domain(entries)
-      entries.reduce(ZZ) do |d, e|
-        ed = Infer.where_defined { Scalar.domain(Expression.lift(e)) }
-        raise DomainError, "can't infer a domain for #{e}; pass one explicitly or declare its variables" unless ed
-        d.join(ed)
+      lifted = entries.map { |e| Expression.lift(e) }
+      known = lifted.map { |e| Infer.where_defined { Scalar.domain(e) } }
+      return known.reduce(ZZ) { |d, ed| d.join(ed) } if known.all?
+      symbolic_domain(lifted) or begin
+        e = lifted[known.index(nil)]
+        names = e.variables.reject { |v| RCAS.assumption(v) }
+        hint = names.empty? ? "" : "; declare #{names.map { |v| "#{v}.in(RR)" }.join(', ')} first"
+        raise DomainError, "can't infer a domain for #{e}#{hint}, or name one: RR.matrix(...)"
+      end
+    end
+
+    # Entries in undeclared indeterminates live in the smallest polynomial
+    # ring over ZZ, QQ, RR or CC that holds them all, and past that in its
+    # fraction field: matrix([[a, b], [c, d]]) is over ZZ[a, b, c, d], as
+    # matrix([[1, 2], [3, 4]]) is over ZZ. A declared name is a scalar of
+    # its own domain and not an indeterminate of the ring. nil when an
+    # entry is not a rational function (sin(a)).
+    def self.symbolic_domain(entries)
+      free = entries.flat_map(&:variables).uniq.reject { |v| RCAS.assumption(v) }.sort
+      return nil if free.empty?
+      rings = [ZZ, QQ, RR, CC].map { |k| PolynomialRing.new(k, free) }
+      (rings + rings.drop(1).map(&:fraction_field)).find do |dom|
+        entries.all? { |e| Infer.where_defined { dom.include?(e) } }
       end
     end
 

@@ -61,10 +61,58 @@ module RCAS
         cancelled = expanded.cancel
         return true if cancelled.is_a?(Num) && cancelled.value.zero?
       end
-      trigonometric_zero?(expanded)
+      radical_zero?(expanded) || trigonometric_zero?(expanded)
     rescue StandardError => rescued
       RCAS.guard!(rescued)
       false
+    end
+
+    # A rational function of radicals t_i = B_i**(1/q_i) is zero when its
+    # numerator, as a polynomial in the t_i, reduces to 0 modulo the
+    # t_i**q_i - B_i. That is a proof - each t_i satisfies its equation -
+    # and cancel cannot see it, since a radical is an atom to it. The
+    # pivots of A - lambda*I at an eigenvalue of matrix([[a, b], [c, d]])
+    # are of this kind, and each read as non-zero, so the eigenspaces came
+    # back empty. A non-zero remainder proves nothing (t**q - B may
+    # factor) and says false. A radical inside another's base is reduced
+    # after it.
+    def radical_zero?(e)
+      radicals = e.each_node.select do |n|
+        n.is_a?(Pow) && n.exponent.is_a?(Num) && n.exponent.value.is_a?(Rational) && n.exponent.value.denominator > 1
+      end
+      return false unless radicals.any? { |n| !n.base.constant? }
+      degrees = {}
+      radicals.each { |n| degrees[n.base] = (degrees[n.base] || 1).lcm(n.exponent.value.denominator) }
+      used = e.variables
+      atoms = degrees.to_h do |b, _|
+        t = Expression.fresh_variable(:t, used)
+        used += [t.name]
+        [b, t]
+      end
+      atomized = replace_radical(e, degrees, atoms)
+      numerator = RationalFunction.numer(atomized.cancel).expand
+      # outer radicals first: reducing t**q to B brings in the radicals
+      # inside B, never the other way round
+      depth = Hash.new { |h, b| h[b] = 1 + degrees.keys.select { |o| o != b && b.each_node.any? { |n| n.is_a?(Pow) && n.base == o } }.map { |o| h[o] }.max.to_i }
+      atoms.keys.sort_by { |b| -depth[b] }.each do |b|
+        t = atoms[b]
+        q = degrees[b]
+        next unless numerator.variables.include?(t.name)
+        value = replace_radical(b, degrees, atoms)
+        numerator = numerator.coeffs(t).each_with_index.reduce(Num.new(0)) do |sum, (c, k)|
+          sum + c * value**(k / q) * t**(k % q)
+        end.expand
+      end
+      numerator.is_a?(Num) && numerator.value.is_a?(Numeric) && numerator.value.zero?
+    end
+
+    def replace_radical(e, degrees, atoms)
+      if e.is_a?(Pow) && atoms.key?(e.base) && e.exponent.is_a?(Num) && e.exponent.value.is_a?(Rational)
+        k = e.exponent.value * degrees[e.base]
+        return atoms[e.base]**k.to_i if k.denominator == 1
+      end
+      return e if e.children.empty?
+      e.map_children { |c| replace_radical(c, degrees, atoms) }
     end
 
     # cos(u)**2 is 1 - sin(u)**2 and cosh(u)**2 is 1 + sinh(u)**2: with every

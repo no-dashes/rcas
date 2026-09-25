@@ -461,4 +461,37 @@ class SolveTest < Minitest::Test
     assert_equal ["0", "1/2"], strs(RCAS.solve(RCAS.asin(x) * (x - Rational(1, 2)), x))
   end
 
+  # MANUAL 1.4 promised "two equations with parameters go through a
+  # resultant", and the resultant route built QQ[x, y] and refused the
+  # parameter (the fourth external review). Parameters now make the Gröbner
+  # basis one over Frac(QQ[a]); the resultant takes what is not rational.
+  def test_a_polynomial_system_with_a_parameter
+    x, y = RCAS::Var.new(:x), RCAS::Var.new(:y)
+    fs = [x**2 + y**2 - 1, x + y - :a]
+    sols = RCAS.solve(fs, [x, y])
+    assert_equal [["(2 - a**2)**(1/2)/2 + a/2", "-(2 - a**2)**(1/2)/2 + a/2"],
+                  ["-(2 - a**2)**(1/2)/2 + a/2", "(2 - a**2)**(1/2)/2 + a/2"]],
+                 sols.map { |sol| [sol[x].to_s, sol[y].to_s] }
+    assert_system_holds(fs, sols)
+    fs = [x**2 + y**2 - 1, y - :a * x]
+    sols = RCAS.solve(fs, [x, y])
+    assert_equal 2, sols.size
+    refute sols.to_s.include?("1/a**2"), "the basis is cleared of its fractions in a"
+    assert_system_holds(fs, sols)
+  end
+
+  def test_a_polynomial_pair_with_an_irrational_coefficient
+    x, y = RCAS::Var.new(:x), RCAS::Var.new(:y)
+    [[x**2 + y**2 - 2, x - RCAS.sqrt(2) * y], [x**2 + y**2 - :a, x - RCAS.sqrt(2) * y]].each do |fs|
+      sols = RCAS.solve(fs, [x, y])
+      assert_equal 2, sols.size
+      assert_system_holds(fs, sols)
+    end
+  end
+
+  def assert_system_holds(fs, sols)
+    sols.each do |sol|
+      fs.each { |f| assert RCAS::Scalar.zero?(f.subs(sol.to_h).simplify), "#{f} at #{sol}" }
+    end
+  end
 end

@@ -318,7 +318,11 @@ module RCAS
     def eigenvalues
       p = charpoly(:_l)
       return p.roots if base.is_a?(FiniteField)
-      Solve.polynomial_roots((0..p.degree).map { |k| p.coeff(k) })
+      # Over a polynomial ring the charpoly lives in QQ[x, _l], where
+      # coeff(k) reads an exponent vector and the total degree is not the
+      # one in _l: QQ[x].matrix([[x, 1], [1, x]]) had no eigenvalues.
+      coefficients = (0..p.degree(:_l)).map { |k| p.coefficient_in(:_l, k).to_expr }
+      Solve.polynomial_roots(coefficients)
     end
 
     # [[eigenvalue, multiplicity, [basis of the eigenspace]], ...]

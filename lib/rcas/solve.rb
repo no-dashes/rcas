@@ -1872,10 +1872,16 @@ module RCAS
 
     # Polynomial systems over QQ by a lex Gröbner basis [CLO15, ch. 2 §8, ch. 3 §1]:
     # the basis is triangular, so the last unknown has a univariate polynomial;
-    # its roots are substituted into the rest. nil when a coefficient is not
-    # rational (parameters), so that the resultant route can try.
+    # its roots are substituted into the rest. Parameters make the
+    # coefficients rational functions, and the basis is taken over
+    # Frac(QQ[params]) - the generic answer, as for a linear system, which
+    # may differ where a leading coefficient in the parameters vanishes.
+    # nil when a coefficient is not rational (sqrt(2), sin(a)), so that the
+    # resultant route can try.
     def polynomial_system(fs, unknowns)
-      ring = QQ[*unknowns.map(&:name)]
+      names = unknowns.map(&:name)
+      params = fs.flat_map(&:variables).uniq - names
+      ring = params.empty? ? QQ[*names] : QQ[*params].fraction_field[*names]
       polys = fs.map do |f|
         ring.call(f)
       rescue DomainError
@@ -1886,7 +1892,10 @@ module RCAS
       unless Groebner.zero_dimensional?(basis, :lex)
         raise RCAS::Unsupported, "the system has infinitely many solutions; its Gröbner basis is #{basis.map(&:to_s).join(', ')}"
       end
-      triangular(basis.map(&:to_expr), unknowns, {}).map { |sol| unknowns.to_h { |u| [u, sol[u]] } }
+      # over Frac(QQ[params]) the coefficients are fractions such as
+      # 1/(1/a**2 + 1); the numerator is the same equation, generically
+      basis = basis.map { |g| params.empty? ? g.to_expr : RationalFunction.numer(g.to_expr) }
+      triangular(basis, unknowns, {}).map { |sol| unknowns.to_h { |u| [u, sol[u]] } }
     end
 
     def triangular(basis, unknowns, known)
@@ -1955,23 +1964,32 @@ module RCAS
       [solution]
     end
 
+    # Two equations whose coefficients are not rational - sqrt(2), or a
+    # parameter next to one - by the resultant in x [GCL92, ch. 9]: its
+    # roots in y are substituted back, and a root of the first equation is
+    # kept where the second vanishes too. Parameters are indeterminates of
+    # the ring, so the coefficients in y are read with coefficient_in.
     def polynomial_pair(fs, unknowns)
       x, y = unknowns
-      ring = QQ[x.name, y.name]
-      f, g = fs.map do |e|
-        ring.call(e)
-      rescue DomainError
-        raise RCAS::Unsupported, "polynomial systems need rational coefficients: #{e}"
+      names = [x.name, y.name]
+      params = fs.flat_map(&:variables).uniq - names
+      ring = [QQ, RR, CC].map { |k| PolynomialRing.new(k, params + names) }.find do |r|
+        fs.all? { |e| Infer.where_defined { r.include?(e) } }
       end
+      raise RCAS::Unsupported, "only linear systems and polynomial systems are supported: #{fs.map(&:to_s).join(', ')}" unless ring
+      f, g = fs.map { |e| ring.call(e) }
       res = f.resultant(g, x.name)
       raise RCAS::Unsupported, "the equations share a common factor" if res.zero?
-      ys = polynomial_roots((0..res.degree(y.name)).map { |k| ring_constant(res.coefficient_in(y.name, k)) })
-      dedupe(ys).flat_map do |y0|
+      ys = polynomial_roots((0..res.degree(y.name)).map { |k| res.coefficient_in(y.name, k).to_expr })
+      dedupe(ys.map(&:simplify)).flat_map do |y0|
         xs = univariate(fs[0].subs(y => y0), x, 1)
-        xs.select { |x0| Equation.new(fs[1], 0).holds?(x.name => x0, y.name => y0) }.map { |x0| { x => x0, y => y0 } }
+        xs.select { |x0| vanishes_at?(fs[1], x => x0, y => y0) }.map { |x0| { x => x0, y => y0 } }
       end
     end
 
-    def ring_constant(poly) = poly.constant_term
+    def vanishes_at?(f, point)
+      value = f.subs(point).simplify
+      value.variables.empty? ? Equation.new(value, 0).holds? : Scalar.zero?(value)
+    end
   end
 end
