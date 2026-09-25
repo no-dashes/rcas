@@ -184,7 +184,9 @@ object:
   one- and two-letter names only `p`, `pp` and (with the JSON library)
   `j`, `jj` are affected. rcas' own `eq`, `pi` and `oo` are reserved too;
   everything else short is free.
-- Ruby evaluates `1/3` before rcas sees it, and the answer is 0. Each line
+- Ruby evaluates `1/3` before rcas sees it, and since both sides are
+  Integers that is integer division, whose answer is 0 (section 1.2
+  explains why Ruby does this). Each line
   is read before it runs, and a division of two integer literals that is
   not whole draws a warning (`2**(1/2)` says the exponent became 0);
   `hold { }` and `steps { }` keep the division as typed and are left
@@ -621,12 +623,60 @@ rcas> (x - x).simplify == 0
 
 ### 1.2 Numbers and constants
 
-Integers and rationals stay exact, floats stay floats. `1/2` in Ruby is
-integer division, so write `1/2r` (or `Rational(1, 2)`) for one half. The
-three front ends warn when a line divides two integer literals and the
-result is not whole, because by then `x + 1/3` is `x + 0` and nothing rcas
-does afterwards can tell. That line prints "warning: 1/3 is Ruby's integer
-division and gives 0; write 1/3r for the fraction" before its result.
+Integers and rationals stay exact, floats stay floats.
+
+**Why `1/2` is 0.** In Ruby, `/` between two Integers is *integer
+division*: the answer is again an Integer, the quotient rounded down,
+with `%` giving the remainder that goes with it (`7 == 2*(7/2) + 7 % 2`).
+That is not a bug but a deliberate rule, the same one C and Java have and
+Python spells `//`: arithmetic on integers stays in the integers, which
+is what counting, indexing and number theory want. Only when one side is
+not an Integer does `/` mean something else - a Float gives a Float, and
+a Rational gives the exact fraction. `2r` is Ruby's literal for the
+Rational 2, so `1/2r` is one half:
+
+```
+rcas> 7/2
+=> 3
+rcas> [7 % 2, -7/2, 7.0/2, 7/2r]
+=> [1, -4, 3.5, (7/2)]
+```
+
+(`-7/2` is -4, not -3: Ruby rounds down, towards minus infinity, where C
+truncates towards zero.)
+
+What makes this a trap in a CAS is *when* it happens. Ruby evaluates
+`1/3` - two plain Integers - before any rcas method is called, so in
+`x + 1/3` rcas receives `x + 0` and has no way to know a fraction was
+meant. rcas could redefine `Integer#/`, but that would change integer
+division for every Ruby library in the process, irb included, so it
+does not; Sage avoids the problem with a preparser that rewrites
+literals before Python sees them, and rcas has no parser of its own by
+design. Write `1/2r` or `Rational(1, 2)`, or divide an expression
+(`x/2` is fine, since `x` is not an Integer). The three front ends warn
+when a line divides two integer literals and the result is not whole:
+that line prints "warning: 1/3 is 0: Ruby divides two Integers as
+integers, rounding down; write 1/3r for the fraction" before its result.
+
+**Why an answer can say `x**(1/3)` all the same.** rcas prints a
+fractional exponent the way mathematics writes it, `x**(1/3)`, and that is
+not the `x**0` the same characters make at the prompt. The exponent in
+the answer was never an Integer division: it is the exact Rational 1/3,
+stored inside the expression by `1/3r`, `Rational(1, 3)`, `root(x, 3)`,
+`sqrt` or a computation, and only its printed form uses `/`. Printed text
+is for reading; Ruby never evaluates it. Typed back in, it would be read
+as Ruby again, `1/3` first, and so the exponent has to be written
+`1/3r` there - the warning above catches a pasted `x**(1/3)`. The prose
+of this manual uses the same notation as the output: `x**(1/3)` in a
+sentence means the cube root, while every `rcas>` line spells it the way
+it must be typed.
+
+```
+rcas> [x**(1/3r), root(x, 3), sqrt(x)]
+=> [x**(1/3), x**(1/3), x**(1/2)]
+rcas> x**(1/3)
+=> x**0
+```
 
 ```
 rcas> (x / 2 + x / 3).simplify

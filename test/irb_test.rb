@@ -99,7 +99,7 @@ class IrbTest < Minitest::Test
   def test_integer_division_is_warned
     out, err, = Open3.capture3(RbConfig.ruby, BIN, stdin_data: "x + 1/3\nhold { 1/2 }\n")
     assert_includes out, "x + 0"
-    assert_equal ["warning: 1/3 is Ruby's integer division and gives 0; write 1/3r for the fraction"],
+    assert_equal ["warning: 1/3 is 0: Ruby divides two Integers as integers, rounding down; write 1/3r for the fraction"],
                  err.lines.map(&:chomp).grep(/^warning/)
   end
 end

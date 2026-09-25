@@ -7,7 +7,7 @@ module RCAS
   # can tell, so the front ends read the line's syntax tree before running
   # it and say so at the moment it happens.
   #
-  #   Lint.warnings("x + 1/3")  # => ["1/3 is Ruby's integer division and gives 0; write 1/3r for the fraction"]
+  #   Lint.warnings("x + 1/3")  # => ["1/3 is 0: Ruby divides two Integers as integers, rounding down; write 1/3r for the fraction"]
   #
   # A division that comes out whole (`6/3`) is left alone, and so is the
   # inside of `hold { }` and `steps { }`, which keep the division as typed.
@@ -52,8 +52,8 @@ module RCAS
       a = integer(node.children[0])
       b = integer(node.children[2]&.children&.first)
       return nil if a.nil? || b.nil? || b.zero? || (a % b).zero?
-      text = "#{a}/#{b} is Ruby's integer division and gives #{a / b}"
-      text += ", so the exponent is #{a / b}" if exponent
+      text = "#{a}/#{b} is #{a / b}: Ruby divides two Integers as integers, rounding down"
+      text += " (so the exponent is #{a / b})" if exponent
       "#{text}; write #{a}/#{b}r for the fraction"
     end
 

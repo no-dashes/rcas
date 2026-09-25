@@ -55,7 +55,7 @@ class AppWorksheetTest < Minitest::Test
   def test_integer_division_is_warned_in_the_cell
     cell = @sheet.submit("x + 1/3")
     assert_equal "x + 0", cell[:text]
-    assert_equal ["1/3 is Ruby's integer division and gives 0; write 1/3r for the fraction"], cell[:warnings]
+    assert_equal ["1/3 is 0: Ruby divides two Integers as integers, rounding down; write 1/3r for the fraction"], cell[:warnings]
     assert_nil @sheet.submit("x + 1/3r")[:warnings]
     assert_equal 1, @sheet.submit("integrate(1/2)")[:warnings].size, "an error cell carries it too"
   end

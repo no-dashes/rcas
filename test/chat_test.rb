@@ -130,7 +130,7 @@ class ChatReplTest < Minitest::Test
 
   def test_integer_division_is_warned_before_the_result
     _, out = repl("x + 1/3\nx + 1/3r\n")
-    assert_includes out, "warning: 1/3 is Ruby's integer division and gives 0; write 1/3r for the fraction"
+    assert_includes out, "warning: 1/3 is 0: Ruby divides two Integers as integers, rounding down; write 1/3r for the fraction"
     assert_equal 1, out.scan("warning:").size
     assert_operator out.index("warning:"), :<, out.index("x + 0")
   end

@@ -9,16 +9,16 @@ class LintTest < Minitest::Test
   end
 
   def test_an_integer_division_that_is_not_whole_is_warned
-    assert_equal ["1/3 is Ruby's integer division and gives 0; write 1/3r for the fraction"],
+    assert_equal ["1/3 is 0: Ruby divides two Integers as integers, rounding down; write 1/3r for the fraction"],
                  RCAS::Lint.warnings("x + 1/3")
-    assert_equal ["-1/3 is Ruby's integer division and gives -1; write -1/3r for the fraction"],
+    assert_equal ["-1/3 is -1: Ruby divides two Integers as integers, rounding down; write -1/3r for the fraction"],
                  RCAS::Lint.warnings("-1/3*x")
   end
 
   def test_an_exponent_says_what_the_power_became
-    assert_equal ["1/2 is Ruby's integer division and gives 0, so the exponent is 0; write 1/2r for the fraction"],
+    assert_equal ["1/2 is 0: Ruby divides two Integers as integers, rounding down (so the exponent is 0); write 1/2r for the fraction"],
                  RCAS::Lint.warnings("2**(1/2)")
-    assert_equal ["1/2 is Ruby's integer division and gives 0; write 1/2r for the fraction"],
+    assert_equal ["1/2 is 0: Ruby divides two Integers as integers, rounding down; write 1/2r for the fraction"],
                  RCAS::Lint.warnings("(1/2)**x"), "the base is not the exponent"
   end
 

@@ -76,9 +76,15 @@ reason is that Ruby folds `1 + 2` before rcas sees it, and a student
 expects `sin(pi/6)` to behave like a number in the same way. Operator
 expressions on constants (`I**2`) still wait for `simplify`.
 
-Ruby's own folding is the one real trap of the design: `1/2` is the
-Integer 0 and `2**(1/3r)` is a Float before any rcas code runs, so
-`x + 1/3` is `x + 0`. The exact spellings are `1/3r`, `Rational(1, 3)`,
+Ruby's own folding is the one real trap of the design: `/` between two
+Integers is integer division (the quotient rounded down, as `//` in
+Python), so `1/2` is the Integer 0, and `2**(1/3r)` is a Float, before
+any rcas code runs; `x + 1/3` is `x + 0`. Redefining `Integer#/` would
+change it for every library in the process, and rcas has no preparser
+(Sage's answer), so the literal has to say what it means. Output keeps
+the mathematical spelling `x**(1/3)` for the stored Rational exponent,
+which reads well but does not paste back: typed at the prompt it is
+`x**0`, and the input warning is what catches it. The exact spellings are `1/3r`, `Rational(1, 3)`,
 `root(2, 3)` and `cbrt`, and `hold { }` keeps the literal structure of a
 block by reading its syntax tree instead of running it. Since the value
 cannot be recovered afterwards, the front ends read each input line's
