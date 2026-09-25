@@ -189,6 +189,12 @@ module RCAS
                 e.base.exponent.value.is_a?(Integer) && RCAS.nonnegative?(e.base.base)
             # (x**2)**(1/2) is x when x cannot be negative
             stack.push([e.base.base, multiply_exponents(e.base.exponent.value, multiply_exponents(exp, pw)), true])
+          elsif exp.is_a?(Rational) && e.base.is_a?(Pow) && e.base.exponent.is_a?(Num) &&
+                e.base.exponent.value.is_a?(Rational) && RCAS.nonnegative?(e.base.base)
+            # (2**(1/2))**(1/2) is 2**(1/4): (b**r)**s = b**(r*s) for real r, s
+            # when b cannot be negative - b**r is then a real power of a
+            # positive number and no branch moves
+            stack.push([Pow.new(e.base.base, Num.new(e.base.exponent.value * exp)), pw, true])
           elsif exp.is_a?(Rational) && exp.denominator > 1 && (split = root_of_product(e.base, exp))
             # (a**2*x**2)**(1/2) is a*(x**2)**(1/2) for a nonnegative a: a
             # factor that cannot be negative comes out of the root, and the

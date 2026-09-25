@@ -268,10 +268,30 @@ class LinearAlgebraTest < Minitest::Test
     RCAS.assume(x: RR) { assert_equal "RR[a]**[1, 2]", RCAS.matrix([[:x, a]]).space.to_s }
   end
 
-  def test_a_matrix_that_is_no_rational_function_says_what_to_type
-    e = assert_raises(RCAS::DomainError) { RCAS.matrix([[RCAS.sin(:a), 1]]) }
-    assert_match(/a\.in\(RR\)/, e.message)
+  def test_an_entry_without_any_domain_says_what_to_type
+    e = assert_raises(RCAS::DomainError) { RCAS.matrix([[RCAS.D(:y, :x), 1]]) }
+    assert_match(/y\.in\(RR\)/, e.message)
     assert_match(/RR\.matrix/, e.message)
+  end
+
+  # The generic eigenvalue has a square root, so no polynomial ring or
+  # fraction field holds it and matrix([[lam, 0], [0, lam]]) refused: a
+  # reader could not write M - lambda*I with the answer rcas had just
+  # given. Undeclared names now read as complex numbers there.
+  def test_radical_and_transcendental_entries_are_over_cc
+    a, b, c, d = %i[a b c d]
+    m = RCAS.matrix([[a, b], [c, d]])
+    m.eigenvalues.each do |lam|
+      lm = RCAS.matrix([[lam, 0], [0, lam]])
+      assert_equal "CC**[2, 2]", lm.space.to_s
+      assert_equal true, RCAS::Scalar.zero?((m - lm).det), "#{lam} is an eigenvalue"
+      assert_equal 1, (m - lm).rank
+    end
+    assert_equal "CC**[1, 2]", RCAS.matrix([[RCAS.sin(:a), 1]]).space.to_s
+    assert_equal "CC**2", RCAS.vector([RCAS.sqrt(:a), 1]).space.to_s
+    assert_empty RCAS.assumptions, "the complex reading is not left behind"
+    # a declared name keeps its own domain
+    RCAS.assume(a: RR) { assert_equal "RR**[1, 2]", RCAS.matrix([[RCAS.sin(:a), 1]]).space.to_s }
   end
 
   # Over a polynomial ring the charpoly lives in QQ[x, _l], where

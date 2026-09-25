@@ -494,4 +494,18 @@ class SolveTest < Minitest::Test
       fs.each { |f| assert RCAS::Scalar.zero?(f.subs(sol.to_h).simplify), "#{f} at #{sol}" }
     end
   end
+  # A discriminant with a square factor: sqrt(a**2 + a**4) printed as it
+  # stood, and x = y/a divided by a parameter the answer does not need.
+  def test_square_factors_leave_the_discriminant
+    x, y, a = :x, :y, :a
+    sols = RCAS.solve([x**2 + y**2 - 1, y - a * x], [x, y])
+    assert_equal TestSupport.hash_style("[{x=>-1/(1 + a**2)**(1/2), y=>-a/(1 + a**2)**(1/2)}, {x=>1/(1 + a**2)**(1/2), y=>a/(1 + a**2)**(1/2)}]"),
+                 TestSupport.hash_style(sols.inspect)
+    sols.each do |sol|
+      [x**2 + y**2 - 1, y - a * x].each { |f| assert RCAS::Scalar.zero?(f.subs(sol.to_h).simplify), f.to_s }
+    end
+    roots = RCAS.solve(x**2 - 2 * a * x + a**2 - 4 * a**2 * :b, x)
+    assert_equal 2, roots.size
+    roots.each { |r| assert RCAS::Scalar.zero?((x**2 - 2 * a * x + a**2 - 4 * a**2 * :b).subs(x => r).expand) }
+  end
 end

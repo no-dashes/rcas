@@ -117,7 +117,12 @@ A matrix or vector whose entries are in undeclared indeterminates lives
 over the polynomial ring they generate, the way integer entries put it
 over `ZZ`: `matrix([[a, b], [c, d]])` is in `ZZ[a, b, c, d]**[2, 2]`,
 and `inverse` and `rref` pass to the fraction field when they need it.
-A declared name is a scalar of its own domain instead.
+A declared name is a scalar of its own domain instead. Entries that are
+not rational functions (a radical, as in a generic eigenvalue, or
+`sin(a)`) read the undeclared names as complex numbers, which is what an
+undeclared name is to `Infer` anyway, and the matrix is over `CC`; the
+constructor runs under that same temporary reading, so its membership
+check agrees with the inference.
 
 Membership is exact where possible and one-sided otherwise:
 `Infer.excluded?(value, domain)` answers true only when the value is

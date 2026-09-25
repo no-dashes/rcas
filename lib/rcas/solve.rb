@@ -1069,15 +1069,22 @@ module RCAS
       [((-b - root) / (2 * a)).simplify, ((-b + root) / (2 * a)).simplify]
     end
 
-    # sqrt(d) with perfect squares taken out: sqrt((a - 1)**2) => a - 1 (a sign is
-    # immaterial for +- roots), sqrt(4*a) => 2*sqrt(a).
+    # sqrt(d) with perfect squares taken out: sqrt((a - 1)**2) => a - 1,
+    # sqrt(4*a) => 2*sqrt(a), sqrt(a**2 + a**4) => a*sqrt(1 + a**2). For
+    # any complex values c*sqrt(w) is one of +-sqrt(c**2*w), so this is
+    # right for the +- pair of the quadratic formula, the one caller, and
+    # for nothing else.
     def square_root(d)
       return RCAS.sqrt(d) if d.variables.empty?
       fact = d.to_poly.factor
-      unit = fact.unit.value
-      return RCAS.sqrt(d) unless fact.factors.all? { |_, m| m.even? } && unit.positive?
-      root = fact.factors.reduce(RCAS.sqrt(Num.new(unit))) { |acc, (g, m)| acc * g.to_expr**(m / 2) }
-      root.simplify
+      return RCAS.sqrt(d) if fact.factors.all? { |_, m| m == 1 }
+      outside = Num.new(1)
+      inside = Num.new(fact.unit.value)
+      fact.factors.each do |g, m|
+        outside *= g.to_expr**(m / 2) if m >= 2
+        inside *= g.to_expr if m.odd?
+      end
+      (outside * RCAS.sqrt(inside.simplify)).simplify
     rescue DomainError, NotImplementedError, RCAS::Unsupported
       RCAS.sqrt(d)
     end

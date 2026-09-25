@@ -623,22 +623,32 @@ module RCAS
     def vector(*args)
       domain = args.first.is_a?(Domain) ? args.shift : nil
       args = args.first if args.size == 1 && args.first.is_a?(Array)
-      domain ||= Functions.infer_domain(args)
-      domain.vector(*args)
+      return domain.vector(*args) if domain
+      Functions.infer_domain(args) { |inferred| inferred.vector(*args) }
     end
 
     # matrix(QQ, [[1, 2], [3, 4]]) or matrix([[1, 2], [3, 4]]) with the domain inferred.
     def matrix(*args)
-      domain = args.first.is_a?(Domain) ? args.shift : Functions.infer_domain(args.flatten)
+      domain = args.first.is_a?(Domain) ? args.shift : nil
       rows = args.size == 1 ? args.first : args
-      domain.matrix(rows)
+      return domain.matrix(rows) if domain
+      Functions.infer_domain(args.flatten) { |inferred| inferred.matrix(rows) }
     end
 
-    def self.infer_domain(entries)
+    # The domain the entries lie in; with a block, what the block builds
+    # over it. The block runs under the same reading of the names that
+    # found the domain, so that the constructor's own membership check
+    # agrees with it (see complex_reading).
+    def self.infer_domain(entries, &build)
+      build ||= :itself.to_proc
       lifted = entries.map { |e| Expression.lift(e) }
       known = lifted.map { |e| Infer.where_defined { Scalar.domain(e) } }
-      return known.reduce(ZZ) { |d, ed| d.join(ed) } if known.all?
-      symbolic_domain(lifted) or begin
+      return build.call(known.reduce(ZZ) { |d, ed| d.join(ed) }) if known.all?
+      if (ring = symbolic_domain(lifted))
+        build.call(ring)
+      elsif (names = complex_reading(lifted))
+        RCAS.assume(**names) { build.call(complex_reading_domain(lifted)) }
+      else
         e = lifted[known.index(nil)]
         names = e.variables.reject { |v| RCAS.assumption(v) }
         hint = names.empty? ? "" : "; declare #{names.map { |v| "#{v}.in(RR)" }.join(', ')} first"
@@ -651,15 +661,35 @@ module RCAS
     # fraction field: matrix([[a, b], [c, d]]) is over ZZ[a, b, c, d], as
     # matrix([[1, 2], [3, 4]]) is over ZZ. A declared name is a scalar of
     # its own domain and not an indeterminate of the ring. nil when an
-    # entry is not a rational function (sin(a)).
+    # entry is not a rational function (the generic eigenvalue, with its
+    # square root; sin(a)).
     def self.symbolic_domain(entries)
-      free = entries.flat_map(&:variables).uniq.reject { |v| RCAS.assumption(v) }.sort
+      free = free_names(entries)
       return nil if free.empty?
       rings = [ZZ, QQ, RR, CC].map { |k| PolynomialRing.new(k, free) }
       (rings + rings.drop(1).map(&:fraction_field)).find do |dom|
         entries.all? { |e| Infer.where_defined { dom.include?(e) } }
       end
     end
+
+    # Past the rational functions the undeclared names are read as what
+    # they are to rcas anyway, complex numbers - the matrix is then what it
+    # would be after a.in(CC), over CC - so that M - lambda*I can be
+    # written out with the eigenvalue rcas just gave. { name => CC } when
+    # that gives every entry a domain, nil otherwise.
+    def self.complex_reading(entries)
+      free = free_names(entries)
+      return nil if free.empty?
+      names = free.to_h { |v| [v, CC] }
+      names if RCAS.assume(**names) { complex_reading_domain(entries) }
+    end
+
+    def self.complex_reading_domain(entries)
+      known = entries.map { |e| Infer.where_defined { Scalar.domain(e) } }
+      known.reduce(ZZ) { |d, ed| d.join(ed) } if known.all?
+    end
+
+    def self.free_names(entries) = entries.flat_map(&:variables).uniq.reject { |v| RCAS.assumption(v) }.sort
 
     ODD = %i[sin tan atan asin sinh sign erf Si].freeze
     EVEN = %i[cos cosh abs].freeze

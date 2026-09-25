@@ -245,4 +245,13 @@ class SimplifyTest < Minitest::Test
     end
     assert_equal "exp(x)**(1/2)", RCAS.sqrt(RCAS.exp(x)).simplify.to_s, "and it is forgotten afterwards"
   end
+  # (b**r)**s = b**(r*s) for a base that cannot be negative: sqrt(sqrt(2))
+  # stayed (2**(1/2))**(1/2). A base of unknown sign keeps the nesting.
+  def test_nested_roots_of_a_nonnegative_base_merge
+    assert_equal "2**(1/4)", RCAS.simplify(RCAS.sqrt(RCAS.sqrt(2))).to_s
+    assert_equal "2**(1/2)", RCAS.simplify(RCAS.root(8, 3)**Rational(1, 2)).to_s
+    assert_equal "(x**(1/2))**(1/2)", RCAS.simplify(RCAS.sqrt(RCAS.sqrt(:x))).to_s
+    RCAS.assume(:x > 0) { assert_equal "x**(1/6)", RCAS.simplify(RCAS.root(RCAS.sqrt(:x), 3)).to_s }
+    assert_equal "(i*2**(1/2))**(1/2)", RCAS.simplify(RCAS.sqrt(RCAS.sqrt(-2))).to_s
+  end
 end

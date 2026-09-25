@@ -2299,7 +2299,9 @@ time. A system with infinitely many solutions raises an error that shows
 the basis. Parameters - symbols that are not unknowns - make the basis one
 over `Frac(QQ[params])`, and the answer is the generic one, as for a
 linear system: it may not hold where a leading coefficient in the
-parameters vanishes (`y = a*x` below divides by `a`). Two equations whose
+parameters vanishes. The square root of a discriminant loses its square
+factors, `sqrt(a**2 + a**4)` becoming `a*sqrt(1 + a**2)`, which is safe
+for every complex `a` because the formula takes both signs. Two equations whose
 coefficients are not rational, such as `sqrt(2)`, go through the resultant
 in the first unknown.
 
@@ -2319,7 +2321,7 @@ rcas> solve([x**2 - 1, y - x, z**2 - x], [x, y, z])
 rcas> solve([x**2 + y**2 - 1, x + y - a], [x, y])
 => [{x=>(2 - a**2)**(1/2)/2 + a/2, y=>-(2 - a**2)**(1/2)/2 + a/2}, {x=>-(2 - a**2)**(1/2)/2 + a/2, y=>(2 - a**2)**(1/2)/2 + a/2}]
 rcas> solve([x**2 + y**2 - 1, y - a*x], [x, y])
-=> [{x=>-(a**2 + a**4)**(1/2)/(a*(1 + a**2)), y=>-(a**2 + a**4)**(1/2)/(1 + a**2)}, {x=>(a**2 + a**4)**(1/2)/(a*(1 + a**2)), y=>(a**2 + a**4)**(1/2)/(1 + a**2)}]
+=> [{x=>-1/(1 + a**2)**(1/2), y=>-a/(1 + a**2)**(1/2)}, {x=>1/(1 + a**2)**(1/2), y=>a/(1 + a**2)**(1/2)}]
 rcas> solve([x**2 + y**2 - 2, x - sqrt(2)*y], [x, y])
 => [{x=>-2*3**(1/2)/3, y=>-6**(1/2)/3}, {x=>2*3**(1/2)/3, y=>6**(1/2)/3}]
 ```
@@ -3378,7 +3380,10 @@ polynomial ring they generate, the way integer entries put it over `ZZ`:
 the smallest of `ZZ[...]`, `QQ[...]`, `RR[...]` and `CC[...]` that holds
 them, and past a polynomial its fraction field. A declared name
 (`x.in(RR)`, below) is a scalar of its own domain instead. An entry that
-is not a rational function, such as `sin(x)`, still needs one of the two.
+is not a rational function - a radical such as a generic eigenvalue, or
+`sin(x)` - reads the undeclared names as complex numbers, which is what
+they are to rcas anyway, and the matrix is over `CC`. That is what lets
+`M - lambda*I` be written out with the eigenvalue rcas has just given.
 
 ```
 rcas> sm = matrix([[x, y], [y, z]])
@@ -3393,6 +3398,13 @@ rcas> sm.inverse
    [-y/(x*z - y**2)  x/(x*z - y**2)]
 rcas> matrix([[x, 1], [1, x]]).eigenvectors
 => [[1 + x, 1, [(1, 1)]], [-1 + x, 1, [(-1, 1)]]]
+rcas> lam = sm.eigenvalues.last
+=> x/2 + (x**2 - 2*x*z + 4*y**2 + z**2)**(1/2)/2 + z/2
+rcas> lm = matrix([[lam, 0], [0, lam]])
+=> [x/2 + (x**2 - 2*x*z + 4*y**2 + z**2)**(1/2)/2 + z/2                                                   0]
+   [                                                  0 x/2 + (x**2 - 2*x*z + 4*y**2 + z**2)**(1/2)/2 + z/2]
+rcas> [lm.space, (sm - lm).det.simplify, (sm - lm).rank]
+=> [CC**[2, 2], 0, 1]
 ```
 
 Eigenvalues are the roots of the characteristic polynomial, exact whenever
