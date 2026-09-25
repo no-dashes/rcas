@@ -14,7 +14,7 @@ exactly what the current code prints. What is *not* finished is listed in
 and why, is in [DESIGN.md](DESIGN.md).
 
 <p align="center">
-  <a href="https://youtu.be/3Lm5DHgfwxo"><img src="https://img.youtube.com/vi/3Lm5DHgfwxo/maxresdefault.jpg" alt="The rcas tour: eight minutes, chapter by chapter" width="720"></a><br>
+  <a href="https://youtu.be/cdB88qxeqL8"><img src="https://img.youtube.com/vi/cdB88qxeqL8/hq720.jpg" alt="The rcas tour: eight minutes, chapter by chapter" width="720"></a><br>
   <em>Watch the tour - eight minutes, chapter by chapter</em>
 </p>
 
@@ -29,7 +29,7 @@ variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
 `RCAS.solve`), or `include RCAS::Functions`, `RCAS::Sets` and
 `RCAS::Constants` to get the bare names used below.
 
-The tour above is on [YouTube](https://youtu.be/3Lm5DHgfwxo); the file itself is
+The tour above is on [YouTube](https://youtu.be/cdB88qxeqL8); the file itself is
 [rcas-tour.mp4](https://github.com/no-dashes/rcas/releases/download/screencasts/rcas-tour.mp4)
 with the releases, kept out of the repository so a clone stays small, and
 [assets/rcas-intro.gif](assets/rcas-intro.gif) is a one-minute version. All

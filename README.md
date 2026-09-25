@@ -27,7 +27,7 @@ A minute of it, from exact arithmetic to typeset answers:
 </p>
 
 The longer tour through everything rcas can do is an eight-minute video,
-[on YouTube](https://youtu.be/3Lm5DHgfwxo); the file itself is
+[on YouTube](https://youtu.be/cdB88qxeqL8); the file itself is
 [rcas-tour.mp4](https://github.com/no-dashes/rcas/releases/download/screencasts/rcas-tour.mp4),
 kept with the releases rather than in the repository, so a clone stays small.
 Both are built from a script of input lines by
