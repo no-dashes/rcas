@@ -9,7 +9,7 @@ A computer algebra system that lives inside Ruby. Symbols are indeterminates,
 the ordinary operators build expression trees, and irb is the REPL:
 
 ```
-$ bin/rcas
+$ rcas
 rcas> e = (x + 1) * (1 - x)
 => (x + 1)*(1 - x)
 rcas> e.expand
@@ -100,18 +100,25 @@ rcas is a gem with no dependencies beyond the Ruby it runs on (`irb` and
 build them in):
 
 ```
-$ gem build rcas.gemspec && gem install ./rcas-0.2.0.gem
-$ rcas              # the same three programs as below, on your PATH
+$ gem install rcas
+$ rcas              # irb with rcas loaded: bare names are variables
+$ rcas-chat         # terminal front end with typeset output
+$ rcas-app          # a window: a worksheet of In/Out cells (--install for the Dock)
 ```
 
-or run it from a checkout, which is what the rest of this file assumes:
+Or run it from a checkout, where the same three programs are `bin/rcas`,
+`bin/rcas-chat` and `bin/rcas-app` (the rest of this file and the manual
+write them that way; `gem build rcas.gemspec` builds the gem from it):
 
 ```
 $ git clone https://github.com/no-dashes/rcas && cd rcas
-$ bin/rcas          # irb with rcas loaded: bare names are variables
-$ bin/rcas-chat     # terminal front end with typeset output
-$ bin/rcas-app      # a window: a worksheet of In/Out cells (--install for the Dock)
+$ bin/rcas
 ```
+
+Typeset pictures need `node`, the `katex` npm package and a Chrome (see
+above). A checkout gets the package with `npm install`; an installed gem
+finds it through `RCAS_KATEX_DIR`, so run `npm install katex` in any
+directory and point the variable at its `node_modules/katex`.
 
 Inside `bin/rcas`, an undefined bare name such as `x` (or `α`, `β₁`: any
 Ruby identifier) becomes the indeterminate `:x`, the functions (`sin`,

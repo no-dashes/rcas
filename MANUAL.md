@@ -18,13 +18,17 @@ and why, is in [DESIGN.md](DESIGN.md).
   <em>Watch the tour - eight minutes, chapter by chapter</em>
 </p>
 
-Start a session with
+Install rcas and start a session with
 
 ```
-$ bin/rcas
+$ gem install rcas
+$ rcas
 ```
 
-or use the library from Ruby with `require "rcas"`. In plain Ruby, write
+(`rcas-chat` and `rcas-app` are the two other front ends, Appendices B and
+C). From a checkout of the repository the same three programs are
+`bin/rcas`, `bin/rcas-chat` and `bin/rcas-app`, which is how this manual
+writes them. Or use the library from Ruby with `require "rcas"`. In plain Ruby, write
 variables as symbols (`:x`) and call functions on the module (`RCAS.sin`,
 `RCAS.solve`), or `include RCAS::Functions`, `RCAS::Sets` and
 `RCAS::Constants` to get the bare names used below.
@@ -157,8 +161,8 @@ checked - nothing in them is typed by hand.
 
 ## Sessions and setup
 
-`bin/rcas` starts irb with `RCAS::IRB.setup` applied to the top-level
-object:
+`rcas` (`bin/rcas` in a checkout, the spelling this manual uses) starts
+irb with `RCAS::IRB.setup` applied to the top-level object:
 
 - A bare identifier that is not yet defined (`x`, `foo_bar`) evaluates to
   the symbol of the same name and is assigned to a local variable, so after
@@ -5548,7 +5552,9 @@ ask with `show`.
 Two rendering backends are supported and tried in this order:
 
 * **KaTeX** ([katex.org](https://katex.org)). Run `npm install` once in the
-  project directory to fetch the `katex` package listed in `package.json`.
+  project directory to fetch the `katex` package listed in `package.json`;
+  with the installed gem, run `npm install katex` in any directory and set
+  `RCAS_KATEX_DIR` to its `node_modules/katex`.
   node typesets the formula to HTML and a local Google Chrome (or Chromium,
   Brave, Edge, Arc) rasterizes it. `RCAS_NODE` and `RCAS_CHROME` point to
   other binaries.
@@ -5569,8 +5575,9 @@ is rendered once. Settings, each also available as an environment variable:
 
 ## Appendix B. rcas-chat
 
-`bin/rcas-chat` is a second front end: a terminal session with a prompt,
-history, saved sessions and typeset output. You type Ruby and get the
+`bin/rcas-chat` (`rcas-chat` from the installed gem) is a second front
+end: a terminal session with a prompt, history, saved sessions and
+typeset output. You type Ruby and get the
 result typeset, in iTerm2, and as text everywhere else; `/output both`
 shows the text as well.
 
@@ -5806,7 +5813,8 @@ test/chat_test.rb             tests, with a fake Claude
 
 ## Appendix C. rcas-app
 
-`bin/rcas-app` is the third front end: a window. It shows the session as a
+`bin/rcas-app` (`rcas-app` from the installed gem) is the third front
+end: a window. It shows the session as a
 worksheet of numbered `In`/`Out` cells, typesets every result that has a
 LaTeX form, and draws plots as pictures instead of braille art.
 
