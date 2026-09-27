@@ -133,7 +133,7 @@ a renderer, and you probably have one already:
 - **Otherwise it uses KaTeX**, which runs on node.js, a JavaScript runtime
   that comes with its package manager npm. Install node with `brew install
   node` (macOS), `sudo apt install nodejs npm` (Debian, Ubuntu), `winget
-  install OpenJS.NodeJS` (Windows) or the installer from
+  install -e --id OpenJS.NodeJS.LTS` (Windows) or the installer from
   [nodejs.org](https://nodejs.org); then run `npm install` in the checkout,
   or `npm install katex` in any directory and set `RCAS_KATEX_DIR` to its
   `node_modules/katex`. KaTeX also needs a Google Chrome, Chromium, Brave or
