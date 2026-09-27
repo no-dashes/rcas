@@ -323,7 +323,7 @@ module RCAS
       def available? = !(node.nil? || katex_dir.nil? || chrome.nil?)
 
       def missing
-        [node ? nil : "node", katex_dir ? nil : "katex npm package (run `npm install`)", chrome ? nil : "Google Chrome / Chromium"].compact.join(", ")
+        [node ? nil : "node", katex_dir ? nil : "katex npm package (npm install; MANUAL.md, Appendix A, Pictures)", chrome ? nil : "Google Chrome / Chromium"].compact.join(", ")
       end
 
       def html(source, display: true)

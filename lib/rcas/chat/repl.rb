@@ -400,7 +400,7 @@ module RCAS
         if @ui.typeset? && !Render.inline?(@ui.out)
           @ui.info("output #{@ui.mode}: inline pictures need iTerm2, so results stay text here; try /output latex")
         elsif @ui.typeset? && !Render.available?
-          @ui.info("output #{@ui.mode}: no typesetting backend found (npm install for KaTeX, or install LaTeX + dvipng)")
+          @ui.info("output #{@ui.mode}: no typesetting backend found; TeX (latex + dvipng) or node.js with KaTeX is needed, see MANUAL.md, Appendix A, Pictures")
         else
           @ui.info("output #{@ui.mode}#{@ui.typeset? ? " (#{Render.selected.name}, scale #{Render.scale}, theme #{Render.theme})" : ''}")
         end

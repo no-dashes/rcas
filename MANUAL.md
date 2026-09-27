@@ -5549,17 +5549,26 @@ printed. `obj.to_png("f.png")` writes the picture to a file. `bin/rcas`
 itself is unchanged: it prints text as before and typesets only when you
 ask with `show`.
 
-Two rendering backends are supported and tried in this order:
+Typeset pictures need a renderer, and you probably have one already:
 
-* **KaTeX** ([katex.org](https://katex.org)). Run `npm install` once in the
-  project directory to fetch the `katex` package listed in `package.json`;
-  with the installed gem, run `npm install katex` in any directory and set
-  `RCAS_KATEX_DIR` to its `node_modules/katex`.
-  node typesets the formula to HTML and a local Google Chrome (or Chromium,
-  Brave, Edge, Arc) rasterizes it. `RCAS_NODE` and `RCAS_CHROME` point to
-  other binaries.
-* **LaTeX**. A TeX installation with `latex` and `dvipng` (or `pdflatex`
-  and ImageMagick).
+- **If TeX is installed** (TeX Live, MacTeX, MiKTeX), rcas uses its `latex`
+  and `dvipng` (or `pdflatex` and ImageMagick), and nothing else is needed.
+- **Otherwise it uses KaTeX**, which runs on node.js, a JavaScript runtime
+  that comes with its package manager npm. Install node with `brew install
+  node` (macOS), `sudo apt install nodejs npm` (Debian, Ubuntu), `winget
+  install OpenJS.NodeJS` (Windows) or the installer from
+  [nodejs.org](https://nodejs.org); then run `npm install` in the checkout,
+  or `npm install katex` in any directory and set `RCAS_KATEX_DIR` to its
+  `node_modules/katex`. KaTeX also needs a Google Chrome, Chromium, Brave or
+  Microsoft Edge on the machine to turn its HTML into a picture.
+
+The two backends in detail, tried in this order when both are there:
+
+* **KaTeX** ([katex.org](https://katex.org)): node typesets the formula to
+  HTML and a local Google Chrome (or Chromium, Brave, Edge, Arc) rasterizes
+  it. `RCAS_NODE` and `RCAS_CHROME` point to other binaries, `RCAS_KATEX_DIR`
+  to the `katex` package when it is not in the project's `node_modules`.
+* **LaTeX**: `latex` and `dvipng`, or `pdflatex` and ImageMagick.
 
 Pick one with `RCAS::Render.backend = :latex` or `RCAS_TEX_BACKEND=latex`.
 Pictures are kept in `/tmp/rcas` (`RCAS_CACHE_DIR`) while a session runs and the ones it created are deleted when it ends, so a formula

@@ -81,13 +81,10 @@ Optional, only for the typeset output and the chat front end:
   picture. `plot(...).to_png` and `show` use the same Chrome as below.
 - The window front end `bin/rcas-app` borrows a browser engine instead of
   shipping one: it needs a Google Chrome, Chromium, Brave or Microsoft Edge
-  on the machine (`RCAS_BROWSER` names another), and `npm install` for the
-  KaTeX it typesets with. Nothing is bundled and nothing goes over the
-  network; see MANUAL.md, Appendix C.
-- Typeset pictures (`show`, `to_png`, and `bin/rcas-chat`): either `node`
-  plus `npm install` in the project directory (fetches KaTeX, see
-  `package.json`) and a local Google Chrome / Chromium, or a TeX
-  installation with `latex` and `dvipng`. Pictures display inline in iTerm2.
+  on the machine (`RCAS_BROWSER` names another). Nothing is bundled and
+  nothing goes over the network; see MANUAL.md, Appendix C.
+- Typeset pictures display inline in iTerm2 and need a renderer, TeX or
+  KaTeX; see "Getting a renderer" below.
 - Optional and off unless you set it up: with the `anthropic` gem and
   credentials in `ANTHROPIC_API_KEY` (or a profile from `ant auth login`),
   `bin/rcas-chat` also answers questions in plain language. Without them
@@ -115,11 +112,6 @@ $ git clone https://github.com/no-dashes/rcas && cd rcas
 $ bin/rcas
 ```
 
-Typeset pictures need `node`, the `katex` npm package and a Chrome (see
-above). A checkout gets the package with `npm install`; an installed gem
-finds it through `RCAS_KATEX_DIR`, so run `npm install katex` in any
-directory and point the variable at its `node_modules/katex`.
-
 Inside `bin/rcas`, an undefined bare name such as `x` (or `α`, `β₁`: any
 Ruby identifier) becomes the indeterminate `:x`, the functions (`sin`,
 `integrate`, `solve`, ...) and the constants (`PI`/`π`, `E`, `I`, `oo`/`∞`,
@@ -130,6 +122,22 @@ setup", for the details.
 Kernel's printers `p`, `pp`, `j` and `jj` are undefined in the session so
 that `p` can be an indeterminate (a prime, say). Print with `puts`, `print`
 or `Kernel.p(expr)` instead. The same holds in `bin/rcas-chat`.
+
+### Getting a renderer
+
+Typeset pictures (`show`, `to_png`, `bin/rcas-chat`, `bin/rcas-app`) need
+a renderer, and you probably have one already:
+
+- **If TeX is installed** (TeX Live, MacTeX, MiKTeX), rcas uses its `latex`
+  and `dvipng` (or `pdflatex` and ImageMagick), and nothing else is needed.
+- **Otherwise it uses KaTeX**, which runs on node.js, a JavaScript runtime
+  that comes with its package manager npm. Install node with `brew install
+  node` (macOS), `sudo apt install nodejs npm` (Debian, Ubuntu), `winget
+  install OpenJS.NodeJS` (Windows) or the installer from
+  [nodejs.org](https://nodejs.org); then run `npm install` in the checkout,
+  or `npm install katex` in any directory and set `RCAS_KATEX_DIR` to its
+  `node_modules/katex`. KaTeX also needs a Google Chrome, Chromium, Brave or
+  Microsoft Edge on the machine to turn its HTML into a picture.
 
 ## Using the library from Ruby
 
